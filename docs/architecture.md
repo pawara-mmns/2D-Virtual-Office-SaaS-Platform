@@ -1,6 +1,6 @@
 # Architecture and scope
 
-## Current foundation and authentication
+## Current foundation, authentication, and organizations
 
 This repository uses pnpm workspaces without an additional task runner. Only
 `apps/web` is an executable workspace. Root build, lint, and typecheck commands
@@ -20,6 +20,7 @@ not check any future service or database.
 - `src/app`: routes, layouts, page composition, and route handlers.
 - `src/components`: reusable presentation components.
 - `src/features/auth`: authentication UI, validation, actions, and access rules.
+- `src/features/organizations`: organization validation, RPC/data access, and UI.
 - `src/lib/supabase`: centralized Supabase client and session-refresh utilities.
 
 Keep business rules in feature modules rather than presentation components.
@@ -35,8 +36,9 @@ when those phases begin. No empty service packages are initialized now.
 Phaser will own rendering and local movement in a lazily loaded office view.
 Keep its game loop separate from React state. LiveKit will handle voice.
 Supabase Auth is configured through the two public environment variables in
-`apps/web/.env.example`. Database, storage, game, realtime, and voice integrations
-remain deferred; no custom tables or tenant model exist.
+`apps/web/.env.example`. Organization schema/RLS and server data access are now
+defined in the Step 3 migration. Remote application has a separate approval gate.
+Storage, game, realtime, and voice integrations remain deferred.
 
 ## Authentication boundary
 
@@ -70,8 +72,25 @@ Missing configuration disables forms with setup instructions, leaves public
 routes functional, and denies dashboard access. No placeholder credentials are
 used. Live Supabase tests require the user's existing configured project.
 
-Tenant isolation must be designed and enforced at data and realtime service
-boundaries in its assigned phase; the foundation makes no isolation guarantees.
+## Organization boundary
+
+Organization creation uses one PostgreSQL RPC transaction for profile, organization,
+OWNER membership, and default office. User/request UUIDs give retries an exact
+idempotency key; tenant identity and roles come from trusted Auth/database context.
+All four public tables have RLS and restricted grants. Private read-only helpers
+avoid circular membership policies. No authenticated membership write API exists.
+
+The active organization is represented by `/workspace/[organizationId]`. Pages
+and data access verify the caller, membership, and RLS-visible records. The URL or
+a client state value never grants access. React request-scoped auth deduplication
+and pre-loading-boundary authentication preserve private HTTP redirects; pages
+and data helpers retain their checks. All private routes are no-store.
+
+See [organization architecture](organizations.md) and [actual validation status](organization-validation.md).
+SQL syntax/mock tests do not prove deployed tenant isolation. Real database tests
+and application require the approved development migration; no guarantees about
+remote RLS are claimed before execution. Realtime tenant authorization remains a
+future service responsibility.
 
 ## Visual direction
 
