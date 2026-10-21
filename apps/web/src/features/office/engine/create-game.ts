@@ -3,12 +3,13 @@ import Phaser from "phaser";
 import { OfficeScene, type OfficeCallbacks } from "../scenes/office-scene.ts";
 import { attachMovementInput } from "../input/movement.ts";
 import { defaultAvatar, type AvatarAppearance } from "../../avatars/presets.ts";
+import type { OfficeNetwork } from "../../../../../../packages/shared/src/protocol.ts";
 
-export function createOfficeGame(host: HTMLElement, callbacks: OfficeCallbacks, appearance: AvatarAppearance = { avatarKey: defaultAvatar, displayName: "You" }) {
+export function createOfficeGame(host: HTMLElement, callbacks: OfficeCallbacks, appearance: AvatarAppearance = { avatarKey: defaultAvatar, displayName: "You" }, multiplayer = false) {
   const input = attachMovementInput(host, () => document.activeElement === host, window);
   const focus = () => host.focus({ preventScroll: true });
   host.addEventListener("pointerdown", focus);
-  const scene = new OfficeScene(input.pressed, callbacks, appearance);
+  const scene = new OfficeScene(input.pressed, callbacks, appearance, multiplayer);
   let game: Phaser.Game;
   try {
     game = new Phaser.Game({ type: Phaser.AUTO, parent: host, width: Math.max(1, host.clientWidth), height: Math.max(1, host.clientHeight),
@@ -34,6 +35,7 @@ export function createOfficeGame(host: HTMLElement, callbacks: OfficeCallbacks, 
   return {
     game,
     setAppearance(appearance: AvatarAppearance) { scene.setAppearance(appearance); },
+    setNetwork(network: OfficeNetwork) { scene.setNetwork(network); },
     zoomBy(step: number) { scene.zoomBy(step); }, resetZoom() { scene.resetZoom(); },
     destroy() {
       if (destroyed) return destroyed;

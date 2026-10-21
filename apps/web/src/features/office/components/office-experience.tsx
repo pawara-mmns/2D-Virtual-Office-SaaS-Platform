@@ -7,4 +7,4 @@ const OfficeCanvas = dynamic(() => import("./office-canvas"), {
   ssr: false,
   loading: () => <div className="flex min-h-110 items-center justify-center border border-line bg-surface"><p role="status" className="text-sm text-muted">Loading office engine…</p></div>,
 });
-export function OfficeExperience({ appearance, profileWarning }: { appearance: AvatarAppearance; profileWarning?: string }) { return <OfficeCanvas appearance={appearance} profileWarning={profileWarning} />; }
+export function OfficeExperience({ appearance, profileWarning, officeId }: { appearance: AvatarAppearance; profileWarning?: string; officeId: string }) { return <OfficeCanvas appearance={appearance} profileWarning={profileWarning} officeId={officeId} />; }

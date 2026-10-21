@@ -1,0 +1,131 @@
+import { Room, ServerError, ClientState, type Client } from "colyseus";
+import { OfficeState, PlayerState } from "../state/office-state.ts";
+import { canStand, simulate } from "../movement/simulation.ts";
+import { mapMarkers, type OfficeMap } from "../../../../packages/shared/src/map.ts";
+import { AUTH_CHECK_MS, AUTH_LEASE_MS, RECONNECT_SECONDS, TICK_MS, mapVersion, validInput, type MoveInput } from "../../../../packages/shared/src/protocol.ts";
+import type { Authorize, Authorization } from "../auth/authorize.ts";
+
+type OfficeClient = Client<{ auth: Authorization }>;
+type Control = { input: MoveInput; lastInput: number; window: number; messages: number; refreshing: boolean; nextCheck: number };
+export type RoomServices = {
+  authorize: Authorize; map: OfficeMap;
+  claimed(officeId: string, userId: string, sessionId: string): boolean;
+  release(officeId: string, userId: string, sessionId: string): void;
+  disposed(officeId: string, roomId: string): void;
+};
+export function officeRoomClass(services: RoomServices) {
+  return class OfficeRoom extends Room<{ state: OfficeState; client: OfficeClient }> {
+    state = new OfficeState();
+    maxClients = 10;
+    maxMessagesPerSecond = 45;
+    // Local diagnostics, deliberately outside synchronized Schema state.
+    simulationTicks = 0;
+    simulationWorkMs = 0;
+    private controls = new Map<string, Control>();
+    private revoked = new Set<string>();
+    // All default matchmaking paths fail closed. Only our authorized endpoint
+    // can reserve seats with trusted authData. Never inherit bundle JWT defaults.
+    static async onAuth(): Promise<never> { throw new ServerError(403, "Use authorized office admission."); }
+    onCreate(options: { officeId: string }) {
+      this.state.officeId = options.officeId;
+      this.state.mapVersion = mapVersion(services.map);
+      this.seatReservationTimeout = 10;
+      this.patchRate = TICK_MS;
+      this.setFixedTimestep(() => this.tick(), 1000 / TICK_MS);
+      this.onMessage("input", (client, value: unknown) => {
+        const control = this.controls.get(client.sessionId), now = Date.now();
+        if (!control) return;
+        if (now - control.window >= 1000) { control.window = now; control.messages = 0; }
+        if (++control.messages > 35 || !validInput(value)) { this.deny(client); return; }
+        if (value.seq <= control.input.seq) return;
+        control.input = value; control.lastInput = now;
+      });
+      this.onMessage("credential", (client, value: unknown) => {
+        const control = this.controls.get(client.sessionId);
+        if (!control || control.refreshing || typeof value !== "string" || value.length > 8192) return;
+        // Credential/profile refresh is bounded separately from movement messages.
+        if (Date.now() < control.nextCheck - AUTH_CHECK_MS + 1000) return;
+        void this.revalidate(client, value);
+      });
+      this.onMessage("*", (client) => this.deny(client));
+    }
+    async onJoin(client: OfficeClient) {
+      try {
+        const auth = client.auth;
+        if (!auth || auth.officeId !== this.state.officeId || !services.claimed(auth.officeId, auth.userId, client.sessionId)) throw new Error();
+        const fresh = await services.authorize(auth.token, this.state.officeId);
+        if (client.state === ClientState.LEAVING || client.state === ClientState.CLOSED || fresh.userId !== auth.userId || fresh.organizationId !== auth.organizationId || this.state.players.size >= 10 || [...this.state.players.values()].some((p) => p.userId === fresh.userId)) throw new Error();
+        client.auth = fresh;
+        const spawn = mapMarkers(services.map).find((m) => m.type === "spawn")!;
+        let spawnX = spawn.x;
+        for (let i = 0; i < 20; i++) {
+          const x = spawn.x + (i % 2 ? 1 : -1) * Math.ceil(i / 2) * 24;
+          if (canStand(services.map, x, spawn.y) && [...this.state.players.values()].every((p) => Math.hypot(p.x - x, p.y - spawn.y) >= 20)) { spawnX = x; break; }
+        }
+        const player = new PlayerState();
+        Object.assign(player, { sessionId: client.sessionId, userId: fresh.userId, avatarKey: fresh.avatarKey, displayName: fresh.displayName, x: spawnX, y: spawn.y });
+        this.state.players.set(client.sessionId, player);
+        this.controls.set(client.sessionId, { input: { seq: -1, x: 0, y: 0 }, lastInput: 0, window: Date.now(), messages: 0, refreshing: false, nextCheck: Date.now() + AUTH_CHECK_MS });
+      } catch {
+        if (client.auth) services.release(this.state.officeId, client.auth.userId, client.sessionId);
+        throw new ServerError(403, "Office access denied.");
+      }
+    }
+    private deny(client: OfficeClient) {
+      this.revoked.add(client.sessionId);
+      // Remove state before closing, so it cannot continue to move or receive updates.
+      this.state.players.delete(client.sessionId); this.controls.delete(client.sessionId);
+      if (client.auth) services.release(this.state.officeId, client.auth.userId, client.sessionId);
+      client.leave(4000, "Office connection ended. Verify access and retry.");
+    }
+    private async revalidate(client: OfficeClient, token = client.auth?.token) {
+      const control = this.controls.get(client.sessionId);
+      if (!control || control.refreshing) return;
+      control.refreshing = true;
+      try {
+        const fresh = await services.authorize(token, this.state.officeId);
+        if (!this.controls.has(client.sessionId) || this.revoked.has(client.sessionId)) return;
+        if (fresh.userId !== client.auth?.userId || fresh.organizationId !== client.auth?.organizationId) throw new Error();
+        client.auth = fresh;
+        const player = this.state.players.get(client.sessionId);
+        if (player) { player.avatarKey = fresh.avatarKey; player.displayName = fresh.displayName; }
+        control.nextCheck = Date.now() + AUTH_CHECK_MS;
+      } catch { this.deny(client); }
+      finally { control.refreshing = false; }
+    }
+    private tick() {
+      const began = performance.now(); this.simulationTicks++;
+      const now = Date.now();
+      for (const client of this.clients) {
+        const control = this.controls.get(client.sessionId), player = this.state.players.get(client.sessionId);
+        if (!control || !player) continue;
+        if (!client.auth || now >= client.auth.expiresAt || now - client.auth.checkedAt >= AUTH_LEASE_MS) { this.deny(client); continue; }
+        if (now >= control.nextCheck && !control.refreshing) void this.revalidate(client);
+        simulate(services.map, player, now - control.lastInput < 250 && player.connected ? control.input : { x: 0, y: 0 });
+      }
+      this.simulationWorkMs += performance.now() - began;
+    }
+    onDrop(client: OfficeClient) {
+      const player = this.state.players.get(client.sessionId);
+      if (!player || this.revoked.has(client.sessionId)) return;
+      player.connected = false; player.isMoving = false;
+      const control = this.controls.get(client.sessionId);
+      if (control) control.input = { ...control.input, x: 0, y: 0 };
+      void this.allowReconnection(client, RECONNECT_SECONDS).catch(() => {});
+    }
+    async onReconnect(client: OfficeClient) {
+      if (this.revoked.has(client.sessionId)) throw new ServerError(403, "Office access denied.");
+      const fresh = await services.authorize(client.auth?.token, this.state.officeId);
+      if (client.state === ClientState.LEAVING || client.state === ClientState.CLOSED || !client.auth || fresh.userId !== client.auth.userId || fresh.organizationId !== client.auth.organizationId || !this.state.players.has(client.sessionId)) throw new ServerError(403, "Office access denied.");
+      client.auth = fresh;
+      this.state.players.get(client.sessionId)!.connected = true;
+      const control = this.controls.get(client.sessionId)!;
+      control.input = { seq: control.input.seq, x: 0, y: 0 }; control.lastInput = 0; control.nextCheck = Date.now() + AUTH_CHECK_MS;
+    }
+    onLeave(client: OfficeClient) {
+      this.state.players.delete(client.sessionId); this.controls.delete(client.sessionId); this.revoked.delete(client.sessionId);
+      if (client.auth) services.release(this.state.officeId, client.auth.userId, client.sessionId);
+    }
+    onDispose() { this.controls.clear(); this.revoked.clear(); services.disposed(this.state.officeId, this.roomId); }
+  };
+}

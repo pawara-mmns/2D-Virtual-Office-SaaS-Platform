@@ -3,7 +3,7 @@
 ## Current foundation, authentication, and organizations
 
 This repository uses pnpm workspaces without an additional task runner. Only
-`apps/web` is an executable workspace. Root build, lint, and typecheck commands
+`apps/web` and `apps/realtime` are executable workspaces. Root build, lint, and typecheck commands
 run recursively so future workspaces can participate by defining those scripts.
 
 The web application uses the Next.js App Router. Pages and layouts are Server
@@ -29,12 +29,14 @@ Use `@/*` for imports within `apps/web/src`.
 
 ## Future service boundaries
 
-The workspace patterns reserve `apps/*` and `packages/*`. Add `apps/realtime`
-for a dedicated Colyseus process and `packages/shared` for cross-service contracts
-when those phases begin. No empty service packages are initialized now.
+`apps/realtime` runs one persistent Colyseus process. `packages/shared` contains
+map validation, avatar definitions, movement contracts and the reconnect transport
+adapter. Both applications compile these pure sources; no generated shared build
+is needed to run web tests. The map JSON remains the canonical existing web asset.
 
-Phaser now owns rendering and local movement in the lazily loaded office view.
-Its game loop is separate from React state. LiveKit will handle future voice.
+Phaser owns rendering in the lazily loaded office view. Colyseus owns movement
+and collision simulation; its state drives interpolated sprites. React receives
+only connection and presence changes. LiveKit will handle future voice.
 Supabase Auth is configured through the two public environment variables in
 `apps/web/.env.example`. Organization schema/RLS and server data access are now
 defined in the Step 3 migration. Remote application has a separate approval gate.
@@ -116,8 +118,10 @@ See [team architecture and security](team-invitations.md) and
 [actual validation/application status](team-invitations-validation.md). Isolated
 PostgreSQL tests execute real roles and RLS with synthetic local Auth fixtures;
 live Auth/PostgREST, provider delivery and concurrent sessions remain distinct
-verification requirements. Future realtime/media services must revoke access and
-disconnect removed members themselves; those services are not implemented.
+verification requirements. Colyseus now revalidates Auth/membership on admission,
+reconnection and periodically, with a 15-second hard authorization lease. Future
+media services still need equivalent revocation handling. See
+[multiplayer validation](realtime-multiplayer-validation.md).
 
 ## Visual direction
 
@@ -146,19 +150,23 @@ The original Tiled JSON separates Floor, Architecture, Furniture and binary
 Collision layers from spawn/area Markers. Phaser Arcade Physics uses a foot body
 and tile collisions. Focus-scoped input leaves form controls/Tab alone. Integer
 zoom, rounded pixels and a single ResizeObserver maintain crisp bounded rendering.
-The office is single-player only; assets are first-party, with no shared user state.
-See [map, lifecycle, browser results and limitations](phaser-office-validation.md).
+The original standalone engine harness is retained for regressions. The actual
+application uses authorized multiplayer; disconnected state freezes/hides players
+instead of simulating a private fallback. Assets remain first-party. See
+[map/lifecycle history](phaser-office-validation.md) and the current
+[multiplayer report](realtime-multiplayer-validation.md).
 
 ## Avatar preference boundary
 
-`features/avatars` owns the six-preset allowlist, safe name fallback, self-profile
+`packages/shared` owns the six-preset allowlist and safe names; `features/avatars` owns self-profile
 read/save service and settings action/UI. Saves resolve verified identity from
 Auth, update only `avatar_key`, and preserve other profile fields. The existing
 profiles grants and self-scoped RLS were verified in the deployed catalog; no
 migration or schema change was needed. Unknown legacy keys use the default.
 
 `office/engine/player-avatar.ts` owns one body, sprite and label, reusing the scene's
-existing movement/physics. All preset frames share one atlas and collision body.
+renderer. All preset frames share one atlas and collision body. Multiplayer positions
+and animation intent come from validated server state.
 An appearance change updates the existing avatar without resetting the scene or
 camera. Frame-loop data is separate from React; animation follows actual resolved
 movement and stops at obstacles. Labels use profile names with email suppression,

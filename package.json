@@ -8,6 +8,12 @@
   },
   "scripts": {
     "dev": "pnpm --filter @virtual-office/web dev",
+    "dev:realtime": "pnpm --filter @virtual-office/realtime dev",
+    "dev:all": "pnpm --parallel --filter @virtual-office/web --filter @virtual-office/realtime dev",
+    "start:realtime": "pnpm --filter @virtual-office/realtime start",
+    "test:realtime": "pnpm --filter @virtual-office/realtime test",
+    "test:realtime:live": "node --experimental-strip-types --test scripts/test-realtime-live.mjs",
+    "check:realtime:env": "node scripts/check-realtime-environment.mjs",
     "build": "pnpm -r build",
     "start": "pnpm --filter @virtual-office/web start",
     "lint": "pnpm -r lint",

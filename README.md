@@ -2,14 +2,14 @@
 
 A multi-tenant 2D virtual office SaaS platform for distributed teams. The planned
 product will give companies private pixel-art offices with realtime movement,
-chat, and voice. **Phase 2 — Step 2 adds avatar presets and profile preferences.**
+chat, and voice. **Phase 3 — Step 1 adds the realtime multiplayer foundation.**
 
 Six original characters can be previewed and saved through Avatar settings in
 the office. Preferences use existing self-scoped Supabase profiles; movement and
-collision remain local. See [avatar validation and manual merge checks](docs/avatar-system-validation.md).
+collision now use server authority. See [multiplayer setup, verification and manual merge checks](docs/realtime-multiplayer-validation.md).
 
 The protected office route now uses Phaser 4.2.1, an original 32×32 pixel-art map,
-local avatar movement, collision and camera controls. See
+shared avatar movement, collision and camera controls. See
 [office setup and actual validation results](docs/phaser-office-validation.md).
 
 Step 4's approved migration is applied to the confirmed development project.
@@ -25,10 +25,11 @@ invitation email and authenticated team workflows remain unverified; see
 - pnpm 10 workspaces, with an exact package-manager version and lockfile
 - Supabase Auth through `@supabase/supabase-js` and `@supabase/ssr`
 - Phaser 4.2.1, loaded only when entering the protected office
+- Colyseus 0.18.9 server, SDK 0.18.5 and Schema 5.0.42
 
 Supabase PostgreSQL organization migrations and server data access are included;
 check [migration and validation status](docs/organization-validation.md) before
-using them. Planned, not installed: Colyseus and LiveKit. Storage remains
+using them. LiveKit remains planned and is not installed. Storage remains
 deferred.
 
 ESLint is pinned to the latest 9.x release for compatibility with the React lint
@@ -82,7 +83,7 @@ apps/
         actions.ts, server.ts, service.ts, action-form.tsx, team-management.tsx
       features/office/
         access.ts, office.test.ts
-        components/, engine/, scenes/, input/, maps/
+        components/, engine/, scenes/, input/, maps/, network/
       features/avatars/
         presets.ts, animation.ts, service.ts, actions.ts
         avatar-settings.tsx, avatars.test.ts
@@ -100,6 +101,16 @@ apps/
     package.json
     postcss.config.mjs
     tsconfig.json
+  realtime/
+    src/
+      auth/, config/, movement/, rooms/, state/, tests/
+      dev.ts, index.ts, server.ts, transport.ts
+    .env.example
+    package.json
+    tsconfig.json, tsconfig.build.json, eslint.config.mjs
+packages/
+  shared/
+    src/avatars.ts, map.ts, protocol.ts, socket-transport.ts
 docs/
   architecture.md
   organizations.md
@@ -108,6 +119,7 @@ docs/
   team-invitations-validation.md
   phaser-office-validation.md
   avatar-system-validation.md
+  realtime-multiplayer-validation.md
 supabase/
   config.toml
   .env.organization-tests.example
@@ -125,13 +137,15 @@ scripts/
   test-office-browser.mjs
   generate-avatar-assets.mjs
   office-pixel-art.mjs
+  check-realtime-environment.mjs
+  test-realtime-live.mjs
 package.json
 pnpm-lock.yaml
 pnpm-workspace.yaml
 ```
 
-`apps/realtime` and `packages/shared` are reserved future
-locations, not initialized packages. See [architecture notes](docs/architecture.md)
+`apps/realtime` is an independent persistent Node process. `packages/shared`
+contains the small pure contracts used by both applications. See [architecture notes](docs/architecture.md)
 for module boundaries and the approved pixel-art direction.
 
 ## Local development
@@ -155,6 +169,14 @@ pnpm dev
 Open <http://localhost:3000>. The landing page and health endpoint run without
 configuration. Authentication needs the existing Supabase project; no local
 PostgreSQL database, Supabase CLI, or new project is required.
+
+For multiplayer, set `NEXT_PUBLIC_REALTIME_URL=http://localhost:2567` in your
+existing ignored web env file. Copy `apps/realtime/.env.example` to
+`apps/realtime/.env`, supplying the **same existing project's URL and publishable
+key** as `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY`. Then run `pnpm dev:all`.
+The web app stays on port 3000 and the realtime process uses 2567. Restart both
+after configuration changes. Use a confirmed account with active membership;
+there is no anonymous or simulated multiplayer entry in the application.
 
 ### Supabase environment
 
@@ -227,11 +249,17 @@ install pnpm 10.34.7 with `npm install --global pnpm@10.34.7` first.
 | Command | Purpose |
 | --- | --- |
 | `pnpm dev` | Start the web development server |
+| `pnpm dev:realtime` | Start only the persistent realtime development server |
+| `pnpm dev:all` | Start web and realtime development servers together |
 | `pnpm build` | Create production builds for initialized workspaces |
 | `pnpm start` | Serve the production web build |
+| `pnpm start:realtime` | Serve the compiled realtime build; requires production HTTPS origin configuration |
 | `pnpm lint` | Run ESLint; warnings fail the check |
 | `pnpm typecheck` | Generate Next.js route types and run TypeScript checks |
-| `pnpm test` | Run auth, organization, invitation and office unit tests with Node's built-in runner |
+| `pnpm test` | Run web unit/service tests and isolated realtime security/transport tests |
+| `pnpm test:realtime` | Run only the realtime security/transport suite with synthetic identities |
+| `pnpm test:realtime:live` | Start the built server and check configured-project negative paths; no accounts |
+| `pnpm check:realtime:env` | Report configuration presence and matching project identity without values |
 | `pnpm test:smoke` | Start a production build temporarily and check HTTP routes |
 | `pnpm test:live` | Opt-in configured-project connectivity and invalid-proof checks |
 | `pnpm test:organization-setup` | Check rollback-runner safety and configuration locally |
@@ -347,7 +375,7 @@ for the distinction between passed checks and untested workflows.
 
 ## Future implementation phases
 
-These are scope boundaries, not implemented features or a fixed delivery order:
+These are scope boundaries; completed foundations and future work are distinguished:
 
 1. **Foundation (current):** workspace, web app, landing page, health endpoint,
    documentation, and development checks.
@@ -363,14 +391,15 @@ These are scope boundaries, not implemented features or a fixed delivery order:
    described in the validation report.
 5. **2D office (current):** lazily loaded Phaser renderer, original 32×32 map and
    assets, one four-direction avatar with walking/idle state, collisions and camera.
-6. **Realtime collaboration:** dedicated Colyseus service, shared contracts,
-   multiplayer movement, presence, and chat.
+6. **Realtime foundation (implemented; live-account verification pending):**
+   dedicated Colyseus service, shared contracts, authoritative multiplayer movement,
+   tenant isolation and presence. Text chat remains a separate future task.
 7. **Voice and production hardening:** LiveKit, communication controls, operational
    validation, accessibility, security, and performance work.
 
 Each phase requires a separate implementation task. The local office engine is
-implemented; realtime, container infrastructure and later product features remain
-deferred. Stop at Phase 2 Step 2; multiplayer is not implemented.
+implemented with the Phase 3 Step 1 realtime foundation. Voice, chat, container
+infrastructure and later product features remain deferred. Stop at Phase 3 Step 1.
 
 ## Organization setup
 

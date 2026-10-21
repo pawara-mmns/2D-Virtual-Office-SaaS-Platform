@@ -14,6 +14,8 @@ const root = fileURLToPath(new URL("../", import.meta.url));
 const web = resolve(root, "apps/web");
 const requireWeb = createRequire(resolve(web, "package.json"));
 const ts = requireWeb("typescript");
+const requireSDK = createRequire(requireWeb.resolve("@colyseus/sdk"));
+const { WebSocketServer } = requireSDK("ws");
 const browser = process.env.OFFICE_TEST_BROWSER || ["C:/Program Files/Google/Chrome/Application/chrome.exe", "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"].find(existsSync);
 const html = `<!doctype html><html lang="en"><meta charset="utf-8"><title>Office engine validation</title>
 <style>body{margin:24px;background:#f8f9f5;color:#202c27;font:14px Arial}header{width:1152px;max-width:100%;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center}h1{font-size:20px;margin:4px 0}#world{width:1152px;height:650px;max-width:calc(100vw - 48px);overflow:hidden;border:1px solid #dce2d8}canvas{display:block;image-rendering:pixelated}button,input{padding:10px}small{color:#5c6961}#world:focus-visible{outline:3px solid #245743}</style>
@@ -33,6 +35,10 @@ function serve(request, response) {
     const pathname = new URL(request.url, "http://localhost").pathname;
     if (pathname === "/") { response.setHeader("Content-Type", "text/html"); response.end(html); return; }
     if (pathname === "/phaser.js") { response.setHeader("Content-Type", "text/javascript"); response.end(readFileSync(resolve(web, "node_modules/phaser/dist/phaser.esm.js"))); return; }
+    if (["/packages/shared/src/avatars.ts", "/packages/shared/src/map.ts", "/packages/shared/src/protocol.ts", "/packages/shared/src/socket-transport.ts"].includes(pathname)) {
+      const source = ts.transpileModule(readFileSync(resolve(root, pathname.slice(1)), "utf8"), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } });
+      response.setHeader("Content-Type", "text/javascript"); response.end(source.outputText); return;
+    }
     if (pathname.startsWith("/office/")) {
       const name = pathname.slice(8);
       if (!["studio.json", "office-tiles.png", "avatar.png"].includes(name)) throw new Error("Unknown asset");
@@ -76,6 +82,13 @@ test("real Chromium validates Phaser rendering, input, collisions, camera, resiz
   const cache = resolve(root, ".cache"); mkdirSync(cache, { recursive: true });
   const profile = mkdtempSync(resolve(cache, "office-browser-"));
   const server = createServer(serve); await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  const handshakeServer = new WebSocketServer({ server });
+  handshakeServer.on("connection", (socket, request) => {
+    socket.once("message", () => socket.send(JSON.stringify({
+      urlCredential: /(?:reconnectionToken|_authToken)=/.test(request.url),
+      headerProof: request.headers["sec-websocket-protocol"] === "office-resume.fixture-proof",
+    })));
+  });
   const child = spawn(browser, ["--headless=new", "--remote-debugging-port=0", `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check", "--enable-unsafe-swiftshader", "--use-angle=swiftshader", "--window-size=1280,1024", "about:blank"], { windowsHide: true, stdio: "ignore" });
   let devtools;
   try {
@@ -142,13 +155,61 @@ test("real Chromium validates Phaser rendering, input, collisions, camera, resiz
     const performance = await evaluate(`(async()=>{const g=office.game;let frames=0;const count=()=>frames++;g.events.on('poststep',count);const start=performance.now();await new Promise(r=>setTimeout(r,1200));const seconds=(performance.now()-start)/1000;g.events.off('poststep',count);return {frames,seconds,fps:Math.round(frames/seconds*10)/10,renderer:g.renderer.type}})()`);
     console.log("Frame measurement complete; checking repeated renderer teardown/remount.");
     for (let i = 0; i < 2; i++) { await evaluate("remount()"); await waitFor(() => evaluate("window.ready === true"), "remount"); assert.equal((await snapshot()).canvases, 1, "Remount never duplicates canvas"); }
+    // Rendering fixture only: network authentication/transport is tested separately.
+    await evaluate(`(async()=>{
+      await window.slot.dispose(); window.ready=false; window.networkClosed=0; window.networkInputs=0;
+      const common={displayName:'Taylor',avatarKey:'fern',x:600,y:450,direction:'down',isMoving:false,connected:true};
+      window.networkState={officeId:'fixture-office',mapVersion:'fixture-map',players:new Map([
+        ['local',{...common,sessionId:'local',userId:'a'}],
+        ['remote',{...common,x:640,sessionId:'remote',userId:'b',avatarKey:'slate',displayName:'Morgan'}]
+      ])};
+      const {createOfficeGame}=await import('/modules/office/engine/create-game.ts');
+      window.office=createOfficeGame(document.getElementById('world'),{onReady(){window.ready=true},onError(){window.failure=true}}, {avatarKey:'fern',displayName:'Taylor'},true);
+      let closed=false;
+      office.setNetwork({snapshot:()=>window.networkState,sessionId:()=> 'local',input(){window.networkInputs++},appearanceChanged(){},close(){if(!closed){closed=true;window.networkClosed++}}});
+    })()`);
+    await waitFor(() => evaluate("window.ready===true && office.game.scene.getScene('Office').remotes.size===1"), "network avatar rendering");
+    assert.equal(await evaluate("office.game.scene.getScene('Office').player.body.enable"), false, "Multiplayer never delegates authoritative movement to local physics");
+    await evaluate("window.remoteSprite=office.game.scene.getScene('Office').remotes.get('remote').sprite;networkState.players.get('remote').x=680;networkState.players.get('remote').isMoving=true;networkState.players.get('remote').direction='right'");
+    await delay(180);
+    assert.equal(await evaluate("office.game.scene.getScene('Office').remotes.get('remote').sprite===window.remoteSprite"), true, "Network updates reuse the same sprite");
+    assert.ok(await evaluate("window.remoteSprite.x>675"), "Remote authoritative samples interpolate smoothly");
+    assert.equal(await evaluate("window.remoteSprite.anims.currentAnim.key"), "avatar-slate-right-walk");
+    await evaluate("networkState.players.get('remote').isMoving=false"); await delay(100);
+    assert.equal(await evaluate("window.remoteSprite.anims.isPlaying"), false, "Remote stops walking when server reports idle");
+    await evaluate(`(()=>{const common=networkState.players.get('local'),presets=['fern','harbor','clay','plum','ochre','slate'];for(let i=0;i<8;i++)networkState.players.set('extra-'+i,{...common,sessionId:'extra-'+i,userId:'extra-'+i,displayName:'Colleague '+i,avatarKey:presets[i%6],x:500+i*24,y:500,isMoving:true,direction:'left'})})()`);
+    await delay(100);
+    assert.equal(await evaluate("office.game.scene.getScene('Office').remotes.size"), 9, "Ten players reuse ten avatar instances");
+    const multiplayerPerformance = await evaluate(`(async()=>{const g=office.game;let frames=0;const count=()=>frames++;g.events.on('poststep',count);const start=performance.now();await new Promise(r=>setTimeout(r,1200));const seconds=(performance.now()-start)/1000;g.events.off('poststep',count);return {frames,seconds,fps:Math.round(frames/seconds*10)/10,players:10,scope:'render fixture, no live accounts or transport'}})()`);
+    await evaluate("for(let i=0;i<8;i++)networkState.players.delete('extra-'+i)");
+    await evaluate("networkState.players.delete('remote')"); await delay(80);
+    assert.equal(await evaluate("office.game.scene.getScene('Office').remotes.size"), 0);
+    assert.equal(await evaluate("window.remoteSprite.scene===undefined"), true, "Leave destroys the sprite");
+    await evaluate("window.savedNetworkState=networkState;window.networkState=undefined"); await delay(70);
+    assert.equal(await evaluate("office.game.scene.getScene('Office').player.visible"), false, "Disconnect does not show an offline player as online");
+    await evaluate("window.networkState=savedNetworkState"); await delay(70);
+    assert.equal(await evaluate("office.game.scene.getScene('Office').player.visible"), true);
+    assert.ok(await evaluate("window.networkInputs>0"));
+    await evaluate("office.destroy()");
+    assert.equal(await evaluate("window.networkClosed"), 1, "Game destruction also closes the network outside React");
     await evaluate("window.slot.dispose()"); assert.equal(await evaluate("document.querySelectorAll('canvas').length"), 0, "Cleanup removes the renderer/canvas");
     assert.equal(await evaluate("office.game.loop.running"), false, "Cleanup stops the frame loop");
+    const nativeHandshake = await evaluate(`(async()=>{
+      const {protectReconnectUrl}=await import('/packages/shared/src/socket-transport.ts');
+      let resolve;const done=new Promise(r=>resolve=r);
+      const connection={transport:{isOpen:false,send(){},sendUnreliable(){},connect(){},close(){}},events:{onopen(){connection.transport.send(new Uint8Array([1]))},onmessage(event){resolve(JSON.parse(event.data))}}};
+      const dispose=protectReconnectUrl(connection);
+      connection.transport.connect('ws://'+location.host+'/handshake-fixture?sessionId=fixture&reconnectionToken=fixture-proof');
+      const result=await done;dispose();
+      try{connection.transport.connect('ws://'+location.host+'/?reconnectionToken=fixture-proof');result.closedRetryBlocked=false}catch{result.closedRetryBlocked=true}
+      return result;
+    })()`);
+    assert.deepEqual(nativeHandshake, { urlCredential: false, headerProof: true, closedRetryBlocked: true }, "Native browser handshake keeps reconnection proof out of URLs and blocks stale retries after disposal");
     assert.deepEqual(devtools.errors, [], "Engine must not raise uncaught browser exceptions");
     const version = await command("Browser.getVersion");
-    console.log(JSON.stringify({ browser: version.product, hardware: cpus()[0]?.model, renderer: "SwiftShader software WebGL", viewport: "1280x1024", measured: performance, screenshot: ".cache/office-preview-desktop.png", scope: "isolated engine only; live authenticated app workflow not tested" }));
+    console.log(JSON.stringify({ browser: version.product, hardware: cpus()[0]?.model, renderer: "SwiftShader software WebGL", viewport: "1280x1024", measured: performance, multiplayerRendering: multiplayerPerformance, screenshot: ".cache/office-preview-desktop.png", scope: "isolated engine only; live authenticated app workflow not tested" }));
   } finally {
-    devtools?.close(); child.kill(); server.close();
+    devtools?.close(); child.kill(); handshakeServer.close(); server.close();
     await delay(500);
     // Only remove this run's newly created, resolved profile under the workspace cache.
     if (resolve(profile).startsWith(cache + sep + "office-browser-")) rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });

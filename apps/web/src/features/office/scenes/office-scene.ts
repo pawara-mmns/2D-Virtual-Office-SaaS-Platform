@@ -3,15 +3,20 @@ import { mapMarkers, TILE_SIZE, validateOfficeMap } from "../maps/map-data.ts";
 import { officeZoom } from "../engine/camera.ts";
 import { PlayerAvatar } from "../engine/player-avatar.ts";
 import type { AvatarAppearance } from "../../avatars/presets.ts";
+import { mapVersion, type OfficeNetwork } from "../../../../../../packages/shared/src/protocol.ts";
+import { movement } from "../input/movement.ts";
 
-export type OfficeCallbacks = { onReady(): void; onError(): void };
+export type OfficeCallbacks = { onReady(mapVersion?: string): void; onError(): void };
 export class OfficeScene extends Phaser.Scene {
   player!: Phaser.Physics.Arcade.Sprite;
   avatar!: PlayerAvatar;
   private failed = false;
   private mapWidth = 0;
   private mapHeight = 0;
-  constructor(private readonly pressed: ReadonlySet<string>, private readonly callbacks: OfficeCallbacks, private appearance: AvatarAppearance) { super("Office"); }
+  private network?: OfficeNetwork;
+  private remotes = new Map<string, PlayerAvatar>();
+  private readonly movementInput = { x: 0, y: 0, facing: "down" as const };
+  constructor(private readonly pressed: ReadonlySet<string>, private readonly callbacks: OfficeCallbacks, private appearance: AvatarAppearance, private readonly multiplayer = false) { super("Office"); }
   preload() {
     this.load.once(Phaser.Loader.Events.FILE_LOAD_ERROR, () => { this.failed = true; this.callbacks.onError(); });
     this.load.image("office-tiles", "/office/office-tiles.png");
@@ -34,6 +39,7 @@ export class OfficeScene extends Phaser.Scene {
       const spawn = mapMarkers(data).find((marker) => marker.type === "spawn")!;
       this.avatar = new PlayerAvatar(this, spawn.x, spawn.y, this.appearance);
       this.player = this.avatar.sprite;
+      if (this.multiplayer) { this.player.setVisible(false); this.avatar.label.setVisible(false); this.player.body!.enable = false; }
       this.physics.add.collider(this.player, collision);
       for (const marker of mapMarkers(data).filter((marker) => marker.type === "area")) {
         this.add.text(marker.x, marker.y, marker.name, { fontFamily: "Courier New, monospace", fontSize: "10px", color: "#344c48", backgroundColor: "#e9e5d2", padding: { x: 5, y: 3 } }).setOrigin(.5).setDepth(1);
@@ -43,8 +49,9 @@ export class OfficeScene extends Phaser.Scene {
       camera.roundPixels = true;
       this.resetZoom();
       this.scale.on(Phaser.Scale.Events.RESIZE, this.resize, this);
-      this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.scale.off(Phaser.Scale.Events.RESIZE, this.resize, this));
-      this.callbacks.onReady();
+      this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => { this.scale.off(Phaser.Scale.Events.RESIZE, this.resize, this); this.network?.close(); this.remotes.clear(); });
+      this.events.once(Phaser.Scenes.Events.DESTROY, () => { this.network?.close(); this.remotes.clear(); });
+      this.callbacks.onReady(mapVersion(data));
     } catch { this.failed = true; this.callbacks.onError(); }
   }
   private resize() { this.setZoom(this.cameras.main.zoom); }
@@ -54,9 +61,30 @@ export class OfficeScene extends Phaser.Scene {
   }
   zoomBy(step: number) { this.setZoom(this.cameras.main.zoom + step); }
   resetZoom() { this.setZoom(2); }
-  setAppearance(appearance: AvatarAppearance) { this.appearance = appearance; this.avatar?.setAppearance(appearance); }
-  update() {
+  setAppearance(appearance: AvatarAppearance) { this.appearance = appearance; if (!this.multiplayer) this.avatar?.setAppearance(appearance); }
+  setNetwork(network: OfficeNetwork) { this.network = network; }
+  update(_time: number, delta: number) {
     if (!this.player || this.failed) return;
+    if (this.multiplayer) {
+      const snapshot = this.network?.snapshot(), sessionId = this.network?.sessionId();
+      const own = sessionId ? snapshot?.players.get(sessionId) : undefined;
+      this.player.setVisible(!!own); this.avatar.label.setVisible(!!own);
+      if (!snapshot || !own) {
+        for (const avatar of this.remotes.values()) avatar.destroy();
+        this.remotes.clear(); return;
+      }
+      const input = movement(this.pressed, own.direction, this.movementInput);
+      this.network!.input(input.x, input.y);
+      this.avatar.renderNetwork(own, delta, true);
+      for (const [id, player] of snapshot.players) {
+        if (id === sessionId) continue;
+        let avatar = this.remotes.get(id);
+        if (!avatar) { avatar = new PlayerAvatar(this, player.x, player.y, player); this.remotes.set(id, avatar); }
+        avatar.renderNetwork(player, delta, false);
+      }
+      for (const [id, avatar] of this.remotes) if (!snapshot.players.has(id)) { avatar.destroy(); this.remotes.delete(id); }
+      return;
+    }
     this.avatar.update(this.pressed);
   }
 }
