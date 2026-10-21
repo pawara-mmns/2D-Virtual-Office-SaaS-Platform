@@ -1,35 +1,16 @@
 import assert from "node:assert/strict";
-import { createServer } from "node:net";
-import { spawn } from "node:child_process";
 import { before, after, test } from "node:test";
-import { setTimeout } from "node:timers/promises";
+import { startProductionApp } from "./helpers/production-app.mjs";
 
 let server;
 let base;
 
 before(async () => {
-  const port = await new Promise((resolve, reject) => {
-    const socket = createServer();
-    socket.on("error", reject);
-    socket.listen(0, "127.0.0.1", () => {
-      const address = socket.address();
-      socket.close(() => resolve(address.port));
-    });
-  });
-  base = `http://127.0.0.1:${port}`;
-  server = spawn(process.execPath, ["node_modules/next/dist/bin/next", "start", "--hostname", "127.0.0.1", "--port", String(port)], { stdio: "ignore" });
-  for (let attempt = 0; attempt < 100; attempt++) {
-    if (server.exitCode !== null) throw new Error("Production server exited. Run pnpm build before the smoke tests.");
-    try {
-      const response = await fetch(base + "/api/health");
-      if (response.ok) return;
-    } catch { /* Server is still starting. */ }
-    await setTimeout(100);
-  }
-  throw new Error("Production server did not become ready.");
+  server = await startProductionApp();
+  base = server.base;
 }, { timeout: 15000 });
 
-after(() => { server?.kill(); });
+after(() => { server?.stop(); });
 
 test("foundation homepage and health endpoint remain available", async () => {
   const home = await fetch(base);

@@ -13,6 +13,7 @@
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
-    "test:smoke": "pnpm --filter @virtual-office/web test:smoke"
+    "test:smoke": "pnpm --filter @virtual-office/web test:smoke",
+    "test:live": "pnpm --filter @virtual-office/web test:live"
   }
 }

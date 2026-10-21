@@ -104,6 +104,8 @@ accepted by this implementation. Never paste a secret key into a public variable
 The URL must be an HTTPS origin (localhost HTTP is supported). These values are
 public client configuration; Next.js embeds them into browser builds. Restart
 development or rebuild production after changing them. `.env.local` is ignored.
+An existing `apps/web/.env` is also supported and ignored by Git; the verified
+Step 2B configuration uses that file. `.env.local` takes precedence if both exist.
 
 With missing or invalid configuration, auth forms are disabled with an explicit
 setup message, and the dashboard redirects to login. No credentials are invented.
@@ -163,6 +165,7 @@ install pnpm 10.34.7 with `npm install --global pnpm@10.34.7` first.
 | `pnpm typecheck` | Generate Next.js route types and run TypeScript checks |
 | `pnpm test` | Run focused auth unit tests with Node's built-in test runner |
 | `pnpm test:smoke` | Start a production build temporarily and check HTTP routes |
+| `pnpm test:live` | Opt-in configured-project connectivity and invalid-proof checks |
 | `pnpm install --frozen-lockfile` | Install the exact locked dependencies in CI |
 
 The root scripts invoke `pnpm`, so its shim or installation must be on PATH.
@@ -178,6 +181,11 @@ pnpm test
 pnpm build
 pnpm test:smoke
 ```
+
+With real Supabase configuration and network access, also run `pnpm test:live`
+after building. It checks public Auth health/settings, unauthenticated access,
+synthetic invalid tokens, and the application's negative paths. It does not create
+accounts, send emails, change real passwords, or bypass email confirmation.
 
 After `pnpm build`, run `pnpm start`. `GET /api/health` returns HTTP 200:
 
@@ -252,10 +260,11 @@ accounts. No test framework dependencies are installed.
 - **Auth unavailable:** the app denies private access during provider/network
   errors. Retry later; do not loosen authorization checks.
 
-Live registration, email delivery, confirmation, login, session refresh, logout,
-and recovery must be checked with real configuration and a permitted test inbox.
-No such credentials were available during this implementation, so remote workflows
-are not claimed as tested.
+Step 2B verified real-project connectivity and negative paths with the configured
+publishable key. Successful registration, email delivery, confirmation, login,
+session refresh, logout, and recovery still require a permitted test inbox/account
+and manual verification. See [actual validation results](docs/authentication-validation.md)
+for the distinction between passed checks and untested workflows.
 
 ## Future implementation phases
 

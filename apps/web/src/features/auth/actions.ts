@@ -5,11 +5,9 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { authSetupMessage, getSupabaseConfig } from "@/lib/supabase/config";
 import { recoveryCookieName, recoveryCookieOptions } from "./links";
-import { applyRecoveryPassword, lookupVerifiedUser } from "./service";
+import { applyRecoveryPassword, lookupVerifiedUser, requestPasswordRecovery } from "./service";
 import { validateAuthForm, type AuthMode, type AuthState } from "./validation";
 
-const recoveryMessage =
-  "If an account exists for this email, you’ll receive a password reset link. Check your inbox and spam folder.";
 const verificationMessage =
   "If this address can be registered, you’ll receive a verification email. Open its link to verify your address before signing in. Check your spam folder too.";
 const unavailableMessage = "We couldn’t reach the authentication service. Please try again shortly.";
@@ -46,10 +44,7 @@ async function submit(mode: AuthMode, form: FormData): Promise<AuthState> {
     if (mode === "forgot-password") {
       // Site URL and email templates are configured in Supabase. Do not derive
       // email destinations from request Host, Origin, or arbitrary next URLs.
-      const { error } = await supabase.auth.resetPasswordForEmail(input.email);
-      if (error && error.status && error.status >= 500) return errorState(unavailableMessage);
-      // Account-specific rejection and rate limits use the same safe response.
-      return { status: "success", message: recoveryMessage };
+      return requestPasswordRecovery(supabase.auth, input.email);
     }
 
     if (mode === "register") {
