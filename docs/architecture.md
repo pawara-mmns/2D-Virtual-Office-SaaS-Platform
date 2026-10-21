@@ -33,12 +33,12 @@ The workspace patterns reserve `apps/*` and `packages/*`. Add `apps/realtime`
 for a dedicated Colyseus process and `packages/shared` for cross-service contracts
 when those phases begin. No empty service packages are initialized now.
 
-Phaser will own rendering and local movement in a lazily loaded office view.
-Keep its game loop separate from React state. LiveKit will handle voice.
+Phaser now owns rendering and local movement in the lazily loaded office view.
+Its game loop is separate from React state. LiveKit will handle future voice.
 Supabase Auth is configured through the two public environment variables in
 `apps/web/.env.example`. Organization schema/RLS and server data access are now
 defined in the Step 3 migration. Remote application has a separate approval gate.
-Storage, game, realtime, and voice integrations remain deferred.
+Storage, realtime, and voice integrations remain deferred.
 
 ## Authentication boundary
 
@@ -121,13 +121,30 @@ disconnect removed members themselves; those services are not implemented.
 
 ## Visual direction
 
-Use an original, top-down 2D pixel office on a 32×32 logical tile grid, crisp
+The first original, top-down 2D pixel office uses a 32×32 logical tile grid, crisp
 nearest-neighbor scaling, consistent sprite dimensions, and uncluttered layouts.
-Future assets should include office furniture and decoration. Four-direction
-avatars and subtle idle/walk animation belong to the engine phase. Load texture
-atlases and office assets only when entering an office.
+Office furniture, decoration and one four-direction animated avatar are included.
+Texture atlases and office assets load only when entering the office.
 
 Surrounding application UI uses clean typography, accessible controls, restrained
 colors, and consistent spacing. Avoid mixing realistic or 3D art with the pixel
-environment. The current static illustration establishes visual direction only;
-it is not a map format, sprite sheet, or avatar implementation.
+environment. The landing page's static illustration remains separate from the
+interactive Tiled map and sprite sheet; its page does not load Phaser.
+
+## Local office engine
+
+`/workspace/[organizationId]/office` verifies the user, active organization and
+membership before reading the existing office. Missing/inaccessible tenant IDs
+share a denied response. No schema change or synthetic office record is needed.
+
+`features/office` contains the server access boundary, client-only dynamic UI,
+engine lifecycle, scene, input and pure map/movement/camera rules. Only the effect
+imports the Phaser factory; a serialized lifecycle prevents remount races and
+awaits deferred destruction. The frame loop does not update React or Supabase.
+
+The original Tiled JSON separates Floor, Architecture, Furniture and binary
+Collision layers from spawn/area Markers. Phaser Arcade Physics uses a foot body
+and tile collisions. Focus-scoped input leaves form controls/Tab alone. Integer
+zoom, rounded pixels and a single ResizeObserver maintain crisp bounded rendering.
+The office is single-player only; assets are first-party, with no shared user state.
+See [map, lifecycle, browser results and limitations](phaser-office-validation.md).

@@ -20,6 +20,21 @@ test("foundation homepage and health endpoint remain available", async () => {
   assert.deepEqual(await health.json(), { status: "ok", service: "web" });
 });
 
+test("homepage and login initial scripts do not include the deferred Phaser runtime", async () => {
+  const scripts = new Set();
+  for (const path of ["/", "/login"]) {
+    const html = await (await fetch(base + path)).text();
+    for (const match of html.matchAll(/<script[^>]+src="([^"]+\.js[^\"]*)"/g)) scripts.add(match[1]);
+  }
+  assert.ok(scripts.size > 0);
+  for (const script of scripts) {
+    const response = await fetch(new URL(script, base));
+    assert.equal(response.ok, true);
+    const source = await response.text();
+    assert.equal(source.includes("Phaser v") || source.includes("Phaser Studio"), false, "Initial public-route JavaScript must not contain Phaser");
+  }
+});
+
 test("auth pages render accessible form controls without public caching", async () => {
   for (const path of ["/login", "/register", "/forgot-password"]) {
     const response = await fetch(base + path);
@@ -63,7 +78,7 @@ test("reset password without recovery proof only offers a new link", async () =>
 });
 
 test("organization creation and workspace routes reject unauthenticated requests", async () => {
-  for (const path of ["/organizations/new", "/workspace/not-a-uuid", "/workspace/250d1968-67d7-4d3c-8846-92f26747d76d", "/workspace/250d1968-67d7-4d3c-8846-92f26747d76d/members"]) {
+  for (const path of ["/organizations/new", "/workspace/not-a-uuid", "/workspace/250d1968-67d7-4d3c-8846-92f26747d76d", "/workspace/250d1968-67d7-4d3c-8846-92f26747d76d/members", "/workspace/250d1968-67d7-4d3c-8846-92f26747d76d/office"]) {
     const response = await fetch(base + path, { redirect: "manual" });
     assert.equal(response.status, 307);
     assert.equal(new URL(response.headers.get("location"), base).pathname, "/login");

@@ -2,7 +2,11 @@
 
 A multi-tenant 2D virtual office SaaS platform for distributed teams. The planned
 product will give companies private pixel-art offices with realtime movement,
-chat, and voice. **Phase 1 — Step 4 adds team members and invitations.**
+chat, and voice. **Phase 2 — Step 1 adds the first interactive single-player office.**
+
+The protected office route now uses Phaser 4.2.1, an original 32×32 pixel-art map,
+local avatar movement, collision and camera controls. See
+[office setup and actual validation results](docs/phaser-office-validation.md).
 
 Step 4's approved migration is applied to the confirmed development project.
 Schema, permission and account-independent regression checks passed. Real
@@ -16,10 +20,11 @@ invitation email and authenticated team workflows remain unverified; see
 - Tailwind CSS 4 and ESLint 9 with Next.js Core Web Vitals and TypeScript rules
 - pnpm 10 workspaces, with an exact package-manager version and lockfile
 - Supabase Auth through `@supabase/supabase-js` and `@supabase/ssr`
+- Phaser 4.2.1, loaded only when entering the protected office
 
 Supabase PostgreSQL organization migrations and server data access are included;
 check [migration and validation status](docs/organization-validation.md) before
-using them. Planned, not installed: Phaser, Colyseus, and LiveKit. Storage remains
+using them. Planned, not installed: Colyseus and LiveKit. Storage remains
 deferred.
 
 ESLint is pinned to the latest 9.x release for compatibility with the React lint
@@ -50,6 +55,7 @@ apps/
         workspace/layout.tsx
         workspace/[organizationId]/page.tsx
         workspace/[organizationId]/members/page.tsx
+        workspace/[organizationId]/office/{page,loading}.tsx
         error.tsx
         globals.css
         icon.svg
@@ -70,6 +76,9 @@ apps/
         invitations.test.ts
       features/members/
         actions.ts, server.ts, service.ts, action-form.tsx, team-management.tsx
+      features/office/
+        access.ts, office.test.ts
+        components/, engine/, scenes/, input/, maps/
       lib/supabase/
         client.ts, server.ts, proxy.ts, config.ts, config.test.ts
         database.types.ts
@@ -77,6 +86,8 @@ apps/
     tests/auth-routes.test.mjs
     tests/organizations-live.test.mjs
     tests/team-live.test.mjs
+    public/office/
+      office-tiles.png, avatar.png, studio.json, ASSETS.md
     .env.example
     eslint.config.mjs
     package.json
@@ -88,6 +99,7 @@ docs/
   organization-validation.md
   team-invitations.md
   team-invitations-validation.md
+  phaser-office-validation.md
 supabase/
   config.toml
   .env.organization-tests.example
@@ -101,6 +113,8 @@ scripts/
   test-organizations.mjs
   test-organizations.test.mjs
   team-database.test.mjs
+  generate-office-assets.mjs
+  test-office-browser.mjs
 package.json
 pnpm-lock.yaml
 pnpm-workspace.yaml
@@ -207,7 +221,7 @@ install pnpm 10.34.7 with `npm install --global pnpm@10.34.7` first.
 | `pnpm start` | Serve the production web build |
 | `pnpm lint` | Run ESLint; warnings fail the check |
 | `pnpm typecheck` | Generate Next.js route types and run TypeScript checks |
-| `pnpm test` | Run auth/configuration/organization unit tests with Node's built-in runner |
+| `pnpm test` | Run auth, organization, invitation and office unit tests with Node's built-in runner |
 | `pnpm test:smoke` | Start a production build temporarily and check HTTP routes |
 | `pnpm test:live` | Opt-in configured-project connectivity and invalid-proof checks |
 | `pnpm test:organization-setup` | Check rollback-runner safety and configuration locally |
@@ -218,6 +232,8 @@ install pnpm 10.34.7 with `npm install --global pnpm@10.34.7` first.
 | `pnpm test:team:live --check` | Validate dedicated test-account setup without running SQL |
 | `pnpm test:team:live` | Live rollback-only team policy suite after migration approval/application |
 | `pnpm test:team:anonymous` | Live invitation API permission denials and invalid-preview checks; no accounts |
+| `pnpm assets:office` | Regenerate original pixel-art assets and the Tiled office map |
+| `pnpm test:office:browser` | Run an isolated real Chromium engine test; no accounts or database |
 | `pnpm install --frozen-lockfile` | Install the exact locked dependencies in CI |
 
 The root scripts invoke `pnpm`, so its shim or installation must be on PATH.
@@ -334,16 +350,16 @@ These are scope boundaries, not implemented features or a fixed delivery order:
    member management, ownership transfer and tenant RLS. The development migration
    is applied; authenticated/email/browser verification still needs the setup
    described in the validation report.
-5. **2D office:** lazily loaded Phaser renderer, 32×32 tiles, office assets,
-   four-direction avatars, and subtle idle/walk animations.
+5. **2D office (current):** lazily loaded Phaser renderer, original 32×32 map and
+   assets, one four-direction avatar with walking/idle state, collisions and camera.
 6. **Realtime collaboration:** dedicated Colyseus service, shared contracts,
    multiplayer movement, presence, and chat.
 7. **Voice and production hardening:** LiveKit, communication controls, operational
    validation, accessibility, security, and performance work.
 
-Each phase requires a separate implementation task. No engine, realtime service,
-container infrastructure, or backend simulation is included. Stop at Phase 1 —
-Step 4; all later product features remain deferred.
+Each phase requires a separate implementation task. The local office engine is
+implemented; realtime, container infrastructure and later product features remain
+deferred. Stop at Phase 2 Step 1; multiplayer is not implemented.
 
 ## Organization setup
 
