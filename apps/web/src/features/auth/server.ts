@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
 import { cache } from "react";
+import { cookies } from "next/headers";
+import { invitationCookieName, postLoginDestination } from "@/lib/invitation-context";
 import { createClient } from "@/lib/supabase/server";
 import { getSupabaseConfig } from "@/lib/supabase/config";
 import { lookupVerifiedUser } from "./service";
@@ -21,5 +23,5 @@ export async function requireUser() {
 
 export async function redirectAuthenticatedUser() {
   const result = await currentUser();
-  if (result.status === "authenticated") redirect("/dashboard");
+  if (result.status === "authenticated") redirect(postLoginDestination((await cookies()).get(invitationCookieName)?.value));
 }
