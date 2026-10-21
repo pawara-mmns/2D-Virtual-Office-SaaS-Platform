@@ -1,0 +1,84 @@
+-- Isolated PostgreSQL suite. Synthetic identities are supplied by the local
+-- PGlite runner. Never run this file against real application accounts.
+begin;
+create temporary table chat_context(org_a uuid,org_b uuid,office_a uuid,office_b uuid,request uuid,message jsonb);
+grant all on chat_context to authenticated;
+create function pg_temp.chat_assert(ok boolean,label text) returns void language plpgsql as $$ begin
+  if ok is distinct from true then raise exception 'FAIL: %',label; end if; raise notice 'PASS: %',label;
+end $$;
+create function pg_temp.chat_denied(statement text,expected text) returns void language plpgsql as $$ declare actual text; begin
+  begin execute statement; exception when others then get stacked diagnostics actual=returned_sqlstate;
+    if actual<>expected then raise exception 'Wrong denial: expected %, got %',expected,actual; end if; return; end;
+  raise exception 'Statement unexpectedly allowed';
+end $$;
+select set_config('request.jwt.claims','{"sub":"00000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+set local role authenticated;
+insert into chat_context(org_a,request) values(public.create_organization('Chat fixture A','10000000-0000-4000-8000-000000000001'),gen_random_uuid());
+update chat_context set office_a=(select id from public.offices where organization_id=org_a);
+select pg_temp.chat_assert((select count(*) from public.chat_channels)=1,'future office provisions one channel');
+select public.create_organization('Chat fixture A','10000000-0000-4000-8000-000000000001');
+select pg_temp.chat_assert((select count(*) from public.chat_channels)=1,'organization retry never duplicates channel');
+update chat_context set message=public.send_office_chat_message(office_a,'Hello team',request);
+select pg_temp.chat_assert((message->'message'->>'senderId')=auth.uid()::text,'sender derived from authenticated identity') from chat_context;
+select pg_temp.chat_assert((message->>'inserted')::boolean,'authorized send persists first request') from chat_context;
+select pg_temp.chat_assert(not (public.send_office_chat_message(office_a,'Hello team',request)->>'inserted')::boolean,'retry returns existing committed row') from chat_context;
+select pg_temp.chat_assert((select count(*) from public.chat_messages)=1,'idempotency prevents duplicate persistence');
+select pg_temp.chat_denied(format('select public.send_office_chat_message(%L,''different'',%L)',office_a,request),'22023') from chat_context;
+select pg_temp.chat_denied(format('select public.send_office_chat_message(%L,''  '',gen_random_uuid())',office_a),'22023') from chat_context;
+select pg_temp.chat_denied(format('select public.send_office_chat_message(%L,repeat(''x'',2001),gen_random_uuid())',office_a),'22023') from chat_context;
+select pg_temp.chat_denied(format('select public.send_office_chat_message(%L,chr(1),gen_random_uuid())',office_a),'22023') from chat_context;
+select pg_temp.chat_denied(format('select public.send_office_chat_message(%L,chr(65279),gen_random_uuid())',office_a),'22023') from chat_context;
+select public.send_office_chat_message(office_a,'rate fixture '||i,gen_random_uuid()) from chat_context cross join generate_series(1,4) i;
+select pg_temp.chat_denied(format('select public.send_office_chat_message(%L,''sixth'',gen_random_uuid())',office_a),'P0310') from chat_context;
+select pg_temp.chat_assert(not (public.send_office_chat_message(office_a,'Hello team',request)->>'inserted')::boolean,'confirmed retry does not consume quota') from chat_context;
+select pg_temp.chat_denied('insert into public.chat_messages(channel_id,sender_id,sender_name,body,client_message_id) select id,''00000000-0000-4000-8000-000000000002'',''forged'',''forged'',gen_random_uuid() from public.chat_channels','42501');
+select pg_temp.chat_denied('update public.chat_messages set body=''changed''','42501');
+select pg_temp.chat_denied('delete from public.chat_messages','42501');
+select pg_temp.chat_denied('insert into public.chat_channels(organization_id,office_id) values(gen_random_uuid(),gen_random_uuid())','42501');
+reset role;
+-- Owner-only local fixtures for pagination; not an application send shortcut.
+insert into public.chat_messages(channel_id,sender_id,sender_name,body,client_message_id,created_at)
+  select c.id,'00000000-0000-4000-8000-000000000001','Fixture','history '||i,gen_random_uuid(),now()-interval '1 minute'
+  from public.chat_channels c join chat_context t on c.office_id=t.office_a cross join generate_series(1,40) i;
+set local role authenticated;
+select pg_temp.chat_assert(jsonb_array_length(public.list_office_chat_messages(office_a))=31,'history is bounded to 30 plus one cursor sentinel') from chat_context;
+select pg_temp.chat_assert((public.list_office_chat_messages(office_a)->0->>'id')::bigint > (public.list_office_chat_messages(office_a)->29->>'id')::bigint,'history order is deterministic') from chat_context;
+select pg_temp.chat_assert((select count(*) from jsonb_array_elements(public.list_office_chat_messages(office_a,(public.list_office_chat_messages(office_a)->29->>'id'))) m where (m->>'id')::bigint >= (public.list_office_chat_messages(office_a)->29->>'id')::bigint)=0,'older cursor has no overlap') from chat_context;
+select pg_temp.chat_denied(format('select public.list_office_chat_messages(%L,''bad cursor'')',office_a),'22023') from chat_context;
+reset role;
+select set_config('request.jwt.claims','{"sub":"00000000-0000-4000-8000-000000000002","role":"authenticated"}',true);
+set local role authenticated;
+update chat_context set org_b=public.create_organization('Chat fixture B',gen_random_uuid());
+update chat_context set office_b=(select id from public.offices where organization_id=org_b);
+select pg_temp.chat_assert((select count(*) from public.chat_messages)=0,'other tenant sees no A messages through RLS');
+select pg_temp.chat_denied(format('select public.list_office_chat_messages(%L)',office_a),'42501') from chat_context;
+select pg_temp.chat_denied(format('select public.send_office_chat_message(%L,''cross tenant'',gen_random_uuid())',office_a),'42501') from chat_context;
+reset role;
+insert into public.organization_members(organization_id,user_id,role) select org_a,'00000000-0000-4000-8000-000000000003','MEMBER' from chat_context;
+insert into public.organization_members(organization_id,user_id,role) select org_a,'00000000-0000-4000-8000-000000000004','MEMBER' from chat_context;
+select set_config('request.jwt.claims','{"sub":"00000000-0000-4000-8000-000000000004","role":"authenticated"}',true);
+set local role authenticated;
+select pg_temp.chat_assert((select count(*) from public.chat_messages)=0,'unverified identity sees no messages');
+select pg_temp.chat_denied(format('select public.send_office_chat_message(%L,''unverified'',gen_random_uuid())',office_a),'42501') from chat_context;
+reset role;
+select set_config('request.jwt.claims','{"sub":"00000000-0000-4000-8000-000000000003","role":"authenticated"}',true);
+set local role authenticated;
+select public.send_office_chat_message(office_a,'Member message',gen_random_uuid()) from chat_context;
+select pg_temp.chat_assert(jsonb_array_length(public.list_office_chat_messages(office_a))=31,'active member can read history') from chat_context;
+reset role;
+select set_config('request.jwt.claims','{"sub":"00000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+set local role authenticated;
+select public.remove_organization_member(t.org_a,m.id) from chat_context t join public.organization_members m on m.organization_id=t.org_a and m.user_id='00000000-0000-4000-8000-000000000003';
+reset role;
+select set_config('request.jwt.claims','{"sub":"00000000-0000-4000-8000-000000000003","role":"authenticated"}',true);
+set local role authenticated;
+select pg_temp.chat_assert((select count(*) from public.chat_messages)=0,'removed member loses RLS reads');
+select pg_temp.chat_denied(format('select public.list_office_chat_messages(%L)',office_a),'42501') from chat_context;
+select pg_temp.chat_denied(format('select public.send_office_chat_message(%L,''removed'',gen_random_uuid())',office_a),'42501') from chat_context;
+reset role;
+set local role anon;
+select pg_temp.chat_denied('select * from public.chat_messages','42501');
+select pg_temp.chat_denied('select public.list_office_chat_messages(gen_random_uuid())','42501');
+select pg_temp.chat_denied('select public.send_office_chat_message(gen_random_uuid(),''anonymous'',gen_random_uuid())','42501');
+reset role;
+rollback;

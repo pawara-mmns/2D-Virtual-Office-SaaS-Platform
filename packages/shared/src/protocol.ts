@@ -1,4 +1,5 @@
 import type { AvatarAppearance, AvatarDirection } from "./avatars.ts";
+import type { Availability } from "./chat.ts";
 export const TICK_MS = 50;
 export const AUTH_CHECK_MS = 10_000;
 export const AUTH_LEASE_MS = 15_000;
@@ -6,9 +7,10 @@ export const RECONNECT_SECONDS = 10;
 export type MoveInput = { seq: number; x: number; y: number };
 export type PlayerSnapshot = AvatarAppearance & {
   sessionId: string; userId: string; x: number; y: number;
-  direction: AvatarDirection; isMoving: boolean; connected: boolean;
+  direction: AvatarDirection; isMoving: boolean; connected: boolean; availability?: Availability;
 };
 export type OfficeSnapshot = { officeId: string; mapVersion: string; players: Map<string, PlayerSnapshot> };
+export type Participant = Pick<PlayerSnapshot, "sessionId" | "userId" | "displayName" | "avatarKey" | "connected" | "availability"> & { isSelf?: boolean };
 export type Presence = { status: "connecting" | "online" | "reconnecting" | "offline"; count: number; notice: string };
 export type OfficeNetwork = {
   snapshot(): OfficeSnapshot | undefined;
@@ -16,6 +18,8 @@ export type OfficeNetwork = {
   input(x: number, y: number): void;
   appearanceChanged(): void;
   close(): void;
+  sendChat?(body: string, clientMessageId: string): boolean;
+  setAvailability?(status: Availability): boolean;
 };
 export function validInput(value: unknown): value is MoveInput {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
