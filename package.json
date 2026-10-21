@@ -14,6 +14,12 @@
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "test:smoke": "pnpm --filter @virtual-office/web test:smoke",
-    "test:live": "pnpm --filter @virtual-office/web test:live"
+    "test:live": "pnpm --filter @virtual-office/web test:live",
+    "test:organizations": "node scripts/test-organizations.mjs",
+    "test:organizations:anonymous": "pnpm --filter @virtual-office/web test:organizations:anonymous",
+    "test:organization-setup": "node --test scripts/test-organizations.test.mjs"
+  },
+  "devDependencies": {
+    "supabase": "^2.121.0"
   }
 }
