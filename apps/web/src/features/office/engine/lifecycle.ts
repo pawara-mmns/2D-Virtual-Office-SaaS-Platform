@@ -1,5 +1,6 @@
 import type { AvatarAppearance } from "../../avatars/presets.ts";
-export type OfficeController = { destroy(): Promise<void>; zoomBy(step: number): void; resetZoom(): void; setAppearance?(appearance: AvatarAppearance): void };
+import type { OfficeNetwork } from "../../../../../../packages/shared/src/protocol.ts";
+export type OfficeController = { destroy(): Promise<void>; zoomBy(step: number): void; resetZoom(): void; setAppearance?(appearance: AvatarAppearance): void; setNetwork?(network: OfficeNetwork): void };
 // Serialize cleanup across rapid route changes and React Strict Mode remounts.
 export function createOfficeLifecycle() {
   let tail: Promise<unknown> = Promise.resolve();
@@ -15,6 +16,7 @@ export function createOfficeLifecycle() {
       zoomBy(step: number) { if (!cancelled) controller?.zoomBy(step); },
       resetZoom() { if (!cancelled) controller?.resetZoom(); },
       setAppearance(appearance: AvatarAppearance) { if (!cancelled) controller?.setAppearance?.(appearance); },
+      setNetwork(network: OfficeNetwork) { if (!cancelled) controller?.setNetwork?.(network); },
       dispose() {
         cancelled = true;
         const closed = ready.then(async () => { await controller?.destroy(); controller = undefined; });

@@ -3,6 +3,7 @@ import { avatarAnimationKey, avatarBody, avatarDirections, avatarDisplayName, av
 import { animationDirection, avatarIsWalking } from "../../avatars/animation.ts";
 import { movement, type Direction, type Movement } from "../input/movement.ts";
 import { PLAYER_SPEED } from "../maps/map-data.ts";
+import type { PlayerSnapshot } from "../../../../../../packages/shared/src/protocol.ts";
 
 export class PlayerAvatar {
   readonly sprite: Phaser.Physics.Arcade.Sprite;
@@ -16,6 +17,7 @@ export class PlayerAvatar {
   private labelWidth = -1;
   private previousX: number;
   private previousY: number;
+  private networkAppearance = "";
   constructor(private readonly scene: Phaser.Scene, x: number, y: number, appearance: AvatarAppearance) {
     this.key = safeAvatarKey(appearance.avatarKey); this.fullName = avatarDisplayName(appearance.displayName);
     this.previousX = x; this.previousY = y;
@@ -34,6 +36,29 @@ export class PlayerAvatar {
     this.key = safeAvatarKey(appearance.avatarKey); this.fullName = avatarDisplayName(appearance.displayName);
     this.walkingDirection = null; this.idleDirection = null; this.labelWidth = -1;
   }
+  renderNetwork(state: PlayerSnapshot, delta: number, local: boolean) {
+    const identity = `${state.avatarKey}/${state.displayName}`;
+    if (this.networkAppearance !== identity) {
+      this.networkAppearance = identity;
+      this.setAppearance({ avatarKey: state.avatarKey, displayName: local ? `You · ${state.displayName}` : state.displayName });
+      if (local) this.label.setBackgroundColor("#245743");
+    }
+    this.sprite.setVelocity(0, 0);
+    if (this.sprite.body) this.sprite.body.enable = false;
+    const distance = Phaser.Math.Distance.Between(this.sprite.x, this.sprite.y, state.x, state.y);
+    const factor = distance > 96 ? 1 : Math.min(1, delta / 50);
+    this.sprite.setPosition(Phaser.Math.Linear(this.sprite.x, state.x, factor), Phaser.Math.Linear(this.sprite.y, state.y, factor));
+    this.facing = state.direction;
+    if (state.isMoving && state.connected) {
+      if (this.walkingDirection !== this.facing) { this.sprite.play(avatarAnimationKey(this.key, this.facing)); this.walkingDirection = this.facing; this.idleDirection = null; }
+    } else if (this.idleDirection !== this.facing || this.walkingDirection) {
+      this.sprite.anims.stop(); this.sprite.setFrame(avatarIdleFrame(this.key, this.facing)); this.idleDirection = this.facing; this.walkingDirection = null;
+    }
+    this.sprite.setAlpha(state.connected ? 1 : .5);
+    this.positionLabel();
+    this.label.setVisible(local || this.scene.cameras.main.worldView.contains(this.sprite.x, this.sprite.y));
+  }
+  destroy() { this.sprite.destroy(); this.label.destroy(); }
   update(pressed: ReadonlySet<string>) {
     const direction = movement(pressed, this.facing, this.direction);
     // Body deltas include attempted movement before tile separation. Compare
