@@ -63,11 +63,41 @@ test("reset password without recovery proof only offers a new link", async () =>
 });
 
 test("organization creation and workspace routes reject unauthenticated requests", async () => {
-  for (const path of ["/organizations/new", "/workspace/not-a-uuid", "/workspace/250d1968-67d7-4d3c-8846-92f26747d76d"]) {
+  for (const path of ["/organizations/new", "/workspace/not-a-uuid", "/workspace/250d1968-67d7-4d3c-8846-92f26747d76d", "/workspace/250d1968-67d7-4d3c-8846-92f26747d76d/members"]) {
     const response = await fetch(base + path, { redirect: "manual" });
     assert.equal(response.status, 307);
     assert.equal(new URL(response.headers.get("location"), base).pathname, "/login");
     assert.match(response.headers.get("cache-control"), /no-store/);
     assert.equal((await response.text()).includes("Your role:"), false);
   }
+});
+
+test("invitation links exchange proof for an HttpOnly cookie and a fixed clean URL without consuming it", async () => {
+  // Synthetic syntax-valid proof only; no account or real invitation is used.
+  const token = "test_invitation_proof_".padEnd(43, "a");
+  const response = await fetch(`${base}/invite/${token}?next=https://evil.example`, { redirect: "manual" });
+  assert.equal(response.status, 303);
+  assert.equal(response.headers.get("location"), "/invite");
+  assert.match(response.headers.get("set-cookie"), /vo-invitation=/);
+  assert.match(response.headers.get("set-cookie"), /HttpOnly/i);
+  assert.match(response.headers.get("set-cookie"), /Secure/i);
+  assert.match(response.headers.get("set-cookie"), /SameSite=lax/i);
+  assert.match(response.headers.get("cache-control"), /no-store/);
+  assert.equal(response.headers.get("referrer-policy"), "no-referrer");
+  assert.equal(response.headers.get("x-frame-options"), "DENY");
+  assert.equal((await response.text()).includes(token), false);
+});
+
+test("malformed invitations and token-free preview never expose secret fields", async () => {
+  const malformed = await fetch(base + "/invite/malformed", { redirect: "manual" });
+  assert.equal(malformed.status, 303);
+  assert.equal(malformed.headers.get("location"), "/invite?notice=invalid");
+  assert.equal(Boolean(malformed.headers.get("set-cookie")?.includes("vo-invitation=")), false);
+  const preview = await fetch(base + "/invite");
+  assert.equal(preview.status, 200);
+  const html = await preview.text();
+  assert.ok(html.includes("Open the invitation link"));
+  assert.equal(html.includes('name="token"'), false);
+  assert.equal(html.includes("Accept invitation</button>"), false);
+  assert.match(preview.headers.get("cache-control"), /no-store/);
 });

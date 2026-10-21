@@ -286,8 +286,10 @@ setup/cleanup must be explicitly scoped before executing it.
 
 ## Current limits
 
-No invitation email flow, membership editor, role-management API, profile editor,
-office entry/rendering, game/realtime/voice, billing, or deployment is included.
+The Step 3 foundation itself excludes invitations and member management; these now
+have a separately reviewed migration and implementation in
+[Step 4](team-invitations.md). Profile editing, office entry/rendering,
+game/realtime/voice, billing and deployment remain outside the implemented scope.
 Workspace lists are intended for MVP volumes; pagination belongs with measured
 usage growth. Live provisioning and tenant-isolation verification require the
 approved migration and test identities. Preserve the distinction in the

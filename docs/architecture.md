@@ -78,7 +78,8 @@ Organization creation uses one PostgreSQL RPC transaction for profile, organizat
 OWNER membership, and default office. User/request UUIDs give retries an exact
 idempotency key; tenant identity and roles come from trusted Auth/database context.
 All four public tables have RLS and restricted grants. Private read-only helpers
-avoid circular membership policies. No authenticated membership write API exists.
+avoid circular membership policies. Direct authenticated membership writes remain
+denied; Step 4 adds the narrowly authorized operations described below.
 
 The active organization is represented by `/workspace/[organizationId]`. Pages
 and data access verify the caller, membership, and RLS-visible records. The URL or
@@ -91,6 +92,32 @@ SQL syntax/mock tests do not prove deployed tenant isolation. Real database test
 and application require the approved development migration; no guarantees about
 remote RLS are claimed before execution. Realtime tenant authorization remains a
 future service responsibility.
+
+## Team and invitation boundary
+
+The applied Step 4 migration adds hashed invitations, private audit records,
+authorized membership functions and a last-owner guard. Organization row locks
+serialize reservations, acceptance and membership changes. Existing tables and
+Auth internals are preserved. Public-role table writes remain denied; scoped
+definer functions independently verify identity, tenant and permission hierarchy.
+
+`features/invitations` separates validation/token handling, data access and real
+Resend delivery; `features/members` separates server authorization/actions and
+membership presentation. Database and external email requests are separate steps,
+with explicit uncertainty handling and token rotation on intentional resend.
+Raw invitation proof never enters database rows or member-list props. The optional
+development/test-only link mode returns it once in the authorized manager's action
+result for copying, using the existing create/rotation RPCs. Production rejects
+link mode before writes. Email mode keeps proof in server delivery only. HttpOnly cookie
+continuation permits only fixed local post-login paths. All team/invite routes
+are private/no-store. Provider credentials are server-only.
+
+See [team architecture and security](team-invitations.md) and
+[actual validation/application status](team-invitations-validation.md). Isolated
+PostgreSQL tests execute real roles and RLS with synthetic local Auth fixtures;
+live Auth/PostgREST, provider delivery and concurrent sessions remain distinct
+verification requirements. Future realtime/media services must revoke access and
+disconnect removed members themselves; those services are not implemented.
 
 ## Visual direction
 

@@ -85,7 +85,8 @@ export function run() {
   if (inventoryProjects(cli(["projects", "list", "--output", "json"])).length !== 1) {
     throw new Error("Linked project inventory identity/health did not match the approved development target.");
   }
-  const sql = preparePolicySql(readFileSync(join(root, "supabase/tests/organization_policies.sql"), "utf8"), configuration.users);
+  const team = process.argv.includes("--team");
+  const sql = preparePolicySql(readFileSync(join(root, team ? "supabase/tests/team_invitations.sql" : "supabase/tests/organization_policies.sql"), "utf8"), configuration.users);
   mkdirSync(join(root, ".cache"), { recursive: true });
   const directory = mkdtempSync(join(root, ".cache/organization-test-"));
   try {
@@ -95,7 +96,7 @@ export function run() {
     if (result.rows?.length !== 1 || result.rows[0].organization_test_result !== marker) {
       throw new Error("Rollback completion marker missing. No test success is recorded.");
     }
-    console.log("PASSED: live organization provisioning and role-based tenant policy assertions. Final ROLLBACK confirmed; no Auth records changed. Browser sessions and concurrent requests are separate checks.");
+    console.log(`PASSED: live ${team ? "team invitation/membership" : "organization provisioning"} and role-based tenant policy assertions. Final ROLLBACK confirmed; no Auth records changed or emails sent. Browser sessions and concurrent requests are separate checks.`);
     return 0;
   } finally {
     // A single generated file/directory inside the verified workspace cache.
