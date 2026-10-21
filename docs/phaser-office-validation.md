@@ -1,5 +1,9 @@
 # Phase 2 Step 1 — interactive pixel-art office
 
+Step 1 snapshot. Avatar assets, animation, names and preferences have since been
+extended in [Phase 2 Step 2 validation](avatar-system-validation.md); its current
+sprite dimensions and test results supersede the original avatar details below.
+
 Validated 2026-10-21, Asia/Colombo. Expected branch
 `feature/p2-s01-phaser-office-engine` confirmed by reading `.git/HEAD`; no Git
 command or Git mutation was performed. **Implementation complete.** Live

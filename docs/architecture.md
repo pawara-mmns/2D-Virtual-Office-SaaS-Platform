@@ -148,3 +148,19 @@ and tile collisions. Focus-scoped input leaves form controls/Tab alone. Integer
 zoom, rounded pixels and a single ResizeObserver maintain crisp bounded rendering.
 The office is single-player only; assets are first-party, with no shared user state.
 See [map, lifecycle, browser results and limitations](phaser-office-validation.md).
+
+## Avatar preference boundary
+
+`features/avatars` owns the six-preset allowlist, safe name fallback, self-profile
+read/save service and settings action/UI. Saves resolve verified identity from
+Auth, update only `avatar_key`, and preserve other profile fields. The existing
+profiles grants and self-scoped RLS were verified in the deployed catalog; no
+migration or schema change was needed. Unknown legacy keys use the default.
+
+`office/engine/player-avatar.ts` owns one body, sprite and label, reusing the scene's
+existing movement/physics. All preset frames share one atlas and collision body.
+An appearance change updates the existing avatar without resetting the scene or
+camera. Frame-loop data is separate from React; animation follows actual resolved
+movement and stops at obstacles. Labels use profile names with email suppression,
+truncation and camera-edge handling. Full details and manual merge checks are in
+[avatar-system-validation.md](avatar-system-validation.md).

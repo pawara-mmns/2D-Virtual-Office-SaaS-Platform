@@ -2,12 +2,13 @@
 import Phaser from "phaser";
 import { OfficeScene, type OfficeCallbacks } from "../scenes/office-scene.ts";
 import { attachMovementInput } from "../input/movement.ts";
+import { defaultAvatar, type AvatarAppearance } from "../../avatars/presets.ts";
 
-export function createOfficeGame(host: HTMLElement, callbacks: OfficeCallbacks) {
+export function createOfficeGame(host: HTMLElement, callbacks: OfficeCallbacks, appearance: AvatarAppearance = { avatarKey: defaultAvatar, displayName: "You" }) {
   const input = attachMovementInput(host, () => document.activeElement === host, window);
   const focus = () => host.focus({ preventScroll: true });
   host.addEventListener("pointerdown", focus);
-  const scene = new OfficeScene(input.pressed, callbacks);
+  const scene = new OfficeScene(input.pressed, callbacks, appearance);
   let game: Phaser.Game;
   try {
     game = new Phaser.Game({ type: Phaser.AUTO, parent: host, width: Math.max(1, host.clientWidth), height: Math.max(1, host.clientHeight),
@@ -32,6 +33,7 @@ export function createOfficeGame(host: HTMLElement, callbacks: OfficeCallbacks) 
   let destroyed: Promise<void> | undefined;
   return {
     game,
+    setAppearance(appearance: AvatarAppearance) { scene.setAppearance(appearance); },
     zoomBy(step: number) { scene.zoomBy(step); }, resetZoom() { scene.resetZoom(); },
     destroy() {
       if (destroyed) return destroyed;

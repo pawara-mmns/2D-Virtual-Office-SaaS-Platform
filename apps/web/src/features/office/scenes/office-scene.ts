@@ -1,17 +1,17 @@
 import Phaser from "phaser";
-import { mapMarkers, PLAYER_SPEED, TILE_SIZE, validateOfficeMap } from "../maps/map-data.ts";
-import { movement, type Direction } from "../input/movement.ts";
+import { mapMarkers, TILE_SIZE, validateOfficeMap } from "../maps/map-data.ts";
 import { officeZoom } from "../engine/camera.ts";
+import { PlayerAvatar } from "../engine/player-avatar.ts";
+import type { AvatarAppearance } from "../../avatars/presets.ts";
 
 export type OfficeCallbacks = { onReady(): void; onError(): void };
 export class OfficeScene extends Phaser.Scene {
   player!: Phaser.Physics.Arcade.Sprite;
-  private label!: Phaser.GameObjects.Text;
-  private facing: Direction = "down";
+  avatar!: PlayerAvatar;
   private failed = false;
   private mapWidth = 0;
   private mapHeight = 0;
-  constructor(private readonly pressed: ReadonlySet<string>, private readonly callbacks: OfficeCallbacks) { super("Office"); }
+  constructor(private readonly pressed: ReadonlySet<string>, private readonly callbacks: OfficeCallbacks, private appearance: AvatarAppearance) { super("Office"); }
   preload() {
     this.load.once(Phaser.Loader.Events.FILE_LOAD_ERROR, () => { this.failed = true; this.callbacks.onError(); });
     this.load.image("office-tiles", "/office/office-tiles.png");
@@ -32,16 +32,12 @@ export class OfficeScene extends Phaser.Scene {
       this.mapWidth = data.width * TILE_SIZE; this.mapHeight = data.height * TILE_SIZE;
       this.physics.world.setBounds(0, 0, this.mapWidth, this.mapHeight);
       const spawn = mapMarkers(data).find((marker) => marker.type === "spawn")!;
-      this.player = this.physics.add.sprite(spawn.x, spawn.y, "avatar", 0).setDepth(3).setCollideWorldBounds(true);
-      this.player.setSize(14, 10).setOffset(9, 22);
+      this.avatar = new PlayerAvatar(this, spawn.x, spawn.y, this.appearance);
+      this.player = this.avatar.sprite;
       this.physics.add.collider(this.player, collision);
-      for (const [row, direction] of ["down", "left", "right", "up"].entries()) {
-        this.anims.create({ key: `walk-${direction}`, frames: [row * 3, row * 3 + 1, row * 3, row * 3 + 2].map((frame) => ({ key: "avatar", frame })), frameRate: 7, repeat: -1 });
-      }
       for (const marker of mapMarkers(data).filter((marker) => marker.type === "area")) {
         this.add.text(marker.x, marker.y, marker.name, { fontFamily: "Courier New, monospace", fontSize: "10px", color: "#344c48", backgroundColor: "#e9e5d2", padding: { x: 5, y: 3 } }).setOrigin(.5).setDepth(1);
       }
-      this.label = this.add.text(spawn.x, spawn.y - 23, "You", { fontFamily: "Arial", fontSize: "10px", color: "#fff9e8", backgroundColor: "#344c48", padding: { x: 4, y: 2 } }).setOrigin(.5).setDepth(4);
       const camera = this.cameras.main;
       camera.setBounds(0, 0, this.mapWidth, this.mapHeight).startFollow(this.player, true);
       camera.roundPixels = true;
@@ -58,13 +54,9 @@ export class OfficeScene extends Phaser.Scene {
   }
   zoomBy(step: number) { this.setZoom(this.cameras.main.zoom + step); }
   resetZoom() { this.setZoom(2); }
+  setAppearance(appearance: AvatarAppearance) { this.appearance = appearance; this.avatar?.setAppearance(appearance); }
   update() {
     if (!this.player || this.failed) return;
-    const direction = movement(this.pressed, this.facing);
-    this.facing = direction.facing;
-    this.player.setVelocity(direction.x * PLAYER_SPEED, direction.y * PLAYER_SPEED);
-    if (direction.x || direction.y) this.player.play(`walk-${this.facing}`, true);
-    else { this.player.anims.stop(); this.player.setFrame(["down", "left", "right", "up"].indexOf(this.facing) * 3); }
-    this.label.setPosition(Math.round(this.player.x), Math.round(this.player.y - 23));
+    this.avatar.update(this.pressed);
   }
 }

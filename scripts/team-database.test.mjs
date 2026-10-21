@@ -35,6 +35,9 @@ test("isolated PostgreSQL executes both migrations and rollback-only team/RLS as
     const foundationResults = await db.exec(foundation, { onNotice: (notice) => { if (notice.message?.startsWith("PASS:")) foundationNotices.push(notice.message); } });
     assert.equal(foundationResults.at(-1).rows[0].organization_test_result, "organization-policy-tests-rolled-back");
     assert.ok(foundationNotices.length >= 20, "Existing foundation SQL regression assertions must execute.");
+    const avatar = preparePolicySql(readFileSync(new URL("../supabase/tests/avatar_profiles.sql", import.meta.url), "utf8"), users);
+    const avatarResults = await db.exec(avatar);
+    assert.equal(avatarResults.at(-1).rows[0].organization_test_result, "organization-policy-tests-rolled-back");
     const remaining = await db.query("select (select count(*) from public.organizations)+(select count(*) from public.organization_members)+(select count(*) from public.organization_invitations)+(select count(*) from public.profiles)+(select count(*) from private.organization_team_events) as remaining");
     assert.equal(Number(remaining.rows[0].remaining), 0, "All application/audit fixtures must roll back.");
     await db.exec(`begin; select set_config('request.jwt.claims','{"role":"authenticated","sub":"00000000-0000-4000-8000-000000000004"}',true); set local role authenticated;
@@ -42,6 +45,6 @@ test("isolated PostgreSQL executes both migrations and rollback-only team/RLS as
         begin perform public.accept_organization_invitation(repeat('a',64)); raise exception 'Unverified user accepted';
         exception when insufficient_privilege then null; end;
       end $$; reset role; rollback;`);
-    console.log(`PostgreSQL ${version.rows[0].version}: executed ${notices.length} team and ${foundationNotices.length} existing foundation assertions; fixtures rolled back. Unverified synthetic local identity rejected. No live Supabase or concurrent sessions tested.`);
+    console.log(`PostgreSQL ${version.rows[0].version}: executed ${notices.length} team and ${foundationNotices.length} existing foundation assertions, plus avatar self-update/name-preservation/cross-user/anonymous guards; fixtures rolled back. Unverified synthetic local identity rejected. No live Supabase or concurrent sessions tested.`);
   } finally { await db.close(); }
 }, { timeout: 60000 });

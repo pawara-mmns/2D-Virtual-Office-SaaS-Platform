@@ -2,12 +2,22 @@
 
 import { useEffect, useRef, useState } from "react";
 import { mountOffice } from "../engine/lifecycle";
+import { AvatarSettings } from "@/features/avatars/avatar-settings";
+import type { AvatarAppearance, AvatarKey } from "@/features/avatars/presets";
 
-export default function OfficeCanvas() {
+export default function OfficeCanvas({ appearance, profileWarning }: { appearance: AvatarAppearance; profileWarning?: string }) {
   const host = useRef<HTMLDivElement>(null);
   const controls = useRef<ReturnType<typeof mountOffice> | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [savedKey, setSavedKey] = useState<AvatarKey | null>(null);
+  const avatarKey = savedKey ?? appearance.avatarKey;
+  const latestAppearance = useRef<AvatarAppearance>({ ...appearance, avatarKey });
+  useEffect(() => {
+    const current = { avatarKey, displayName: appearance.displayName };
+    latestAppearance.current = current;
+    controls.current?.setAppearance(current);
+  }, [avatarKey, appearance.displayName]);
   useEffect(() => {
     if (!host.current) return;
     const element = host.current;
@@ -19,12 +29,15 @@ export default function OfficeCanvas() {
       return () => createOfficeGame(element, {
         onReady() { window.clearTimeout(timeout); if (active) setStatus("ready"); },
         onError: fail,
-      });
+      }, latestAppearance.current);
     }, fail);
     controls.current = controller;
     return () => { active = false; window.clearTimeout(timeout); controls.current = null; void controller.dispose(); };
   }, [attempt]);
-  return <section aria-label="Interactive office" className="mt-6 overflow-hidden rounded-md border border-line bg-white">
+  return <>
+    {profileWarning && <p role="alert" className="mt-4 text-sm leading-6 text-muted">{profileWarning}</p>}
+    <AvatarSettings currentKey={avatarKey} onSaved={setSavedKey} onReturn={() => host.current?.focus({ preventScroll: true })} />
+    <section aria-label="Interactive office" className="mt-6 overflow-hidden rounded-md border border-line bg-white">
     <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3 sm:px-5">
       <p id="office-instructions" className="text-xs leading-6 text-muted">Click or Tab into the office to move. <kbd>W A S D</kbd> or arrow keys. Tab to leave the canvas.</p>
       <div role="group" aria-label="Office zoom" className="flex gap-2">
@@ -41,5 +54,5 @@ export default function OfficeCanvas() {
       </div>}
     </div>
     <div className="flex flex-wrap justify-between gap-2 border-t border-line px-5 py-3 text-xs leading-6 text-muted"><p>Development · Meeting room · Lounge · Reception</p><p>Single-player office · Keyboard required</p></div>
-  </section>;
+  </section></>;
 }

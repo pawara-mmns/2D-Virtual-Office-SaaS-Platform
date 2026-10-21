@@ -9,7 +9,7 @@ import { resolveOfficeAccess, type OfficeAccessSource } from "./access.ts";
 
 function mapSource() { return JSON.parse(readFileSync(new URL("../../../public/office/studio.json", import.meta.url), "utf8")); }
 test("original atlas and directional avatar sheets align with their fixed 32px grid", () => {
-  for (const [name, width, height] of [["office-tiles.png", 512, 256], ["avatar.png", 96, 128]] as const) {
+  for (const [name, width, height] of [["office-tiles.png", 512, 256], ["avatar.png", 96, 768]] as const) {
     const png = readFileSync(new URL(`../../../public/office/${name}`, import.meta.url));
     assert.equal(png.subarray(1, 4).toString(), "PNG");
     assert.equal(png.readUInt32BE(16), width); assert.equal(png.readUInt32BE(20), height);

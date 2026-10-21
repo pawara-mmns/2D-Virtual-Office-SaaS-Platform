@@ -1,36 +1,11 @@
 // Original pixel drawings and editable Tiled map. No downloaded art or libraries.
-import { mkdirSync, writeFileSync } from "node:fs";
-import { deflateSync } from "node:zlib";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { picture } from "./office-pixel-art.mjs";
+import { generateAvatars } from "./generate-avatar-assets.mjs";
 import { fileURLToPath } from "node:url";
 
 const output = fileURLToPath(new URL("../apps/web/public/office/", import.meta.url));
 mkdirSync(output, { recursive: true });
-function picture(width, height) {
-  const pixels = Buffer.alloc(width * height * 4);
-  const color = (hex) => [...hex.match(/../g).map((v) => parseInt(v, 16)), ...(hex.length === 6 ? [255] : [])];
-  function rect(x, y, w, h, hex) {
-    const rgba = color(hex);
-    for (let py = Math.max(0, y); py < Math.min(height, y + h); py++) for (let px = Math.max(0, x); px < Math.min(width, x + w); px++) {
-      for (let c = 0; c < 4; c++) pixels[(py * width + px) * 4 + c] = rgba[c];
-    }
-  }
-  function ellipse(x, y, w, h, hex) {
-    for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) if (((i + .5 - w / 2) / (w / 2)) ** 2 + ((j + .5 - h / 2) / (h / 2)) ** 2 <= 1) rect(x + i, y + j, 1, 1, hex);
-  }
-  const line = (x, y, w, hex) => rect(x, y, w, 1, hex);
-  function png(file) {
-    function chunk(type, data) {
-      const bytes = Buffer.concat([Buffer.from(type), data]); let crc = 0xffffffff;
-      for (const byte of bytes) { crc ^= byte; for (let k = 0; k < 8; k++) crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1)); }
-      const result = Buffer.alloc(data.length + 12); result.writeUInt32BE(data.length); bytes.copy(result, 4); result.writeUInt32BE((crc ^ 0xffffffff) >>> 0, result.length - 4); return result;
-    }
-    const header = Buffer.alloc(13); header.writeUInt32BE(width); header.writeUInt32BE(height, 4); header[8] = 8; header[9] = 6;
-    const scanlines = Buffer.alloc((width * 4 + 1) * height);
-    for (let y = 0; y < height; y++) pixels.copy(scanlines, y * (width * 4 + 1) + 1, y * width * 4, (y + 1) * width * 4);
-    writeFileSync(output + file, Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk("IHDR", header), chunk("IDAT", deflateSync(scanlines, { level: 9 })), chunk("IEND", Buffer.alloc(0))]));
-  }
-  return { rect, ellipse, line, png };
-}
 const art = picture(512, 256);
 const { rect: r, ellipse: e, line: l } = art;
 // Alternating oak boards, stitched carpet, stone and architectural tiles.
@@ -86,23 +61,7 @@ e(324, 213, 24, 8, "273e3830"); r(335, 176, 2, 38, "5b6c59"); r(327, 169, 18, 13
 r(354, 163, 60, 26, "926f4d"); r(356, 165, 56, 22, "c5af81"); for (let i = 0; i < 4; i++) r(361 + i * 12, 169 + i % 2 * 3, 9, 11, ["ece6c9", "9fb7a7", "cda48a", "e3dbc0"][i]);
 art.png("office-tiles.png");
 
-const avatar = picture(96, 128);
-for (let direction = 0; direction < 4; direction++) for (let frame = 0; frame < 3; frame++) {
-  const x = frame * 32, y = direction * 32, step = frame === 1 ? -1 : frame === 2 ? 1 : 0;
-  const { rect: p, ellipse: oval } = avatar;
-  oval(x + 7, y + 26, 19, 5, "253d3b45");
-  p(x + 11, y + 21, 5, 6 + step, "354c60"); p(x + 17, y + 21, 5, 6 - step, "354c60");
-  p(x + 10, y + 26 + step, 6, 3, "263b43"); p(x + 17, y + 26 - step, 6, 3, "263b43");
-  p(x + 10, y + 13, 13, 11, "426c6e"); p(x + 12, y + 14, 9, 8, "6a9890");
-  p(x + 7, y + 15 + step, 4, 8, "426c6e"); p(x + 23, y + 15 - step, 3, 8, "426c6e");
-  p(x + 7, y + 22 + step, 4, 3, "c48d6c"); p(x + 23, y + 22 - step, 3, 3, "c48d6c");
-  p(x + 11, y + 4, 12, 11, "d9a47f"); p(x + 10, y + 3, 14, 6, "4c3c36"); p(x + 12, y + 2, 10, 3, "6d5141");
-  if (direction === 3) { p(x + 11, y + 6, 12, 8, "594136"); p(x + 13, y + 13, 8, 2, "bd896c"); }
-  else if (direction === 1) { p(x + 10, y + 9, 3, 5, "d9a47f"); p(x + 12, y + 9, 2, 2, "283b3b"); p(x + 21, y + 6, 3, 8, "4c3c36"); }
-  else if (direction === 2) { p(x + 22, y + 9, 3, 5, "d9a47f"); p(x + 21, y + 9, 2, 2, "283b3b"); p(x + 10, y + 6, 3, 8, "4c3c36"); }
-  else { p(x + 13, y + 9, 2, 2, "283b3b"); p(x + 20, y + 9, 2, 2, "283b3b"); p(x + 16, y + 13, 4, 1, "a56d56"); }
-}
-avatar.png("avatar.png");
+generateAvatars();
 
 const width = 36, height = 26, size = width * height;
 const floor = Array.from({ length: size }, (_, i) => 1 + ((i % width * 7 + Math.floor(i / width) * 3) % 3));
@@ -137,5 +96,7 @@ const map = { type: "map", version: "1.10", tiledversion: "1.11.2", orientation:
   layers: [layer(1, "Floor", floor), layer(2, "Architecture", walls), layer(3, "Furniture", furniture), layer(4, "Collision", collision, false), { id: 5, name: "Markers", type: "objectgroup", x: 0, y: 0, opacity: 1, visible: true, objects: [marker(1, "Entrance", "spawn", 18.5, 24.2), marker(2, "LOUNGE", "area", 6, 10.8), marker(3, "DEVELOPMENT", "area", 18, 2.5), marker(4, "MEETING ROOM", "area", 29, 10), marker(5, "RECEPTION", "area", 18.5, 23.4)] }],
   tilesets: [{ firstgid: 1, name: "office", tilewidth: 32, tileheight: 32, tilecount: 128, columns: 16, spacing: 0, margin: 0, image: "office-tiles.png", imagewidth: 512, imageheight: 256 }],
 };
-writeFileSync(output + "studio.json", JSON.stringify(map, null, 2) + "\n");
+const mapFile = output + "studio.json";
+const lineEnding = existsSync(mapFile) && readFileSync(mapFile, "utf8").includes("\r\n") ? "\r\n" : "\n";
+writeFileSync(mapFile, (JSON.stringify(map, null, 2) + "\n").replace(/\n/g, lineEnding));
 console.log("Generated original office atlas, avatar sheet and editable Tiled JSON.");
