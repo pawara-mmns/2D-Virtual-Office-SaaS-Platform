@@ -25,3 +25,5 @@ Thumbs.db
 
 # Local tooling
 .cache/
+supabase/.temp/
+supabase/.branches/
