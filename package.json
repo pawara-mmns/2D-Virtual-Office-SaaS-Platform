@@ -1,0 +1,16 @@
+{
+  "name": "virtual-office",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.34.7",
+  "engines": {
+    "node": ">=22.14.0"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @virtual-office/web dev",
+    "build": "pnpm -r build",
+    "start": "pnpm --filter @virtual-office/web start",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck"
+  }
+}

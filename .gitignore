@@ -1,0 +1,27 @@
+# Dependencies and local package-manager data
+node_modules/
+.pnpm-store/
+
+# Next.js and generated output
+.next/
+out/
+dist/
+coverage/
+*.tsbuildinfo
+next-env.d.ts
+
+# Local configuration and credentials
+.env*
+!.env.example
+!.env.*.example
+*.pem
+.vercel/
+.aws/
+
+# Logs and operating-system files
+*.log
+.DS_Store
+Thumbs.db
+
+# Local tooling
+.cache/
