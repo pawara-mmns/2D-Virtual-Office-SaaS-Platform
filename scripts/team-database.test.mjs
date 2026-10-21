@@ -7,7 +7,7 @@ import { preparePolicySql } from "./test-organizations.mjs";
 // A disposable, empty in-memory PostgreSQL database. These are synthetic local
 // fixture identities, never Supabase Auth accounts or copied production data.
 const users = ["7df17a9c-1c4c-472f-88d5-8d2db93e96a5", "250d1968-67d7-4d3c-8846-92f26747d76d", "16eb799f-5058-4a47-b638-8b8fc4a22f8b"];
-test("isolated PostgreSQL executes both migrations and rollback-only team/RLS assertions", async () => {
+test("isolated PostgreSQL executes foundation/team/chat migrations and rollback-only team/RLS assertions", async () => {
   const notices = [];
   const db = new PGlite();
   try {
@@ -23,7 +23,7 @@ test("isolated PostgreSQL executes both migrations and rollback-only team/RLS as
       insert into auth.users(id,email,email_confirmed_at) values
       ('${users[0]}','a@team-test.invalid',now()),('${users[1]}','b@team-test.invalid',now()),('${users[2]}','c@team-test.invalid',now()),
       ('00000000-0000-4000-8000-000000000004','unverified@team-test.invalid',null);`);
-    for (const file of ["20261021000100_organization_foundation.sql", "20261021000200_team_invitations.sql"]) {
+    for (const file of ["20261021000100_organization_foundation.sql", "20261021000200_team_invitations.sql", "20261022000100_workspace_chat.sql"]) {
       await db.exec(readFileSync(new URL(`../supabase/migrations/${file}`, import.meta.url), "utf8"));
     }
     const sql = preparePolicySql(readFileSync(new URL("../supabase/tests/team_invitations.sql", import.meta.url), "utf8"), users);
@@ -38,7 +38,7 @@ test("isolated PostgreSQL executes both migrations and rollback-only team/RLS as
     const avatar = preparePolicySql(readFileSync(new URL("../supabase/tests/avatar_profiles.sql", import.meta.url), "utf8"), users);
     const avatarResults = await db.exec(avatar);
     assert.equal(avatarResults.at(-1).rows[0].organization_test_result, "organization-policy-tests-rolled-back");
-    const remaining = await db.query("select (select count(*) from public.organizations)+(select count(*) from public.organization_members)+(select count(*) from public.organization_invitations)+(select count(*) from public.profiles)+(select count(*) from private.organization_team_events) as remaining");
+    const remaining = await db.query("select (select count(*) from public.organizations)+(select count(*) from public.organization_members)+(select count(*) from public.organization_invitations)+(select count(*) from public.profiles)+(select count(*) from private.organization_team_events)+(select count(*) from public.chat_channels)+(select count(*) from public.chat_messages) as remaining");
     assert.equal(Number(remaining.rows[0].remaining), 0, "All application/audit fixtures must roll back.");
     await db.exec(`begin; select set_config('request.jwt.claims','{"role":"authenticated","sub":"00000000-0000-4000-8000-000000000004"}',true); set local role authenticated;
       do $$ begin

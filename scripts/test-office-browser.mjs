@@ -209,7 +209,9 @@ test("real Chromium validates Phaser rendering, input, collisions, camera, resiz
     const version = await command("Browser.getVersion");
     console.log(JSON.stringify({ browser: version.product, hardware: cpus()[0]?.model, renderer: "SwiftShader software WebGL", viewport: "1280x1024", measured: performance, multiplayerRendering: multiplayerPerformance, screenshot: ".cache/office-preview-desktop.png", scope: "isolated engine only; live authenticated app workflow not tested" }));
   } finally {
-    devtools?.close(); child.kill(); handshakeServer.close(); server.close();
+    const exited = child.exitCode !== null ? Promise.resolve() : new Promise((done) => child.once("exit", done));
+    if (devtools) try { await Promise.race([devtools.command("Browser.close"), delay(1500)]); } catch { /* own isolated browser may already have exited */ }
+    devtools?.close(); if (child.exitCode === null) child.kill(); await Promise.race([exited, delay(2000)]); handshakeServer.close(); server.close();
     await delay(500);
     // Only remove this run's newly created, resolved profile under the workspace cache.
     if (resolve(profile).startsWith(cache + sep + "office-browser-")) rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });

@@ -11,6 +11,8 @@ import type { OfficeState } from "../state/office-state.ts";
 import type { Room as SDKRoomType } from "@colyseus/sdk";
 import { createRequire } from "node:module";
 import { protectReconnectUrl } from "../../../../packages/shared/src/socket-transport.ts";
+import { ChatFailure, type ChatStore } from "../chat/store.ts";
+import type { ChatMessage } from "../../../../packages/shared/src/chat.ts";
 
 // Real HTTP/WebSockets and Schema synchronization; synthetic authorization only.
 // Never contacts Supabase or represents live-account validation.
@@ -37,7 +39,19 @@ test("real transport: canonical tenants, authority, presence, capacity, reconnec
     return { userId: id(n), organizationId: n >= 20 ? id(202) : id(201), officeId: allowedOffice, token: String(token),
       expiresAt: Date.now() + 60_000, checkedAt: Date.now(), displayName: `Member ${n}`, avatarKey: n === 2 ? "slate" : "fern" };
   };
-  const server = createRealtimeServer({ authorize, map, origins: [origin] });
+  const committed = new Map<string, ChatMessage>();
+  let failNext = false, storeCalls = 0;
+  const chat: ChatStore = { async send(auth, input) {
+    storeCalls++;
+    if (failNext) { failNext = false; throw new ChatFailure("UNAVAILABLE"); }
+    const key = `${auth.userId}/${input.clientMessageId}`;
+    const previous = committed.get(key); if (previous) return { message: previous, inserted: false };
+    await delay(15);
+    const message: ChatMessage = { id: String(committed.size+1), channelId: auth.officeId, senderId: auth.userId, senderName: auth.displayName,
+      body: input.body, clientMessageId: input.clientMessageId, createdAt: new Date().toISOString() };
+    committed.set(key, message); return { message, inserted: true };
+  } };
+  const server = createRealtimeServer({ authorize, map, origins: [origin], chat });
   const rooms: SDKRoom[] = [];
   await server.listen(0, "127.0.0.1");
   const address = server.transport.server!.address(); assert.ok(address && typeof address === "object");
@@ -80,6 +94,34 @@ test("real transport: canonical tenants, authority, presence, capacity, reconnec
     const c = await join(20, id(102));
     assert.notEqual(c.roomId, a.roomId); assert.equal(c.state.players.size, 1);
     assert.equal([...c.state.players.values()].some((p) => p.userId === id(1)), false);
+    const aChat: ChatMessage[] = [], bChat: ChatMessage[] = [], cChat: ChatMessage[] = [];
+    const chatErrors: { code: string }[] = [], availabilityErrors: { code: string }[] = [];
+    a.onMessage("chat.message", (message: ChatMessage) => { assert.ok([...committed.values()].some((saved) => saved.id === message.id), "Only committed messages are acknowledged"); aChat.push(message); });
+    b.onMessage("chat.message", (message: ChatMessage) => bChat.push(message));
+    c.onMessage("chat.message", (message: ChatMessage) => cChat.push(message));
+    a.onMessage("chat.error", (error: { code: string }) => chatErrors.push(error));
+    a.onMessage("availability.error", (error: { code: string }) => availabilityErrors.push(error));
+    const chatBegan = performance.now();
+    a.send("chat.send", { body: "Hello office", clientMessageId: id(301) });
+    await until(() => aChat.length === 1 && bChat.length === 1, "committed chat delivery");
+    const chatLatencyMs = Math.round(performance.now()-chatBegan);
+    assert.equal(cChat.length, 0, "No cross-tenant chat event"); assert.equal(committed.size, 1);
+    a.send("chat.send", { body: "Hello office", clientMessageId: id(301) });
+    await until(() => aChat.length === 2, "retry acknowledgement"); assert.equal(bChat.length, 1); assert.equal(committed.size, 1);
+    const beforeForgery = storeCalls;
+    a.send("chat.send", { body: "forged", clientMessageId: id(302), senderId: id(2) });
+    await until(() => chatErrors.length === 1, "forged sender rejected"); assert.equal(storeCalls, beforeForgery);
+    failNext = true; a.send("chat.send", { body: "database failure", clientMessageId: id(302) });
+    await until(() => chatErrors.length === 2, "database failure feedback"); assert.equal(chatErrors.at(-1)!.code, "UNAVAILABLE"); assert.equal(bChat.length, 1);
+    a.send("availability.set", { status: "BUSY" });
+    await until(() => b.state.players.get(a.sessionId)?.availability === "BUSY", "availability synchronized");
+    a.send("availability.set", { status: "OFFLINE" });
+    await until(() => availabilityErrors.length === 1, "invalid availability rejected");
+    a.send("availability.set", { status: "BUSY", sessionId: b.sessionId });
+    await until(() => availabilityErrors.length === 2, "forged availability target rejected");
+    assert.equal(b.state.players.get(b.sessionId)!.availability, "AVAILABLE");
+    await delay(1050); a.send("availability.set", { status: "DO_NOT_DISTURB" });
+    await until(() => b.state.players.get(a.sessionId)?.availability === "DO_NOT_DISTURB", "DND synchronized");
     const startY = a.state.players.get(a.sessionId)!.y;
     let stateUpdates = 0; a.onStateChange(() => stateUpdates++);
     const began = performance.now();
@@ -100,6 +142,7 @@ test("real transport: canonical tenants, authority, presence, capacity, reconnec
     await until(() => reconnects === 1, "safe reconnection");
     await until(() => a.state.players.get(a.sessionId)?.connected === true, "reconnected state");
     assert.equal(a.state.players.size, 2); assert.equal(a.state.players.get(a.sessionId)!.y, stableY);
+    assert.equal(a.state.players.get(a.sessionId)!.availability, "DO_NOT_DISTURB", "reconnect retains availability independently of connection flag");
     // Fill the canonical room. Joining an eleventh never spawns another room.
     for (let n = 3; n <= 10; n++) assert.equal((await join(n)).roomId, a.roomId);
     await until(() => a.state.players.size === 10, "capacity");
@@ -133,6 +176,11 @@ test("real transport: canonical tenants, authority, presence, capacity, reconnec
     const flooding = rooms.find((room) => room.state?.players.get(room.sessionId)?.userId === id(9))!;
     for (let seq = 1000; seq < 1040; seq++) flooding.send("input", { seq, x: 0, y: 0 });
     await until(() => !a.state.players.has(flooding.sessionId), "excess movement rate disconnected");
+    const removedSender = rooms.find((room) => room.state?.players.get(room.sessionId)?.userId === id(8))!;
+    const committedBeforeRemoval = committed.size;
+    removed.add(8); removedSender.send("chat.send", { body: "after removal", clientMessageId: id(303) });
+    await until(() => !a.state.players.has(removedSender.sessionId), "removed sender denied immediately by fresh check");
+    assert.equal(committed.size, committedBeforeRemoval);
     // Server-side removal is enforced without a client voluntarily leaving.
     removed.add(2);
     const local = matchMaker.getLocalRoomById(a.roomId);
@@ -144,10 +192,10 @@ test("real transport: canonical tenants, authority, presence, capacity, reconnec
     // Explicit leave releases a player immediately (rather than counting a stale tab).
     await c.leave(); await until(() => !matchMaker.getLocalRoomById(c.roomId) || !(matchMaker.getLocalRoomById(c.roomId).state as OfficeState).players.has(c.sessionId), "leave cleanup");
     // Hard expiry does not depend on a successful refresh request.
-    const leaseClient = local.clients.find((client) => client.auth?.userId === id(8))!;
+    const leaseClient = local.clients.find((client) => client.auth?.userId === id(7))!;
     (leaseClient.auth as Authorization).checkedAt = Date.now() - AUTH_LEASE_MS;
     await until(() => !(local.state as OfficeState).players.has(leaseClient.sessionId), "hard authorization lease expiry");
-    console.info(JSON.stringify({ scope: "isolated real transport, synthetic auth", firstRemoteMovementMs: Math.round(latency), stateUpdatesDuringScenario: stateUpdates, configuredTickHz: 20, twoTenantRooms: true, tenPlayerMeasurement: measured }));
+    console.info(JSON.stringify({ scope: "isolated real transport, synthetic auth/chat store", firstRemoteMovementMs: Math.round(latency), committedChatObservedMs: chatLatencyMs, stateUpdatesDuringScenario: stateUpdates, configuredTickHz: 20, twoTenantRooms: true, tenPlayerMeasurement: measured }));
   } finally {
     for (const room of rooms) { room.reconnection.enabled = false; if (room.connection.isOpen) await room.leave(); room.removeAllListeners(); }
     await server.gracefullyShutdown(false);

@@ -6,10 +6,11 @@ import { AccessDenied, type Authorize } from "./auth/authorize.ts";
 import { createAdmission } from "./rooms/admission.ts";
 import { officeRoomClass } from "./rooms/office-room.ts";
 import type { Request, Response } from "express";
+import type { ChatStore } from "./chat/store.ts";
 
-export function createRealtimeServer(options: { authorize: Authorize; map: OfficeMap; origins: string[] }) {
+export function createRealtimeServer(options: { authorize: Authorize; map: OfficeMap; origins: string[]; chat?: ChatStore }) {
   const admission = createAdmission();
-  const OfficeRoom = officeRoomClass({ ...admission, authorize: options.authorize, map: options.map });
+  const OfficeRoom = officeRoomClass({ ...admission, authorize: options.authorize, map: options.map, chat: options.chat });
   const origins = new Set(options.origins);
   matchMaker.controller.exposedMethods = [];
   matchMaker.controller.DEFAULT_CORS_HEADERS = {

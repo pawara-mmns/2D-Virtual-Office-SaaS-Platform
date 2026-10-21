@@ -4,11 +4,14 @@ import { canStand, simulate } from "../movement/simulation.ts";
 import { mapMarkers, type OfficeMap } from "../../../../packages/shared/src/map.ts";
 import { AUTH_CHECK_MS, AUTH_LEASE_MS, RECONNECT_SECONDS, TICK_MS, mapVersion, validInput, type MoveInput } from "../../../../packages/shared/src/protocol.ts";
 import type { Authorize, Authorization } from "../auth/authorize.ts";
+import { ChatFailure, type ChatStore } from "../chat/store.ts";
+import { isAvailability, parseChatSend, type ChatErrorCode } from "../../../../packages/shared/src/chat.ts";
 
 type OfficeClient = Client<{ auth: Authorization }>;
 type Control = { input: MoveInput; lastInput: number; window: number; messages: number; refreshing: boolean; nextCheck: number };
 export type RoomServices = {
   authorize: Authorize; map: OfficeMap;
+  chat?: ChatStore;
   claimed(officeId: string, userId: string, sessionId: string): boolean;
   release(officeId: string, userId: string, sessionId: string): void;
   disposed(officeId: string, roomId: string): void;
@@ -23,6 +26,9 @@ export function officeRoomClass(services: RoomServices) {
     simulationWorkMs = 0;
     private controls = new Map<string, Control>();
     private revoked = new Set<string>();
+    private chatPending = new Set<string>();
+    private statusPending = new Set<string>();
+    private statusAt = new Map<string, number>();
     // All default matchmaking paths fail closed. Only our authorized endpoint
     // can reserve seats with trusted authData. Never inherit bundle JWT defaults.
     static async onAuth(): Promise<never> { throw new ServerError(403, "Use authorized office admission."); }
@@ -47,7 +53,46 @@ export function officeRoomClass(services: RoomServices) {
         if (Date.now() < control.nextCheck - AUTH_CHECK_MS + 1000) return;
         void this.revalidate(client, value);
       });
+      this.onMessage("chat.send", (client, value: unknown) => { void this.sendChat(client, value); });
+      this.onMessage("availability.set", (client, value: unknown) => { void this.setAvailability(client, value); });
       this.onMessage("*", (client) => this.deny(client));
+    }
+    private async actionIdentity(client: OfficeClient) {
+      const auth = client.auth;
+      if (!auth || !this.state.players.get(client.sessionId)?.connected || Date.now() >= auth.expiresAt || Date.now()-auth.checkedAt >= AUTH_LEASE_MS) throw new ChatFailure("DENIED");
+      const fresh = await services.authorize(auth.token, this.state.officeId);
+      if (fresh.userId !== auth.userId || fresh.organizationId !== auth.organizationId || fresh.officeId !== this.state.officeId || Date.now() >= fresh.expiresAt || !this.state.players.get(client.sessionId)?.connected) throw new ChatFailure("DENIED");
+      return fresh;
+    }
+    private async sendChat(client: OfficeClient, value: unknown) {
+      const input = parseChatSend(value);
+      const error = (code: ChatErrorCode) => client.send("chat.error", { clientMessageId: input?.clientMessageId ?? null, code });
+      if (!input) { error("INVALID"); return; }
+      if (this.chatPending.has(client.sessionId)) { error("RATE_LIMIT"); return; }
+      if (!services.chat) { error("UNAVAILABLE"); return; }
+      this.chatPending.add(client.sessionId);
+      try {
+        let fresh: Authorization;
+        try { fresh = await this.actionIdentity(client); } catch { throw new ChatFailure("DENIED"); }
+        const saved = await services.chat.send(fresh, input);
+        // Only committed records are acknowledged/broadcast. A retry acknowledges
+        // only its sender and does not replay an old message to the whole room.
+        for (const recipient of saved.inserted ? this.clients : [client]) {
+          const auth = recipient.auth;
+          if (auth && this.state.players.get(recipient.sessionId)?.connected && Date.now()<auth.expiresAt && Date.now()-auth.checkedAt<AUTH_LEASE_MS) recipient.send("chat.message", saved.message);
+        }
+      } catch (failure) {
+        const code = failure instanceof ChatFailure ? failure.code : "UNAVAILABLE";
+        error(code); if (code === "DENIED") this.deny(client);
+      } finally { this.chatPending.delete(client.sessionId); }
+    }
+    private async setAvailability(client: OfficeClient, value: unknown) {
+      if (!value || typeof value !== "object" || Object.keys(value).length !== 1 || !("status" in value) || !isAvailability(value.status)) { client.send("availability.error", { code: "INVALID" }); return; }
+      if (this.statusPending.has(client.sessionId) || Date.now()-(this.statusAt.get(client.sessionId) ?? 0)<1000) { client.send("availability.error", { code: "RATE_LIMIT" }); return; }
+      this.statusAt.set(client.sessionId, Date.now()); this.statusPending.add(client.sessionId);
+      try { await this.actionIdentity(client); const player = this.state.players.get(client.sessionId); if (player) player.availability = value.status; }
+      catch { client.send("availability.error", { code: "DENIED" }); this.deny(client); }
+      finally { this.statusPending.delete(client.sessionId); }
     }
     async onJoin(client: OfficeClient) {
       try {
@@ -123,9 +168,10 @@ export function officeRoomClass(services: RoomServices) {
       control.input = { seq: control.input.seq, x: 0, y: 0 }; control.lastInput = 0; control.nextCheck = Date.now() + AUTH_CHECK_MS;
     }
     onLeave(client: OfficeClient) {
+      this.chatPending.delete(client.sessionId); this.statusPending.delete(client.sessionId); this.statusAt.delete(client.sessionId);
       this.state.players.delete(client.sessionId); this.controls.delete(client.sessionId); this.revoked.delete(client.sessionId);
       if (client.auth) services.release(this.state.officeId, client.auth.userId, client.sessionId);
     }
-    onDispose() { this.controls.clear(); this.revoked.clear(); services.disposed(this.state.officeId, this.roomId); }
+    onDispose() { this.controls.clear(); this.revoked.clear(); this.chatPending.clear(); this.statusPending.clear(); this.statusAt.clear(); services.disposed(this.state.officeId, this.roomId); }
   };
 }

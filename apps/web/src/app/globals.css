@@ -36,6 +36,15 @@ body {
 
 .office-stage { height: clamp(380px, calc(100dvh - 250px), 900px); width: 100%; overflow: hidden; }
 .office-stage canvas { display: block; image-rendering: pixelated; }
+.office-work-area.chat-open { display: grid; grid-template-columns: minmax(0, 1fr) 340px; }
+.office-chat { display: flex; flex-direction: column; height: clamp(380px, calc(100dvh - 250px), 900px); border-left: 1px solid var(--color-line); }
+.office-chat[hidden] { display: none; }
+@media (max-width: 1023px) {
+  .office-work-area.chat-open { display: block; }
+  .office-work-area.chat-open .office-world { display: none; }
+  .office-chat { border-left: 0; }
+}
+:is(textarea):focus-visible { outline: 3px solid var(--color-forest); outline-offset: 4px; }
 
 .skip-link {
   position: absolute;

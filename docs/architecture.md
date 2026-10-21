@@ -172,3 +172,27 @@ camera. Frame-loop data is separate from React; animation follows actual resolve
 movement and stops at obstacles. Labels use profile names with email suppression,
 truncation and camera-edge handling. Full details and manual merge checks are in
 [avatar-system-validation.md](avatar-system-validation.md).
+
+## Office Chat and availability (Phase 3 Step 2)
+
+The existing office socket carries `chat.send`, committed `chat.message`, fixed
+`chat.error` and `availability.set` events. Chat content never enters movement
+Schema state. Each send rechecks verified active membership, then a user-scoped
+Supabase RPC serializes against organization membership changes and enforces
+sender identity, idempotency and five messages per ten seconds. No privileged
+application client is used. The narrowly scoped send function is SECURITY DEFINER
+because direct table writes are denied; the bounded history RPC is SECURITY
+INVOKER and uses RLS as well as explicit authorization.
+
+The approved development migration creates one fixed channel per organization/office and
+append-only messages. A trigger covers future offices and an idempotent backfill
+covers existing offices. Saved sender names avoid per-message profile lookups.
+Monotonic bigint IDs are transported as strings and used for keyset pagination.
+The UI retains at most 150 messages and advances its window for older pages.
+
+Availability is an ephemeral field of the existing player state; offline status
+still comes from the connection. Presentation-only participant fingerprints
+prevent React updates for movement patches. User/office keys isolate cached chat
+and drafts across workspace switches. The existing 15-second authorization lease
+and reconnect checks apply to chat and status. See
+[migration status, validation and manual QA](workspace-chat-validation.md).

@@ -2,11 +2,15 @@
 
 A multi-tenant 2D virtual office SaaS platform for distributed teams. The planned
 product will give companies private pixel-art offices with realtime movement,
-chat, and voice. **Phase 3 — Step 1 adds the realtime multiplayer foundation.**
+chat, and voice. **Phase 3 — Step 2 adds Office Chat and availability; its approved
+development migration is applied. Authenticated live verification remains manual.**
 
 Six original characters can be previewed and saved through Avatar settings in
 the office. Preferences use existing self-scoped Supabase profiles; movement and
 collision now use server authority. See [multiplayer setup, verification and manual merge checks](docs/realtime-multiplayer-validation.md).
+Chat uses the same socket, persists through a user-scoped database RPC, and loads
+bounded history. Available, Busy and Do Not Disturb remain separate from online
+presence. See [chat validation and migration review](docs/workspace-chat-validation.md).
 
 The protected office route now uses Phaser 4.2.1, an original 32×32 pixel-art map,
 shared avatar movement, collision and camera controls. See
@@ -87,6 +91,8 @@ apps/
       features/avatars/
         presets.ts, animation.ts, service.ts, actions.ts
         avatar-settings.tsx, avatars.test.ts
+      features/chat/
+        actions.ts, chat-panel.tsx, participants.tsx, events.ts, chat.test.ts
       lib/supabase/
         client.ts, server.ts, proxy.ts, config.ts, config.test.ts
         database.types.ts
@@ -103,14 +109,14 @@ apps/
     tsconfig.json
   realtime/
     src/
-      auth/, config/, movement/, rooms/, state/, tests/
+      auth/, chat/, config/, movement/, rooms/, state/, tests/
       dev.ts, index.ts, server.ts, transport.ts
     .env.example
     package.json
     tsconfig.json, tsconfig.build.json, eslint.config.mjs
 packages/
   shared/
-    src/avatars.ts, map.ts, protocol.ts, socket-transport.ts
+    src/avatars.ts, map.ts, protocol.ts, socket-transport.ts, chat.ts, chat-database.ts
 docs/
   architecture.md
   organizations.md
@@ -120,15 +126,21 @@ docs/
   phaser-office-validation.md
   avatar-system-validation.md
   realtime-multiplayer-validation.md
+  workspace-chat-validation.md
 supabase/
   config.toml
   .env.organization-tests.example
   migrations/20261021000100_organization_foundation.sql
   migrations/20261021000200_team_invitations.sql
+  migrations/20261022000100_workspace_chat.sql
   tests/organization_policies.sql
   tests/team_invitations.sql
   tests/team_schema_audit.sql
   tests/team_access_guards.sql
+  tests/workspace_chat.sql
+  tests/workspace_chat_postflight.sql
+  tests/workspace_chat_live_denials.sql
+  tests/workspace_chat_regression_audit.sql
 scripts/
   test-organizations.mjs
   test-organizations.test.mjs
@@ -258,6 +270,9 @@ install pnpm 10.34.7 with `npm install --global pnpm@10.34.7` first.
 | `pnpm typecheck` | Generate Next.js route types and run TypeScript checks |
 | `pnpm test` | Run web unit/service tests and isolated realtime security/transport tests |
 | `pnpm test:realtime` | Run only the realtime security/transport suite with synthetic identities |
+| `pnpm test:chat:database` | Validate chat grants, RLS, persistence and pagination in disposable PostgreSQL |
+| `pnpm test:chat:browser` | Exercise the actual chat UI and Phaser together with isolated synthetic history; build first |
+| `pnpm test:chat:anonymous` | Verify the configured development Supabase chat API rejects anonymous and invalid-token requests; no writes |
 | `pnpm test:realtime:live` | Start the built server and check configured-project negative paths; no accounts |
 | `pnpm check:realtime:env` | Report configuration presence and matching project identity without values |
 | `pnpm test:smoke` | Start a production build temporarily and check HTTP routes |
@@ -393,13 +408,15 @@ These are scope boundaries; completed foundations and future work are distinguis
    assets, one four-direction avatar with walking/idle state, collisions and camera.
 6. **Realtime foundation (implemented; live-account verification pending):**
    dedicated Colyseus service, shared contracts, authoritative multiplayer movement,
-   tenant isolation and presence. Text chat remains a separate future task.
+   tenant isolation and presence. Office Chat and availability are implemented;
+   their approved development migration is applied; authenticated live verification
+   remains pending manual testing.
 7. **Voice and production hardening:** LiveKit, communication controls, operational
    validation, accessibility, security, and performance work.
 
 Each phase requires a separate implementation task. The local office engine is
-implemented with the Phase 3 Step 1 realtime foundation. Voice, chat, container
-infrastructure and later product features remain deferred. Stop at Phase 3 Step 1.
+implemented with the Phase 3 Step 2 chat/status changes. Voice, container
+infrastructure and later product features remain deferred. Stop at Phase 3 Step 2.
 
 ## Organization setup
 

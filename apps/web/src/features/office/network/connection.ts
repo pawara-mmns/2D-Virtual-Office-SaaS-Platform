@@ -1,6 +1,8 @@
 import { Client, type Room, type SeatReservation } from "@colyseus/sdk";
 import type { OfficeNetwork, OfficeSnapshot, Presence } from "../../../../../../packages/shared/src/protocol.ts";
 import { protectReconnectUrl } from "../../../../../../packages/shared/src/socket-transport.ts";
+import { decodeMessage, isAvailability, parseChatSend, type ChatEvent } from "../../../../../../packages/shared/src/chat.ts";
+import type { Participant } from "../../../../../../packages/shared/src/protocol.ts";
 
 type OfficeRoom = Room<object, OfficeSnapshot>;
 export function realtimeUrl(value: string | undefined, production = process.env.NODE_ENV === "production") {
@@ -12,11 +14,16 @@ export function realtimeUrl(value: string | undefined, production = process.env.
 export function connectOffice(options: {
   url: string; officeId: string; mapVersion: string;
   getToken(): Promise<string | null>; onPresence(presence: Presence): void;
+  onChat?(event: ChatEvent): void;
+  onParticipants?(participants: Participant[]): void;
+  onAvailabilityError?(message: string): void;
 }): OfficeNetwork {
   let room: OfficeRoom | undefined, state: OfficeSnapshot | undefined;
   let closed = false, online = false, seq = 0, previousCount = 0;
   let lastX = 0, lastY = 0, lastSent = 0;
   let disposeTransport: (() => void) | undefined;
+  let participantKey = "", chatReady = false;
+  const disconnected = () => { chatReady = false; options.onChat?.({ type: "connection", online: false }); options.onParticipants?.([]); participantKey = ""; };
   const controller = new AbortController();
   const presence = (status: Presence["status"], notice: string) => {
     if (!closed) options.onPresence({ status, notice, count: online && state ? [...state.players.values()].filter((p) => p.connected).length : 0 });
@@ -24,7 +31,7 @@ export function connectOffice(options: {
   const credential = async () => {
     const token = await options.getToken();
     if (!closed && online && room && token) room.send("credential", token);
-    else if (!token && !closed) { online = false; void room?.leave(); state = undefined; presence("offline", "Your session ended. Sign in and retry."); }
+    else if (!token && !closed) { online = false; void room?.leave(); state = undefined; disconnected(); presence("offline", "Your session ended. Sign in and retry."); }
   };
   const open = async () => {
     try {
@@ -63,19 +70,33 @@ export function connectOffice(options: {
         if (closed) return;
         if (next.officeId !== options.officeId || next.mapVersion !== options.mapVersion) { close(); options.onPresence({ status: "offline", count: 0, notice: "Office map changed. Reload this page." }); return; }
         state = next;
+        if (!chatReady && online) { chatReady = true; options.onChat?.({ type: "connection", online: true }); }
+        const participants = [...next.players.values()];
+        // Positions never enter React. Notify only when participant presentation
+        // changes, not on the high-frequency movement patches.
+        const key = JSON.stringify(participants.map((p) => [p.sessionId,p.userId,p.displayName,p.avatarKey,p.connected,p.availability]));
+        if (key !== participantKey) { participantKey = key; options.onParticipants?.(participants.map((p) => ({ sessionId: p.sessionId, userId: p.userId, displayName: p.displayName, avatarKey: p.avatarKey, connected: p.connected, availability: isAvailability(p.availability) ? p.availability : "AVAILABLE", isSelf: p.sessionId === room?.sessionId }))); }
         const count = [...next.players.values()].filter((p) => p.connected).length;
         if (count !== previousCount) { const before = previousCount; previousCount = count; presence("online", count > before ? "A participant joined." : "A participant left."); }
       });
-      room.onDrop(() => { online = false; presence("reconnecting", "Connection lost. Reconnecting…"); });
+      room.onMessage("chat.message", (value: unknown) => { if (!closed && online) try { options.onChat?.({ type: "message", message: decodeMessage(value) }); } catch { options.onChat?.({ type: "error", clientMessageId: null, code: "UNAVAILABLE" }); } });
+      room.onMessage("chat.error", (value: { code?: unknown; clientMessageId?: unknown }) => {
+        if (closed) return;
+        const code = value?.code === "INVALID" || value?.code === "RATE_LIMIT" || value?.code === "DENIED" ? value.code : "UNAVAILABLE";
+        options.onChat?.({ type: "error", code, clientMessageId: typeof value?.clientMessageId === "string" ? value.clientMessageId : null });
+      });
+      room.onMessage("availability.error", () => options.onAvailabilityError?.("Availability could not change. Wait a moment, check access and retry."));
+      room.onDrop(() => { online = false; disconnected(); presence("reconnecting", "Connection lost. Reconnecting…"); });
       room.onReconnect(() => { online = true; lastSent = 0; presence("online", "Reconnected."); void credential(); });
-      room.onLeave(() => { online = false; state = undefined; presence("offline", "Disconnected. Verify your session and membership, then retry."); });
-      room.onError(() => { online = false; presence("offline", "Office connection failed. Check access and retry."); });
+      room.onLeave(() => { online = false; state = undefined; disconnected(); presence("offline", "Disconnected. Verify your session and membership, then retry."); });
+      room.onError(() => { online = false; disconnected(); presence("offline", "Office connection failed. Check access and retry."); });
       presence("online", "Connected.");
     } catch { if (!closed) presence("offline", "Could not connect. Check your session and the realtime server, then retry."); }
   };
   const close = () => {
     if (closed) return;
     closed = true; online = false; state = undefined; controller.abort(); clearInterval(refresh);
+    disconnected();
     if (room) { room.reconnection.enabled = false; void room.leave(); disposeTransport?.(); room.removeAllListeners(); }
   };
   // getSession refreshes expired browser tokens; authorization remains server-side.
@@ -93,5 +114,7 @@ export function connectOffice(options: {
     },
     appearanceChanged() { void credential().catch(() => {}); },
     close,
+    sendChat(body, clientMessageId) { if (closed || !online || !chatReady || !room || !parseChatSend({ body, clientMessageId })) return false; room.send("chat.send", { body, clientMessageId }); return true; },
+    setAvailability(status) { if (closed || !online || !room || !isAvailability(status)) return false; room.send("availability.set", { status }); return true; },
   };
 }
