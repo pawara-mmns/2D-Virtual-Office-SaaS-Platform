@@ -14,10 +14,11 @@ export default function HomePage() {
           </span>
           Virtual Office
         </Link>
-        <nav aria-label="Main navigation">
+        <nav aria-label="Main navigation" className="flex items-center gap-4 sm:gap-6">
           <a href="#vision" className="text-sm font-medium text-muted transition-colors hover:text-ink">
             Our vision <span aria-hidden="true" className="ml-1">↗</span>
           </a>
+          <Link href="/login" className="text-sm font-medium text-forest hover:underline">Sign in</Link>
         </nav>
       </header>
 
