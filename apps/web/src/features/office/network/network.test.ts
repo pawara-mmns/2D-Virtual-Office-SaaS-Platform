@@ -24,6 +24,8 @@ test("admission sends bearer only in headers, surfaces denial, and releases life
     assert.equal(states.at(-1)?.status, "offline"); assert.equal(states.at(-1)?.count, 0);
     assert.match(states.at(-1)!.notice, /access denied/);
     assert.equal(network.snapshot(), undefined);
+    assert.equal(network.sendChat?.("offline", "00000000-0000-4000-8000-000000000001"), false);
+    assert.equal(network.setAvailability?.("BUSY"), false);
   } finally { network.close(); network.close(); globalThis.fetch = original; }
 });
 test("cancelled asynchronous startup never requests or mounts a stale room", async () => {
