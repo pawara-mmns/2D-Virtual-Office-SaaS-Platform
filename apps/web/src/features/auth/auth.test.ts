@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { AuthApiError, type Session, type SupabaseClient, type User } from "@supabase/supabase-js";
 import { isTokenHash, parseConfirmation, safeAuthDestination } from "./links.ts";
-import { applyRecoveryPassword, lookupVerifiedUser } from "./service.ts";
+import { applyRecoveryPassword, lookupVerifiedUser, requestPasswordRecovery } from "./service.ts";
 import { validateAuthForm, type AuthMode } from "./validation.ts";
 
 const user: User = {
@@ -112,4 +112,24 @@ test("recovery handles update failures, Auth outages, and failed session revocat
   assert.equal(await applyRecoveryPassword(authMock({ verifyOtp: async () => { throw new Error("offline"); } }), hash, "a good passphrase"), "unavailable");
   assert.equal(await applyRecoveryPassword(authMock({ signOut: async () => ({ error: new AuthApiError("offline", 503, "unexpected_failure") }) }), hash, "a good passphrase"), "updated-signout-failed");
   assert.equal(await applyRecoveryPassword(authMock({ signOut: async () => { throw new Error("offline"); } }), hash, "a good passphrase"), "updated-signout-failed");
+});
+
+test("forgot password gives identical safe messaging for known, unknown, and rate-limited accounts", async () => {
+  const success = await requestPasswordRecovery({ resetPasswordForEmail: async () => ({ data: {}, error: null }) }, "test@example.com");
+  assert.equal(success.status, "success");
+  for (const error of [new AuthApiError("not found", 400, "user_not_found"), new AuthApiError("limited", 429, "over_email_send_rate_limit")]) {
+    const result = await requestPasswordRecovery({ resetPasswordForEmail: async () => ({ data: null, error }) }, "test@example.com");
+    assert.deepEqual(result, success);
+  }
+});
+
+test("forgot password reports transport and provider outages instead of reporting successful submission", async () => {
+  for (const status of [0, 503]) {
+    const result = await requestPasswordRecovery({ resetPasswordForEmail: async () => ({ data: null, error: new AuthApiError("offline", status, "unexpected_failure") }) }, "test@example.com");
+    assert.equal(result.status, "error");
+    assert.ok(result.message?.includes("Please try again"));
+  }
+  const result = await requestPasswordRecovery({ resetPasswordForEmail: async () => { throw new Error("private transport details"); } }, "test@example.com");
+  assert.equal(result.status, "error");
+  assert.equal(result.message?.includes("private transport details"), false);
 });

@@ -1,8 +1,27 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { isTokenHash } from "./links.ts";
+import type { AuthState } from "./validation.ts";
 
 type AuthApi = SupabaseClient["auth"];
 type UserAuth = Pick<AuthApi, "getUser">;
+
+export async function requestPasswordRecovery(
+  auth: Pick<AuthApi, "resetPasswordForEmail">,
+  email: string,
+): Promise<AuthState> {
+  try {
+    const { error } = await auth.resetPasswordForEmail(email);
+    // Supabase transport failures can have status 0/undefined. They must not be
+    // mistaken for successful submission; account-specific errors stay private.
+    if (error && (!error.status || error.status >= 500)) throw new Error("Auth unavailable");
+    return {
+      status: "success",
+      message: "If an account exists for this email, you’ll receive a password reset link. Check your inbox and spam folder.",
+    };
+  } catch {
+    return { status: "error", message: "We couldn’t reach the authentication service. Please try again shortly." };
+  }
+}
 
 export type UserLookup =
   | { status: "authenticated"; user: { id: string; email: string } }

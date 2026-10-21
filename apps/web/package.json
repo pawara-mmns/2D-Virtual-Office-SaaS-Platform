@@ -10,7 +10,8 @@
     "lint": "eslint . --max-warnings=0",
     "typecheck": "next typegen && tsc --noEmit",
     "test": "node --experimental-strip-types --test \"src/**/*.test.ts\"",
-    "test:smoke": "node --test tests/auth-routes.test.mjs"
+    "test:smoke": "node --test tests/auth-routes.test.mjs",
+    "test:live": "node --experimental-strip-types --test tests/auth-live.test.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "0.12.7",
