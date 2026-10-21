@@ -21,7 +21,8 @@
     "test:team:database": "node --test scripts/team-database.test.mjs",
     "test:team:live": "node scripts/test-organizations.mjs --team",
     "test:team:anonymous": "pnpm --filter @virtual-office/web test:team:anonymous",
-    "assets:office": "node scripts/generate-office-assets.mjs",
+    "assets:office": "node --experimental-strip-types scripts/generate-office-assets.mjs",
+    "assets:avatars": "node --experimental-strip-types scripts/generate-avatar-assets.mjs",
     "test:office:browser": "node --test scripts/test-office-browser.mjs"
   },
   "devDependencies": {

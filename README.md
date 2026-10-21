@@ -2,7 +2,11 @@
 
 A multi-tenant 2D virtual office SaaS platform for distributed teams. The planned
 product will give companies private pixel-art offices with realtime movement,
-chat, and voice. **Phase 2 — Step 1 adds the first interactive single-player office.**
+chat, and voice. **Phase 2 — Step 2 adds avatar presets and profile preferences.**
+
+Six original characters can be previewed and saved through Avatar settings in
+the office. Preferences use existing self-scoped Supabase profiles; movement and
+collision remain local. See [avatar validation and manual merge checks](docs/avatar-system-validation.md).
 
 The protected office route now uses Phaser 4.2.1, an original 32×32 pixel-art map,
 local avatar movement, collision and camera controls. See
@@ -79,6 +83,9 @@ apps/
       features/office/
         access.ts, office.test.ts
         components/, engine/, scenes/, input/, maps/
+      features/avatars/
+        presets.ts, animation.ts, service.ts, actions.ts
+        avatar-settings.tsx, avatars.test.ts
       lib/supabase/
         client.ts, server.ts, proxy.ts, config.ts, config.test.ts
         database.types.ts
@@ -100,6 +107,7 @@ docs/
   team-invitations.md
   team-invitations-validation.md
   phaser-office-validation.md
+  avatar-system-validation.md
 supabase/
   config.toml
   .env.organization-tests.example
@@ -115,6 +123,8 @@ scripts/
   team-database.test.mjs
   generate-office-assets.mjs
   test-office-browser.mjs
+  generate-avatar-assets.mjs
+  office-pixel-art.mjs
 package.json
 pnpm-lock.yaml
 pnpm-workspace.yaml
@@ -233,6 +243,7 @@ install pnpm 10.34.7 with `npm install --global pnpm@10.34.7` first.
 | `pnpm test:team:live` | Live rollback-only team policy suite after migration approval/application |
 | `pnpm test:team:anonymous` | Live invitation API permission denials and invalid-preview checks; no accounts |
 | `pnpm assets:office` | Regenerate original pixel-art assets and the Tiled office map |
+| `pnpm assets:avatars` | Regenerate only the six-preset avatar sheet |
 | `pnpm test:office:browser` | Run an isolated real Chromium engine test; no accounts or database |
 | `pnpm install --frozen-lockfile` | Install the exact locked dependencies in CI |
 
@@ -359,7 +370,7 @@ These are scope boundaries, not implemented features or a fixed delivery order:
 
 Each phase requires a separate implementation task. The local office engine is
 implemented; realtime, container infrastructure and later product features remain
-deferred. Stop at Phase 2 Step 1; multiplayer is not implemented.
+deferred. Stop at Phase 2 Step 2; multiplayer is not implemented.
 
 ## Organization setup
 
