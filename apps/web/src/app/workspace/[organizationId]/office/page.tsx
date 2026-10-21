@@ -30,6 +30,6 @@ export default async function OfficePage({ params }: { params: Promise<{ organiz
       <div className="min-w-0"><p className="truncate text-xs font-medium text-muted">{access.organization.name}</p><h1 className="mt-1 break-words text-xl font-semibold tracking-tight">{access.office.name}</h1></div>
       <Link href={`/workspace/${id}`} className="auth-text-link">Back to workspace</Link>
     </header>
-    <main id="office-main"><p className="mt-5 text-sm leading-6 text-muted">Explore your shared office with the keyboard.</p><OfficeExperience key={user.id} appearance={appearance} profileWarning={profileWarning} officeId={access.office.id} /></main>
+    <main id="office-main"><p className="mt-5 text-sm leading-6 text-muted">Explore your shared office with the keyboard.</p><OfficeExperience key={`${user.id}/${access.office.id}`} appearance={appearance} profileWarning={profileWarning} officeId={access.office.id} /></main>
   </div>;
 }
