@@ -34,6 +34,9 @@ body {
   image-rendering: pixelated;
 }
 
+.office-stage { height: clamp(380px, calc(100dvh - 250px), 900px); width: 100%; overflow: hidden; }
+.office-stage canvas { display: block; image-rendering: pixelated; }
+
 .skip-link {
   position: absolute;
   top: 1rem;
@@ -51,6 +54,7 @@ body {
 }
 
 @layer components {
+  .office-control { @apply inline-flex min-h-10 min-w-10 items-center justify-center rounded border border-line bg-white px-3 text-sm font-medium text-ink hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50; }
   .team-panel { @apply rounded-md border border-line bg-white p-5 sm:p-6; }
   .team-table-wrap { @apply max-w-full overflow-x-auto rounded-md border border-line bg-white; }
   .team-table { @apply w-full min-w-160 border-collapse text-left text-sm; }
