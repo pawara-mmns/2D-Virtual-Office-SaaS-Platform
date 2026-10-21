@@ -11,7 +11,8 @@
     "typecheck": "next typegen && tsc --noEmit",
     "test": "node --experimental-strip-types --test \"src/**/*.test.ts\"",
     "test:smoke": "node --test tests/auth-routes.test.mjs",
-    "test:live": "node --experimental-strip-types --test tests/auth-live.test.mjs"
+    "test:live": "node --experimental-strip-types --test tests/auth-live.test.mjs",
+    "test:organizations:anonymous": "node --experimental-strip-types --test tests/organizations-live.test.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "0.12.7",

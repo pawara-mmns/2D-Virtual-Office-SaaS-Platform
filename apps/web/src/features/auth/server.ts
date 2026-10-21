@@ -1,13 +1,14 @@
 import { redirect } from "next/navigation";
+import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { getSupabaseConfig } from "@/lib/supabase/config";
 import { lookupVerifiedUser } from "./service";
 
-export async function currentUser() {
+export const currentUser = cache(async () => {
   if (!getSupabaseConfig()) return { status: "unconfigured" } as const;
   const supabase = await createClient();
   return lookupVerifiedUser(supabase.auth);
-}
+});
 
 export async function requireUser() {
   const result = await currentUser();

@@ -61,3 +61,13 @@ test("reset password without recovery proof only offers a new link", async () =>
   assert.ok(html.includes("Open the reset link"));
   assert.equal(html.includes('name="password"'), false);
 });
+
+test("organization creation and workspace routes reject unauthenticated requests", async () => {
+  for (const path of ["/organizations/new", "/workspace/not-a-uuid", "/workspace/250d1968-67d7-4d3c-8846-92f26747d76d"]) {
+    const response = await fetch(base + path, { redirect: "manual" });
+    assert.equal(response.status, 307);
+    assert.equal(new URL(response.headers.get("location"), base).pathname, "/login");
+    assert.match(response.headers.get("cache-control"), /no-store/);
+    assert.equal((await response.text()).includes("Your role:"), false);
+  }
+});

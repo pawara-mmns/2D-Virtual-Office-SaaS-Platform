@@ -2,7 +2,7 @@
 
 A multi-tenant 2D virtual office SaaS platform for distributed teams. The planned
 product will give companies private pixel-art offices with realtime movement,
-chat, and voice. **Phase 1 — Step 2 adds the Supabase authentication foundation.**
+chat, and voice. **Phase 1 — Step 3 adds the organization foundation.**
 
 ## Technology stack
 
@@ -12,8 +12,10 @@ chat, and voice. **Phase 1 — Step 2 adds the Supabase authentication foundatio
 - pnpm 10 workspaces, with an exact package-manager version and lockfile
 - Supabase Auth through `@supabase/supabase-js` and `@supabase/ssr`
 
-Planned, not installed: Phaser, Colyseus, and LiveKit. Supabase database and storage
-integrations are deferred; this phase adds authentication only.
+Supabase PostgreSQL organization migrations and server data access are included;
+check [migration and validation status](docs/organization-validation.md) before
+using them. Planned, not installed: Phaser, Colyseus, and LiveKit. Storage remains
+deferred.
 
 ESLint is pinned to the latest 9.x release for compatibility with the React lint
 plugin supplied by `eslint-config-next`. npm currently marks that major as
@@ -35,6 +37,11 @@ apps/
           reset-password/page.tsx
         auth/confirm/route.ts
         dashboard/page.tsx
+        dashboard/layout.tsx
+        dashboard/loading.tsx
+        organizations/new/page.tsx
+        workspace/layout.tsx
+        workspace/[organizationId]/page.tsx
         error.tsx
         globals.css
         icon.svg
@@ -46,10 +53,16 @@ apps/
         actions.ts, server.ts, service.ts, validation.ts, links.ts
         auth-form.tsx, auth-shell.tsx, sign-out-button.tsx
         auth.test.ts
+      features/organizations/
+        actions.ts, server.ts, service.ts, validation.ts
+        organization-form.tsx, workspace-shell.tsx, workspace-switcher.tsx
+        organizations.test.ts
       lib/supabase/
         client.ts, server.ts, proxy.ts, config.ts, config.test.ts
+        database.types.ts
       proxy.ts
     tests/auth-routes.test.mjs
+    tests/organizations-live.test.mjs
     .env.example
     eslint.config.mjs
     package.json
@@ -57,6 +70,16 @@ apps/
     tsconfig.json
 docs/
   architecture.md
+  organizations.md
+  organization-validation.md
+supabase/
+  config.toml
+  .env.organization-tests.example
+  migrations/20261021000100_organization_foundation.sql
+  tests/organization_policies.sql
+scripts/
+  test-organizations.mjs
+  test-organizations.test.mjs
 package.json
 pnpm-lock.yaml
 pnpm-workspace.yaml
@@ -163,9 +186,13 @@ install pnpm 10.34.7 with `npm install --global pnpm@10.34.7` first.
 | `pnpm start` | Serve the production web build |
 | `pnpm lint` | Run ESLint; warnings fail the check |
 | `pnpm typecheck` | Generate Next.js route types and run TypeScript checks |
-| `pnpm test` | Run focused auth unit tests with Node's built-in test runner |
+| `pnpm test` | Run auth/configuration/organization unit tests with Node's built-in runner |
 | `pnpm test:smoke` | Start a production build temporarily and check HTTP routes |
 | `pnpm test:live` | Opt-in configured-project connectivity and invalid-proof checks |
+| `pnpm test:organization-setup` | Check rollback-runner safety and configuration locally |
+| `pnpm test:organizations:anonymous` | Live public-key-only organization access rejection checks |
+| `pnpm test:organizations --check` | Validate local dedicated test-account configuration; no DB tests |
+| `pnpm test:organizations` | Live provisioning/RLS suite with three confirmed test users; rolls back |
 | `pnpm install --frozen-lockfile` | Install the exact locked dependencies in CI |
 
 The root scripts invoke `pnpm`, so its shim or installation must be on PATH.
@@ -275,8 +302,9 @@ These are scope boundaries, not implemented features or a fixed delivery order:
 2. **Authentication (current step):** Supabase SSR clients, email verification,
    login/logout, password recovery, and server-protected dashboard. Live project
    configuration and email workflow verification remain external setup.
-3. **Identity and tenancy (future):** organizations, authorization, and tenant
-   isolation, designed in their own assigned phase.
+3. **Organizations (current):** atomic workspace/default office creation, member
+   roles, workspace switching, and tenant RLS. Remote migration and database tests
+   require the separate safety/approval workflow in [organization docs](docs/organizations.md).
 4. **2D office:** lazily loaded Phaser renderer, 32×32 tiles, office assets,
    four-direction avatars, and subtle idle/walk animations.
 5. **Realtime collaboration:** dedicated Colyseus service, shared contracts,
@@ -285,5 +313,17 @@ These are scope boundaries, not implemented features or a fixed delivery order:
    validation, accessibility, security, and performance work.
 
 Each phase requires a separate implementation task. No engine, realtime service,
-database schema, container infrastructure, or backend simulation is included.
-Stop at authentication foundation for Phase 1 — Step 2; no Step 3 work is included.
+container infrastructure, or backend simulation is included. Stop at Phase 1 —
+Step 3; invitations and all later product features remain deferred.
+
+## Organization setup
+
+Use the existing Supabase project and the same public URL/publishable key. Follow
+[organization architecture, schema, security, migration and testing instructions](docs/organizations.md).
+Migration `20261021000100_organization_foundation.sql` was applied with explicit
+approval to development project `rofutnholbtdmxccrkbs`; its remote history/schema
+checks passed. Live authenticated provisioning/cross-tenant tests remain NOT TESTED
+until three dedicated, normally confirmed accounts are available. Prepare them
+using the [account setup instructions](docs/organizations.md#dedicated-test-accounts).
+No service-role browser key or local database is needed. Future migrations still
+require target/history/schema/dry-run review and explicit approval.
