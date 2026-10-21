@@ -11,6 +11,8 @@
     "build": "pnpm -r build",
     "start": "pnpm --filter @virtual-office/web start",
     "lint": "pnpm -r lint",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "test:smoke": "pnpm --filter @virtual-office/web test:smoke"
   }
 }
