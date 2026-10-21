@@ -1,10 +1,16 @@
 export type Direction = "down" | "left" | "right" | "up";
 const movementKeys = new Set(["KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowLeft", "ArrowDown", "ArrowRight"]);
-export function movement(pressed: ReadonlySet<string>, facing: Direction = "down") {
+export type Movement = { x: number; y: number; facing: Direction };
+export function movement(pressed: ReadonlySet<string>, facing: Direction = "down", result: Movement = { x: 0, y: 0, facing }) {
   const x = Number(pressed.has("KeyD") || pressed.has("ArrowRight")) - Number(pressed.has("KeyA") || pressed.has("ArrowLeft"));
   const y = Number(pressed.has("KeyS") || pressed.has("ArrowDown")) - Number(pressed.has("KeyW") || pressed.has("ArrowUp"));
   const length = Math.hypot(x, y) || 1;
-  return { x: x / length, y: y / length, facing: x ? x < 0 ? "left" as const : "right" as const : y ? y < 0 ? "up" as const : "down" as const : facing };
+  const horizontal: Direction = x < 0 ? "left" : "right";
+  const vertical: Direction = y < 0 ? "up" : "down";
+  // Keep a valid facing axis during diagonals instead of snapping to horizontal.
+  result.facing = x && y ? facing === horizontal || facing === vertical ? facing : horizontal : x ? horizontal : y ? vertical : facing;
+  result.x = x / length; result.y = y / length;
+  return result;
 }
 export function attachMovementInput(target: EventTarget, focus: () => boolean, globalEvents: EventTarget) {
   const pressed = new Set<string>();
