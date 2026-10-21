@@ -20,8 +20,8 @@ const html = `<!doctype html><html lang="en"><meta charset="utf-8"><title>Office
 <header><div><small>Virtual Office · isolated engine validation</small><h1>Oak & Fern Studio</h1></div><button id="outside">Outside canvas</button></header><div id="world" tabindex="0" aria-label="Office"></div><p><input id="text" aria-label="Input focus test" placeholder="Keyboard focus check"></p>
 <script type="importmap">{"imports":{"phaser":"/phaser.js"}}</script>
 <script type="module">
-import {createOfficeGame} from '/modules/engine/create-game.ts';
-import {mountOffice} from '/modules/engine/lifecycle.ts';
+import {createOfficeGame} from '/modules/office/engine/create-game.ts';
+import {mountOffice} from '/modules/office/engine/lifecycle.ts';
 window.startOffice=()=>{window.ready=false;window.failure=false;window.slot=mountOffice(async()=>()=>{
   window.office=createOfficeGame(document.getElementById('world'),{onReady(){window.ready=true},onError(){window.failure=true}});return window.office;
 },()=>{window.failure=true})};
@@ -39,8 +39,9 @@ function serve(request, response) {
       response.setHeader("Content-Type", name.endsWith("png") ? "image/png" : "application/json"); response.end(readFileSync(resolve(web, "public/office", name))); return;
     }
     if (pathname.startsWith("/modules/")) {
-      const base = resolve(web, "src/features/office"); const file = resolve(base, pathname.slice(9));
-      if (!file.startsWith(base + sep) || !file.endsWith(".ts")) throw new Error("Invalid module");
+      const base = resolve(web, "src/features"); const file = resolve(base, pathname.slice(9));
+      const allowed = file.startsWith(resolve(base, "office") + sep) || [resolve(base, "avatars/presets.ts"), resolve(base, "avatars/animation.ts")].includes(file);
+      if (!allowed || !file.endsWith(".ts")) throw new Error("Invalid module");
       const source = ts.transpileModule(readFileSync(file, "utf8"), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } });
       response.setHeader("Content-Type", "text/javascript"); response.end(source.outputText); return;
     }
@@ -90,14 +91,42 @@ test("real Chromium validates Phaser rendering, input, collisions, camera, resiz
     const snapshot = () => evaluate(`(()=>{const s=office.game.scene.getScene('Office'),p=s.player,c=s.cameras.main;return {x:p.x,y:p.y,left:p.body.left,top:p.body.top,zoom:c.zoom,scrollX:c.scrollX,scrollY:c.scrollY,viewLeft:c.worldView.left,viewTop:c.worldView.top,right:c.worldView.right,bottom:c.worldView.bottom,canvases:document.querySelectorAll('canvas').length,walking:p.anims.isPlaying,width:office.game.scale.width,height:office.game.scale.height}})()`);
     const press = async (code, key, milliseconds) => { await command("Input.dispatchKeyEvent", { type: "keyDown", code, key }); await delay(milliseconds); await command("Input.dispatchKeyEvent", { type: "keyUp", code, key }); await delay(80); };
     await evaluate("document.getElementById('world').focus()"); const initial = await snapshot();
-    await press("KeyW", "w", 250); assert.ok((await snapshot()).y < initial.y - 10, "WASD moves the player");
+    await command("Input.dispatchKeyEvent", { type: "keyDown", code: "KeyW", key: "w" }); await delay(250);
+    assert.equal((await snapshot()).walking, true, "Unobstructed motion plays the walk animation");
+    await command("Input.dispatchKeyEvent", { type: "keyUp", code: "KeyW", key: "w" }); await delay(80);
+    assert.ok((await snapshot()).y < initial.y - 10, "WASD moves the player");
     assert.equal((await snapshot()).walking, false, "Release enters idle");
+    for (const [code, key, direction] of [["KeyW", "w", "up"], ["KeyA", "a", "left"], ["KeyS", "s", "down"], ["KeyD", "d", "right"]]) {
+      await evaluate("office.game.scene.getScene('Office').player.body.reset(600,450)");
+      await command("Input.dispatchKeyEvent", { type: "keyDown", code, key }); await delay(170);
+      assert.equal(await evaluate("office.game.scene.getScene('Office').player.anims.currentAnim.key"), `avatar-fern-${direction}-walk`);
+      await command("Input.dispatchKeyEvent", { type: "keyUp", code, key }); await delay(70);
+      assert.equal((await snapshot()).walking, false);
+    }
     await evaluate("office.game.scene.getScene('Office').player.body.reset(48,496)");
     await press("ArrowLeft", "ArrowLeft", 500); const wall = await snapshot();
     assert.ok(wall.left >= 32 && wall.x < 48, "Physical wall collision stops arrow-key movement");
     await evaluate("office.game.scene.getScene('Office').player.body.reset(512,272)");
     await press("KeyW", "w", 1100); const desk = await snapshot();
     assert.ok(desk.top >= 192 && desk.top < 196, "Physical furniture collision stops movement");
+    await command("Input.dispatchKeyEvent", { type: "keyDown", code: "KeyW", key: "w" }); await delay(150);
+    assert.equal((await snapshot()).walking, false, "Holding a key against furniture remains idle");
+    await command("Input.dispatchKeyEvent", { type: "keyUp", code: "KeyW", key: "w" });
+    const presets = ["fern", "harbor", "clay", "plum", "ochre", "slate"];
+    for (const [index, key] of presets.entries()) {
+      const before = await snapshot();
+      await evaluate(`office.setAppearance({avatarKey:${JSON.stringify(key)},displayName:'Alexandria Long Profile Name'})`); await delay(70);
+      assert.equal(await evaluate("Math.floor(Number(office.game.scene.getScene('Office').player.frame.name)/12)"), index, "Preset selects its own frame range");
+      const after = await snapshot(); assert.equal(after.x, before.x); assert.equal(after.y, before.y);
+      assert.deepEqual(await evaluate("(()=>{const p=office.game.scene.getScene('Office').player;return [p.body.width,p.body.height]})()"), [14, 10]);
+    }
+    assert.equal(await evaluate("office.game.anims.anims.size"), 24, "Animation definitions are registered once per game");
+    await evaluate("office.setAppearance({avatarKey:'fern',displayName:'private@example.invalid'})"); await delay(70);
+    assert.equal(await evaluate("office.game.scene.getScene('Office').avatar.label.text"), "You", "Account emails never appear as player labels");
+    await evaluate("office.setAppearance({avatarKey:'slate',displayName:'Alexandria Long Profile Name'});office.game.scene.getScene('Office').player.body.reset(800,40)");
+    await press("KeyW", "w", 300);
+    assert.equal(await evaluate("(()=>{const s=office.game.scene.getScene('Office');return s.avatar.label.getBounds().top>=s.cameras.main.worldView.top})()"), true, "Name label stays inside the top camera boundary");
+    assert.equal(await evaluate("(()=>{const s=office.game.scene.getScene('Office'),p=s.player.getBounds(),l=s.avatar.label.getBounds();return l.bottom<=p.top||l.top>=p.bottom})()"), true, "Boundary-safe name label does not overlap character artwork");
     await evaluate("document.getElementById('text').focus()"); const stationary = await snapshot();
     await press("KeyD", "d", 150); assert.equal((await snapshot()).x, stationary.x, "Typing outside the canvas cannot move the avatar");
     await evaluate("document.getElementById('world').focus()"); await press("Tab", "Tab", 20);
@@ -106,6 +135,7 @@ test("real Chromium validates Phaser rendering, input, collisions, camera, resiz
     await evaluate("document.getElementById('world').style.width='360px';document.getElementById('world').style.height='420px'"); await delay(200);
     const resized = await snapshot(); assert.equal(resized.width, 360); assert.equal(resized.height, 420);
     assert.ok(resized.viewLeft >= 0 && resized.viewTop >= 0 && resized.right <= 1152 && resized.bottom <= 832, `Camera stays inside map after resize: ${JSON.stringify(resized)}`);
+    assert.equal(await evaluate("(()=>{const s=office.game.scene.getScene('Office'),l=s.avatar.label.getBounds(),v=s.cameras.main.worldView;return l.left>=v.left&&l.right<=v.right&&l.top>=v.top&&l.bottom<=v.bottom})()"), true, "Long names remain readable inside the resized camera");
     await evaluate("document.getElementById('world').style.width='1152px';document.getElementById('world').style.height='832px';office.zoomBy(-10)"); await delay(250);
     const image = await command("Page.captureScreenshot", { format: "png" }); writeFileSync(resolve(cache, "office-preview-desktop.png"), Buffer.from(image.data, "base64"));
     console.log("Rendering, movement, collisions, focus, zoom and resize checks passed; measuring frame rate.");
