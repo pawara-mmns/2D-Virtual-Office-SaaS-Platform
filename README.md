@@ -2,7 +2,7 @@
 
 A multi-tenant 2D virtual office SaaS platform for distributed teams. The planned
 product will give companies private pixel-art offices with realtime movement,
-chat, and voice. **Phase 1 — Step 1 is the frontend foundation only.**
+chat, and voice. **Phase 1 — Step 2 adds the Supabase authentication foundation.**
 
 ## Technology stack
 
@@ -10,8 +10,10 @@ chat, and voice. **Phase 1 — Step 1 is the frontend foundation only.**
 - TypeScript in strict mode, with unchecked indexed access enabled
 - Tailwind CSS 4 and ESLint 9 with Next.js Core Web Vitals and TypeScript rules
 - pnpm 10 workspaces, with an exact package-manager version and lockfile
+- Supabase Auth through `@supabase/supabase-js` and `@supabase/ssr`
 
-Planned, not installed: Phaser, Colyseus, LiveKit, and Supabase.
+Planned, not installed: Phaser, Colyseus, and LiveKit. Supabase database and storage
+integrations are deferred; this phase adds authentication only.
 
 ESLint is pinned to the latest 9.x release for compatibility with the React lint
 plugin supplied by `eslint-config-next`. npm currently marks that major as
@@ -25,12 +27,30 @@ apps/
     src/
       app/
         api/health/route.ts
+        (auth)/
+          layout.tsx
+          login/page.tsx
+          register/page.tsx
+          forgot-password/page.tsx
+          reset-password/page.tsx
+        auth/confirm/route.ts
+        dashboard/page.tsx
+        error.tsx
         globals.css
         icon.svg
         layout.tsx
         page.tsx
       components/
         office-preview.tsx
+      features/auth/
+        actions.ts, server.ts, service.ts, validation.ts, links.ts
+        auth-form.tsx, auth-shell.tsx, sign-out-button.tsx
+        auth.test.ts
+      lib/supabase/
+        client.ts, server.ts, proxy.ts, config.ts, config.test.ts
+      proxy.ts
+    tests/auth-routes.test.mjs
+    .env.example
     eslint.config.mjs
     package.json
     postcss.config.mjs
@@ -42,8 +62,7 @@ pnpm-lock.yaml
 pnpm-workspace.yaml
 ```
 
-Create `apps/web/src/features` and `apps/web/src/lib` when the first feature or
-utility needs them. `apps/realtime` and `packages/shared` are reserved future
+`apps/realtime` and `packages/shared` are reserved future
 locations, not initialized packages. See [architecture notes](docs/architecture.md)
 for module boundaries and the approved pixel-art direction.
 
@@ -65,9 +84,69 @@ pnpm install
 pnpm dev
 ```
 
-Open <http://localhost:3000>. No environment variables, external accounts, or
-database are required, so there is no `.env.example` yet. Introduce one when the
-first integration needs configuration, and never commit credentials.
+Open <http://localhost:3000>. The landing page and health endpoint run without
+configuration. Authentication needs the existing Supabase project; no local
+PostgreSQL database, Supabase CLI, or new project is required.
+
+### Supabase environment
+
+Copy `apps/web/.env.example` to **`apps/web/.env.local`**, then fill in:
+
+```dotenv
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
+```
+
+Find the Project URL and publishable key in the existing project's **Connect**
+dialog or **Project Settings → API Keys**. Use the `sb_publishable_...` key.
+Secret keys (`sb_secret_...`), service-role keys, and legacy JWT keys are not
+accepted by this implementation. Never paste a secret key into a public variable.
+The URL must be an HTTPS origin (localhost HTTP is supported). These values are
+public client configuration; Next.js embeds them into browser builds. Restart
+development or rebuild production after changing them. `.env.local` is ignored.
+
+With missing or invalid configuration, auth forms are disabled with an explicit
+setup message, and the dashboard redirects to login. No credentials are invented.
+
+### Supabase dashboard configuration
+
+In the existing project's Authentication settings:
+
+1. Enable email/password signup and **Confirm email**. Use a minimum password
+   length of 12 to match the app; any stronger provider policy is still enforced.
+2. Set **URL Configuration → Site URL** to exactly `http://localhost:3000` for
+   this local setup (no trailing slash). If you use another port, update it.
+3. Add these exact local Redirect URLs, avoiding broad wildcards:
+   `http://localhost:3000/auth/confirm`, `http://localhost:3000/reset-password`,
+   and `http://localhost:3000/dashboard`.
+4. Under **Email Templates → Confirm signup**, use this link:
+
+   ```html
+   <a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&amp;type=email">Verify email</a>
+   ```
+
+5. Under **Email Templates → Reset password**, use this link:
+
+   ```html
+   <a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&amp;type=recovery">Reset password</a>
+   ```
+
+The custom templates are required: default implicit fragment links and OAuth
+`?code=` callbacks are not handled in this email/password-only phase. Emails use
+the trusted Supabase Site URL; the app does not accept a request-supplied email
+redirect origin. The exact Redirect URLs keep configuration explicit, although
+these templates build links directly from Site URL rather than RedirectTo.
+Use separate projects or carefully change Site URL when testing another origin.
+
+Review the project's SMTP recipient restrictions and email rate limits. The
+default email service is limited; use an allowed test recipient or your own SMTP
+provider. Disable email link tracking. Do not disable email confirmation to work
+around delivery problems. Check Authentication logs without sharing tokens or
+passwords.
+
+The implementation follows [Supabase's SSR client guidance](https://supabase.com/docs/guides/auth/server-side/creating-a-client),
+[password authentication](https://supabase.com/docs/guides/auth/passwords), and
+[SSR email templates](https://supabase.com/docs/guides/auth/auth-email-templates).
 
 On Windows with restrictive PowerShell execution policy, use `corepack.cmd pnpm`
 or `pnpm.cmd` instead of their PowerShell shims. If Corepack is unavailable,
@@ -82,6 +161,8 @@ install pnpm 10.34.7 with `npm install --global pnpm@10.34.7` first.
 | `pnpm start` | Serve the production web build |
 | `pnpm lint` | Run ESLint; warnings fail the check |
 | `pnpm typecheck` | Generate Next.js route types and run TypeScript checks |
+| `pnpm test` | Run focused auth unit tests with Node's built-in test runner |
+| `pnpm test:smoke` | Start a production build temporarily and check HTTP routes |
 | `pnpm install --frozen-lockfile` | Install the exact locked dependencies in CI |
 
 The root scripts invoke `pnpm`, so its shim or installation must be on PATH.
@@ -93,7 +174,9 @@ Validate changes with:
 ```sh
 pnpm lint
 pnpm typecheck
+pnpm test
 pnpm build
+pnpm test:smoke
 ```
 
 After `pnpm build`, run `pnpm start`. `GET /api/health` returns HTTP 200:
@@ -105,7 +188,74 @@ After `pnpm build`, run `pnpm start`. `GET /api/health` returns HTTP 200:
 The endpoint checks that the web application is running. It does not check future
 backend dependencies. The landing page is a static Server Component with an
 original pixel-office illustration; its links navigate to the vision section.
-It provides no authentication, signup, or office interaction.
+The existing landing design is preserved, with a sign-in link added. It provides
+no office interaction.
+
+## Authentication behavior and manual test checklist
+
+- `/register`: submit email, password, and confirmation. Invalid values fail on
+  the server. The success message tells users to check their email; it does not
+  claim that a particular address exists or that delivery is guaranteed.
+- `/auth/confirm`: follow the verification email. A valid `type=email` token is
+  verified with Supabase and redirects to `/dashboard`. Invalid/expired links
+  return a controlled login notice; registering again can request verification.
+- `/login`: test wrong credentials, an unverified account, and a verified account.
+  A verified user is redirected to `/dashboard`; login/register pages also
+  redirect existing verified sessions there.
+- `/dashboard`: test a signed-out browser and a session with an expired/revoked
+  token. Protected content requires a fresh `getUser()` and a confirmed email.
+  A successful visit shows only the account email, sign-out, and empty workspace.
+- Sign out, refresh, and use browser Back. Dashboard content must remain gated.
+  Sign-out clears local cookies even if Auth is unavailable and reports that
+  remote revocation could not be confirmed. No public caching is allowed.
+- `/forgot-password`: request resets for an existing and unknown email; both use
+  the same success wording. Check the email in the existing account's inbox.
+- Open its reset link. `/auth/confirm` transfers the opaque token into a
+  10-minute HttpOnly cookie scoped to `/reset-password` and redirects to a clean
+  URL. Verification is deferred to submission so scanners cannot consume the
+  token. Submit matching new passwords. Supabase must verify `type=recovery`
+  before updating; a regular login alone does not authorize this form.
+- A successful reset attempts to revoke all sessions, clears local cookies, and
+  returns to login. Verify the new password works and the old one fails. Supabase
+  access tokens already issued may remain valid until expiry. A revocation
+  failure gets a separate notice rather than a claim that all sessions ended.
+- Test an expired/used link, altered type/hash, duplicate callback parameters,
+  direct `/reset-password`, mismatched passwords, and an external `next` URL.
+  None should bypass verification or redirect outside this app.
+- Use keyboard navigation and a mobile viewport. Check labels, focus visibility,
+  pending buttons, inline errors, and success messages. Test a network outage;
+  errors should stay generic and retryable, without exposing provider details.
+
+Automated tests use isolated in-memory fixtures, not the remote project. Smoke
+tests require `pnpm build` first and start/stop their own local production server.
+They cover public routes, private caching headers, unauthorized dashboard access,
+invalid callbacks, and reset without proof. They do not send emails or create
+accounts. No test framework dependencies are installed.
+
+### Troubleshooting
+
+- **Setup message:** check `apps/web/.env.local`, the publishable key prefix, and
+  the project URL. Restart/rebuild after changing public environment variables.
+- **No email:** check spam, provider logs, SMTP restrictions, rate limits, and
+  the recipient allowlist. The safe recovery message intentionally hides whether
+  an address exists. Wait before retrying; do not repeatedly resend.
+- **Expired link:** request a new one. Tokens are one-time; the app's reset
+  cookie lasts 10 minutes after opening the link. If password updating fails after
+  verification, the consumed token cannot be reused. Request another reset.
+- **Session missing after confirmation:** verify the custom templates above,
+  Site URL/port, cookie settings, and browser origin. `localhost` and `127.0.0.1`
+  have separate cookie stores. Keep app and email links on the same configured
+  origin. Use HTTPS outside localhost.
+- **Verification required / signup configuration warning:** enable Confirm email
+  in Supabase. The app deliberately rejects immediate signup sessions when that
+  setting is disabled.
+- **Auth unavailable:** the app denies private access during provider/network
+  errors. Retry later; do not loosen authorization checks.
+
+Live registration, email delivery, confirmation, login, session refresh, logout,
+and recovery must be checked with real configuration and a permitted test inbox.
+No such credentials were available during this implementation, so remote workflows
+are not claimed as tested.
 
 ## Future implementation phases
 
@@ -113,15 +263,18 @@ These are scope boundaries, not implemented features or a fixed delivery order:
 
 1. **Foundation (current):** workspace, web app, landing page, health endpoint,
    documentation, and development checks.
-2. **Identity and tenancy:** Supabase configuration, authentication, organizations,
-   authorization, and tenant isolation.
-3. **2D office:** lazily loaded Phaser renderer, 32×32 tiles, office assets,
+2. **Authentication (current step):** Supabase SSR clients, email verification,
+   login/logout, password recovery, and server-protected dashboard. Live project
+   configuration and email workflow verification remain external setup.
+3. **Identity and tenancy (future):** organizations, authorization, and tenant
+   isolation, designed in their own assigned phase.
+4. **2D office:** lazily loaded Phaser renderer, 32×32 tiles, office assets,
    four-direction avatars, and subtle idle/walk animations.
-4. **Realtime collaboration:** dedicated Colyseus service, shared contracts,
+5. **Realtime collaboration:** dedicated Colyseus service, shared contracts,
    multiplayer movement, presence, and chat.
-5. **Voice and production hardening:** LiveKit, communication controls, operational
+6. **Voice and production hardening:** LiveKit, communication controls, operational
    validation, accessibility, security, and performance work.
 
 Each phase requires a separate implementation task. No engine, realtime service,
-auth, database schema, container infrastructure, or backend simulation is included
-in Phase 1 — Step 1.
+database schema, container infrastructure, or backend simulation is included.
+Stop at authentication foundation for Phase 1 — Step 2; no Step 3 work is included.
