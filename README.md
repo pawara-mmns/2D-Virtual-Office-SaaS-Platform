@@ -2,7 +2,12 @@
 
 A multi-tenant 2D virtual office SaaS platform for distributed teams. The planned
 product will give companies private pixel-art offices with realtime movement,
-chat, and voice. **Phase 1 — Step 3 adds the organization foundation.**
+chat, and voice. **Phase 1 — Step 4 adds team members and invitations.**
+
+Step 4's approved migration is applied to the confirmed development project.
+Schema, permission and account-independent regression checks passed. Real
+invitation email and authenticated team workflows remain unverified; see
+[Step 4 validation](docs/team-invitations-validation.md).
 
 ## Technology stack
 
@@ -36,12 +41,15 @@ apps/
           forgot-password/page.tsx
           reset-password/page.tsx
         auth/confirm/route.ts
+        invite/page.tsx
+        invite/[token]/route.ts
         dashboard/page.tsx
         dashboard/layout.tsx
         dashboard/loading.tsx
         organizations/new/page.tsx
         workspace/layout.tsx
         workspace/[organizationId]/page.tsx
+        workspace/[organizationId]/members/page.tsx
         error.tsx
         globals.css
         icon.svg
@@ -57,12 +65,18 @@ apps/
         actions.ts, server.ts, service.ts, validation.ts
         organization-form.tsx, workspace-shell.tsx, workspace-switcher.tsx
         organizations.test.ts
+      features/invitations/
+        actions.ts, email.ts, errors.ts, service.ts, token.ts, validation.ts
+        invitations.test.ts
+      features/members/
+        actions.ts, server.ts, service.ts, action-form.tsx, team-management.tsx
       lib/supabase/
         client.ts, server.ts, proxy.ts, config.ts, config.test.ts
         database.types.ts
       proxy.ts
     tests/auth-routes.test.mjs
     tests/organizations-live.test.mjs
+    tests/team-live.test.mjs
     .env.example
     eslint.config.mjs
     package.json
@@ -72,14 +86,21 @@ docs/
   architecture.md
   organizations.md
   organization-validation.md
+  team-invitations.md
+  team-invitations-validation.md
 supabase/
   config.toml
   .env.organization-tests.example
   migrations/20261021000100_organization_foundation.sql
+  migrations/20261021000200_team_invitations.sql
   tests/organization_policies.sql
+  tests/team_invitations.sql
+  tests/team_schema_audit.sql
+  tests/team_access_guards.sql
 scripts/
   test-organizations.mjs
   test-organizations.test.mjs
+  team-database.test.mjs
 package.json
 pnpm-lock.yaml
 pnpm-workspace.yaml
@@ -193,6 +214,10 @@ install pnpm 10.34.7 with `npm install --global pnpm@10.34.7` first.
 | `pnpm test:organizations:anonymous` | Live public-key-only organization access rejection checks |
 | `pnpm test:organizations --check` | Validate local dedicated test-account configuration; no DB tests |
 | `pnpm test:organizations` | Live provisioning/RLS suite with three confirmed test users; rolls back |
+| `pnpm test:team:database` | Disposable in-memory PostgreSQL team/RLS and foundation regression tests |
+| `pnpm test:team:live --check` | Validate dedicated test-account setup without running SQL |
+| `pnpm test:team:live` | Live rollback-only team policy suite after migration approval/application |
+| `pnpm test:team:anonymous` | Live invitation API permission denials and invalid-preview checks; no accounts |
 | `pnpm install --frozen-lockfile` | Install the exact locked dependencies in CI |
 
 The root scripts invoke `pnpm`, so its shim or installation must be on PATH.
@@ -305,16 +330,20 @@ These are scope boundaries, not implemented features or a fixed delivery order:
 3. **Organizations (current):** atomic workspace/default office creation, member
    roles, workspace switching, and tenant RLS. Remote migration and database tests
    require the separate safety/approval workflow in [organization docs](docs/organizations.md).
-4. **2D office:** lazily loaded Phaser renderer, 32×32 tiles, office assets,
+4. **Team invitations (current):** real email adapter, verified-email acceptance,
+   member management, ownership transfer and tenant RLS. The development migration
+   is applied; authenticated/email/browser verification still needs the setup
+   described in the validation report.
+5. **2D office:** lazily loaded Phaser renderer, 32×32 tiles, office assets,
    four-direction avatars, and subtle idle/walk animations.
-5. **Realtime collaboration:** dedicated Colyseus service, shared contracts,
+6. **Realtime collaboration:** dedicated Colyseus service, shared contracts,
    multiplayer movement, presence, and chat.
-6. **Voice and production hardening:** LiveKit, communication controls, operational
+7. **Voice and production hardening:** LiveKit, communication controls, operational
    validation, accessibility, security, and performance work.
 
 Each phase requires a separate implementation task. No engine, realtime service,
 container infrastructure, or backend simulation is included. Stop at Phase 1 —
-Step 3; invitations and all later product features remain deferred.
+Step 4; all later product features remain deferred.
 
 ## Organization setup
 
@@ -327,3 +356,32 @@ until three dedicated, normally confirmed accounts are available. Prepare them
 using the [account setup instructions](docs/organizations.md#dedicated-test-accounts).
 No service-role browser key or local database is needed. Future migrations still
 require target/history/schema/dry-run review and explicit approval.
+
+## Team invitations
+
+For local testing without an invitation email provider, set
+`INVITATION_DELIVERY_MODE=link` in the existing ignored `apps/web/.env` and keep
+`APP_URL=http://localhost:3000` (or your trusted local origin). Restart `pnpm dev`.
+Team members offers **Create invitation link**, **Copy link**, and **Regenerate
+invitation link**. Normal verified-email acceptance and database permissions still
+apply. Links are displayed only for the issuing action; regeneration invalidates
+older links. No email is sent in this mode. Production rejects link mode; use
+`INVITATION_DELIVERY_MODE=email` or omit the setting for normal Resend delivery.
+See [development link security/setup](docs/team-invitations.md#development-invitation-links).
+
+Open **Team members** from a workspace. Owners/admins can send role-scoped
+invitations, resend or revoke them, and manage authorized members. Ownership
+transfer is explicit, atomic and audited. Members have a read-only directory.
+Invitations reserve seats toward the ten-member limit and expire after seven days.
+
+Configure server-only `APP_URL`, `RESEND_API_KEY` and `INVITATION_FROM_EMAIL` in
+the existing ignored web env file. Use a verified Resend sender, HTTPS in deployed
+environments and disabled email click/open tracking. Unconfigured sends report an
+accurate error; no fake email is used. There is no new application dependency for
+delivery. PGlite is development-only for disposable SQL tests.
+
+The invitation link captures proof into an HttpOnly cookie, then uses clean
+`/invite` for preview, normal registration/login continuation and explicit verified
+email acceptance. Token-bearing paths need redaction in deployment access logs.
+See [architecture/configuration/test instructions](docs/team-invitations.md) and
+[actual PASS/NOT TESTED results and approval status](docs/team-invitations-validation.md).

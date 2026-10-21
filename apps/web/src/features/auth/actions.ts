@@ -1,6 +1,7 @@
 "use server";
 
 import { cookies } from "next/headers";
+import { invitationCookieName, postLoginDestination } from "@/lib/invitation-context";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { authSetupMessage, getSupabaseConfig } from "@/lib/supabase/config";
@@ -76,7 +77,7 @@ async function submit(mode: AuthMode, form: FormData): Promise<AuthState> {
         await clearLocalSession();
         return errorState(user.status === "unavailable" ? unavailableMessage : "Verify your email before signing in.");
       }
-      destination = "/dashboard";
+      destination = postLoginDestination((await cookies()).get(invitationCookieName)?.value);
     }
 
     if (mode === "reset-password") {

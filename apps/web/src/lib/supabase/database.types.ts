@@ -46,6 +46,71 @@ export type Database = {
           },
         ]
       }
+      organization_invitations: {
+        Row: {
+          accepted_at: string | null
+          accepted_by: string | null
+          created_at: string
+          delivery_status: string
+          delivery_version: number
+          email: string
+          expires_at: string
+          id: string
+          invited_by: string | null
+          invited_role: string
+          last_delivery_at: string
+          organization_id: string
+          provider_message_id: string | null
+          revoked_at: string | null
+          token_hash: string
+          updated_at: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          accepted_by?: string | null
+          created_at?: string
+          delivery_status?: string
+          delivery_version?: number
+          email: string
+          expires_at?: string
+          id?: string
+          invited_by?: string | null
+          invited_role: string
+          last_delivery_at?: string
+          organization_id: string
+          provider_message_id?: string | null
+          revoked_at?: string | null
+          token_hash: string
+          updated_at?: string
+        }
+        Update: {
+          accepted_at?: string | null
+          accepted_by?: string | null
+          created_at?: string
+          delivery_status?: string
+          delivery_version?: number
+          email?: string
+          expires_at?: string
+          id?: string
+          invited_by?: string | null
+          invited_role?: string
+          last_delivery_at?: string
+          organization_id?: string
+          provider_message_id?: string | null
+          revoked_at?: string | null
+          token_hash?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "organization_invitations_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       organization_members: {
         Row: {
           created_at: string
@@ -146,9 +211,60 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      accept_organization_invitation: {
+        Args: { p_token_hash: string }
+        Returns: string
+      }
       create_organization: {
         Args: { p_name: string; p_request_id: string }
         Returns: string
+      }
+      create_organization_invitation: {
+        Args: {
+          p_email: string
+          p_org: string
+          p_role: string
+          p_token_hash: string
+        }
+        Returns: Json
+      }
+      list_organization_members: {
+        Args: { p_offset?: number; p_org: string }
+        Returns: Json
+      }
+      preview_organization_invitation: {
+        Args: { p_token_hash: string }
+        Returns: Json
+      }
+      record_invitation_delivery: {
+        Args: {
+          p_invitation: string
+          p_org: string
+          p_provider_id?: string
+          p_status: string
+          p_version: number
+        }
+        Returns: boolean
+      }
+      remove_organization_member: {
+        Args: { p_member: string; p_org: string }
+        Returns: undefined
+      }
+      resend_organization_invitation: {
+        Args: { p_invitation: string; p_org: string; p_token_hash: string }
+        Returns: Json
+      }
+      revoke_organization_invitation: {
+        Args: { p_invitation: string; p_org: string }
+        Returns: undefined
+      }
+      transfer_organization_ownership: {
+        Args: { p_confirmation: string; p_member: string; p_org: string }
+        Returns: undefined
+      }
+      update_organization_member_role: {
+        Args: { p_member: string; p_org: string; p_role: string }
+        Returns: undefined
       }
     }
     Enums: {

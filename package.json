@@ -17,9 +17,13 @@
     "test:live": "pnpm --filter @virtual-office/web test:live",
     "test:organizations": "node scripts/test-organizations.mjs",
     "test:organizations:anonymous": "pnpm --filter @virtual-office/web test:organizations:anonymous",
-    "test:organization-setup": "node --test scripts/test-organizations.test.mjs"
+    "test:organization-setup": "node --test scripts/test-organizations.test.mjs",
+    "test:team:database": "node --test scripts/team-database.test.mjs",
+    "test:team:live": "node scripts/test-organizations.mjs --team",
+    "test:team:anonymous": "pnpm --filter @virtual-office/web test:team:anonymous"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.10",
     "supabase": "^2.121.0"
   }
 }
