@@ -13,7 +13,8 @@
     "test:smoke": "node --test tests/auth-routes.test.mjs",
     "test:live": "node --experimental-strip-types --test tests/auth-live.test.mjs",
     "test:organizations:anonymous": "node --experimental-strip-types --test tests/organizations-live.test.mjs",
-    "test:team:anonymous": "node --experimental-strip-types --test tests/team-live.test.mjs"
+    "test:team:anonymous": "node --experimental-strip-types --test tests/team-live.test.mjs",
+    "test:chat:anonymous": "node --experimental-strip-types --test tests/chat-live.test.mjs"
   },
   "dependencies": {
     "@colyseus/sdk": "0.18.5",
