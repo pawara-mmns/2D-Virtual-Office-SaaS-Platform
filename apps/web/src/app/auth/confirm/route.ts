@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { invitationCookieName, postLoginDestination } from "@/lib/invitation-context";
 import { createClient } from "@/lib/supabase/server";
 import { getSupabaseConfig } from "@/lib/supabase/config";
 import { parseConfirmation, recoveryCookieName, recoveryCookieOptions } from "@/features/auth/links";
@@ -35,5 +36,5 @@ export async function GET(request: NextRequest) {
   } catch {
     return go("/login?notice=unavailable");
   }
-  return go(input.next);
+  return go(postLoginDestination(request.cookies.get(invitationCookieName)?.value));
 }

@@ -10,5 +10,6 @@ export const config = {
     "/login", "/register", "/forgot-password", "/reset-password",
     "/auth/:path*", "/dashboard/:path*",
     "/organizations/:path*", "/workspace/:path*",
+    "/invite/:path*",
   ],
 };

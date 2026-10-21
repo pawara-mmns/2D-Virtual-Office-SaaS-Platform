@@ -52,6 +52,7 @@ export default async function WorkspacePage({ params }: { params: Promise<{ orga
         <div><dt className="text-muted">Workspace identifier</dt><dd className="mt-2 break-all font-mono text-xs">{organization.slug}</dd></div>
         <div><dt className="text-muted">Status</dt><dd className="mt-2">Active</dd></div>
       </dl>
+      <nav aria-label="Workspace navigation" className="mt-6"><Link href={`/workspace/${organization.id}/members`} className="auth-text-link">Team members</Link></nav>
       <section aria-labelledby="office-heading" className="mt-10 border border-line bg-white p-6 sm:p-8">
         <p className="text-xs font-semibold tracking-widest text-muted uppercase">Default office</p>
         <h2 id="office-heading" className="mt-3 text-xl font-semibold">{office?.name ?? "Office unavailable"}</h2>
