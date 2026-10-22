@@ -6,12 +6,15 @@ import { AUTH_CHECK_MS, AUTH_LEASE_MS, RECONNECT_SECONDS, TICK_MS, mapVersion, v
 import type { Authorize, Authorization } from "../auth/authorize.ts";
 import { ChatFailure, type ChatStore } from "../chat/store.ts";
 import { isAvailability, parseChatSend, type ChatErrorCode } from "../../../../packages/shared/src/chat.ts";
+import { meetingZone } from "../../../../packages/shared/src/voice.ts";
+import type { VoiceService } from "../voice/service.ts";
 
 type OfficeClient = Client<{ auth: Authorization }>;
 type Control = { input: MoveInput; lastInput: number; window: number; messages: number; refreshing: boolean; nextCheck: number };
 export type RoomServices = {
   authorize: Authorize; map: OfficeMap;
   chat?: ChatStore;
+  voice?: VoiceService;
   claimed(officeId: string, userId: string, sessionId: string): boolean;
   release(officeId: string, userId: string, sessionId: string): void;
   disposed(officeId: string, roomId: string): void;
@@ -55,6 +58,7 @@ export function officeRoomClass(services: RoomServices) {
       });
       this.onMessage("chat.send", (client, value: unknown) => { void this.sendChat(client, value); });
       this.onMessage("availability.set", (client, value: unknown) => { void this.setAvailability(client, value); });
+      this.onMessage("voice.leave", (client) => { void services.voice?.revoke(client.sessionId); });
       this.onMessage("*", (client) => this.deny(client));
     }
     private async actionIdentity(client: OfficeClient) {
@@ -117,6 +121,7 @@ export function officeRoomClass(services: RoomServices) {
       }
     }
     private deny(client: OfficeClient) {
+      services.voice?.leave(client.sessionId);
       this.revoked.add(client.sessionId);
       // Remove state before closing, so it cannot continue to move or receive updates.
       this.state.players.delete(client.sessionId); this.controls.delete(client.sessionId);
@@ -147,10 +152,12 @@ export function officeRoomClass(services: RoomServices) {
         if (!client.auth || now >= client.auth.expiresAt || now - client.auth.checkedAt >= AUTH_LEASE_MS) { this.deny(client); continue; }
         if (now >= control.nextCheck && !control.refreshing) void this.revalidate(client);
         simulate(services.map, player, now - control.lastInput < 250 && player.connected ? control.input : { x: 0, y: 0 });
+        if (player.connected && services.voice) services.voice.observe(client.sessionId,client.auth,meetingZone(services.map,player.x,player.y),(value) => client.send("voice.state",value));
       }
       this.simulationWorkMs += performance.now() - began;
     }
     onDrop(client: OfficeClient) {
+      services.voice?.leave(client.sessionId);
       const player = this.state.players.get(client.sessionId);
       if (!player || this.revoked.has(client.sessionId)) return;
       player.connected = false; player.isMoving = false;
@@ -168,10 +175,11 @@ export function officeRoomClass(services: RoomServices) {
       control.input = { seq: control.input.seq, x: 0, y: 0 }; control.lastInput = 0; control.nextCheck = Date.now() + AUTH_CHECK_MS;
     }
     onLeave(client: OfficeClient) {
+      services.voice?.leave(client.sessionId);
       this.chatPending.delete(client.sessionId); this.statusPending.delete(client.sessionId); this.statusAt.delete(client.sessionId);
       this.state.players.delete(client.sessionId); this.controls.delete(client.sessionId); this.revoked.delete(client.sessionId);
       if (client.auth) services.release(this.state.officeId, client.auth.userId, client.sessionId);
     }
-    onDispose() { this.controls.clear(); this.revoked.clear(); this.chatPending.clear(); this.statusPending.clear(); this.statusAt.clear(); services.disposed(this.state.officeId, this.roomId); }
+    onDispose() { for (const id of this.state.players.keys()) services.voice?.leave(id); this.controls.clear(); this.revoked.clear(); this.chatPending.clear(); this.statusPending.clear(); this.statusAt.clear(); services.disposed(this.state.officeId, this.roomId); }
   };
 }

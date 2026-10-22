@@ -5,6 +5,8 @@ import { realtimeConfig } from "./config/environment.ts";
 import { supabaseAuthorizer } from "./auth/authorize.ts";
 import { createRealtimeServer } from "./server.ts";
 import { supabaseChatStore } from "./chat/store.ts";
+import { voiceConfig, livekitProvider } from "./voice/provider.ts";
+import { createVoiceService } from "./voice/service.ts";
 
 try {
   process.env.NODE_ENV ??= "production";
@@ -12,7 +14,12 @@ try {
   // Explicit cwd-independent path: the very same asset served to Phaser.
   const mapFile = process.env.OFFICE_MAP_PATH ?? resolve("../web/public/office/studio.json");
   const map = validateOfficeMap(JSON.parse(readFileSync(resolve(mapFile), "utf8")));
-  const server = createRealtimeServer({ authorize: supabaseAuthorizer(config.url, config.key), chat: supabaseChatStore(config.url, config.key), map, origins: config.origins });
+  const authorize = supabaseAuthorizer(config.url,config.key);
+  let provider = null;
+  try { const media = voiceConfig(process.env); if (media) provider = livekitProvider(media); }
+  catch { console.warn("Voice configuration is invalid; office movement and chat remain available."); }
+  const voice = createVoiceService(authorize,provider);
+  const server = createRealtimeServer({ authorize, chat: supabaseChatStore(config.url, config.key), map, origins: config.origins, voice });
   await server.listen(config.port, "0.0.0.0");
   console.info(`Realtime office server listening on port ${config.port}.`);
 } catch {

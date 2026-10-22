@@ -13,6 +13,9 @@ import { createRequire } from "node:module";
 import { protectReconnectUrl } from "../../../../packages/shared/src/socket-transport.ts";
 import { ChatFailure, type ChatStore } from "../chat/store.ts";
 import type { ChatMessage } from "../../../../packages/shared/src/chat.ts";
+import { createVoiceService } from "../voice/service.ts";
+import type { VoiceProvider } from "../voice/provider.ts";
+import type { VoiceZoneState } from "../../../../packages/shared/src/voice.ts";
 
 // Real HTTP/WebSockets and Schema synchronization; synthetic authorization only.
 // Never contacts Supabase or represents live-account validation.
@@ -51,7 +54,16 @@ test("real transport: canonical tenants, authority, presence, capacity, reconnec
       body: input.body, clientMessageId: input.clientMessageId, createdAt: new Date().toISOString() };
     committed.set(key, message); return { message, inserted: true };
   } };
-  const server = createRealtimeServer({ authorize, map, origins: [origin], chat });
+  const voiceTokens: {room:string;identity:string}[] = [], voiceRemoved: {identity:string;cutoff:bigint}[] = [];
+  const mediaMembers = new Map<string,Set<string>>();
+  const voiceProvider: VoiceProvider = { url:"wss://voice-fixture.livekit.cloud",prefix:"fixture_",room:(auth)=>`fixture_${auth.organizationId}_${auth.officeId}`,
+    async token(_auth,room,identity){voiceTokens.push({room,identity});return "synthetic-media-token";},
+    async rooms(){return [...mediaMembers.keys()];}, async participants(room){return [...(mediaMembers.get(room)??[])];},
+    async remove(room,identity,cutoff){voiceRemoved.push({identity,cutoff});mediaMembers.get(room)?.delete(identity);},
+  };
+  const voice = createVoiceService(authorize,voiceProvider); await voice.poll();
+  const voiceStates = new Map<string,VoiceZoneState>();
+  const server = createRealtimeServer({ authorize, map, origins: [origin], chat, voice });
   const rooms: SDKRoom[] = [];
   await server.listen(0, "127.0.0.1");
   const address = server.transport.server!.address(); assert.ok(address && typeof address === "object");
@@ -64,6 +76,7 @@ test("real transport: canonical tenants, authority, presence, capacity, reconnec
     const response = await reserve(n, officeId); assert.equal(response.status, 200);
     const client = new Client(url, { headers: { Origin: origin } });
     const room = await client.consumeSeatReservation<OfficeState>(await response.json());
+    room.onMessage("voice.state",(value:VoiceZoneState)=>voiceStates.set(room.sessionId,value));
     protectReconnectUrl(room.connection, (address, protocol) => {
       const query = new URL(address).searchParams;
       assert.equal(query.has("reconnectionToken"), false); assert.equal(query.has("_authToken"), false);
@@ -94,6 +107,28 @@ test("real transport: canonical tenants, authority, presence, capacity, reconnec
     const c = await join(20, id(102));
     assert.notEqual(c.roomId, a.roomId); assert.equal(c.state.players.size, 1);
     assert.equal([...c.state.players.values()].some((p) => p.userId === id(1)), false);
+    const requestVoice = (token: string,sessionId: string,officeId=id(101),extra:object={}) => fetch(`${url}/voice/token`,{method:"POST",headers:{Origin:origin,"Content-Type":"application/json",Authorization:`Bearer ${token}`},body:JSON.stringify({officeId,sessionId,...extra})});
+    await until(()=>voiceStates.has(a.sessionId),"initial voice zone");
+    assert.equal(voiceStates.get(a.sessionId)!.zone,null);
+    assert.equal((await requestVoice("fixture-1",a.sessionId)).status,403,"Outside the authoritative zone");
+    assert.equal((await requestVoice("fixture-1",a.sessionId,id(101),{zone:"Meeting Room",x:928,y:320})).status,400,"Forged zone/coordinates rejected");
+    assert.equal((await requestVoice("invalid",a.sessionId)).status,403);
+    assert.equal((await requestVoice("fixture-1",a.sessionId,id(102))).status,403);
+    const authoritative = matchMaker.getLocalRoomById(a.roomId).state as OfficeState;
+    const original={x:authoritative.players.get(a.sessionId)!.x,y:authoritative.players.get(a.sessionId)!.y};
+    // Server-only fixture relocation. No application API accepts coordinates.
+    Object.assign(authoritative.players.get(a.sessionId)!,{x:928,y:320});
+    await until(()=>voiceStates.get(a.sessionId)?.zone==="Meeting Room","authoritative zone entry");
+    assert.equal(voiceStates.get(a.sessionId)!.participants,0,"Online avatars are not media participants");
+    assert.equal((await requestVoice("fixture-2",a.sessionId)).status,403,"Another verified account cannot claim a session");
+    assert.equal((await requestVoice("fixture-1",a.sessionId)).status,200);
+    assert.ok([409,429].includes((await requestVoice("fixture-1",a.sessionId)).status));
+    mediaMembers.set(voiceTokens[0]!.room,new Set([voiceTokens[0]!.identity])); await voice.poll();
+    await until(()=>voiceStates.get(a.sessionId)?.participants===1,"count from media API fixture");
+    Object.assign(authoritative.players.get(a.sessionId)!,original);
+    await until(()=>voiceStates.get(a.sessionId)?.zone===null && voiceRemoved.length===1,"server enforced zone exit removal");
+    assert.ok(voiceRemoved[0]!.cutoff>BigInt(Math.floor(Date.now()/1000)));
+    await voice.poll();
     const aChat: ChatMessage[] = [], bChat: ChatMessage[] = [], cChat: ChatMessage[] = [];
     const chatErrors: { code: string }[] = [], availabilityErrors: { code: string }[] = [];
     a.onMessage("chat.message", (message: ChatMessage) => { assert.ok([...committed.values()].some((saved) => saved.id === message.id), "Only committed messages are acknowledged"); aChat.push(message); });
@@ -197,6 +232,7 @@ test("real transport: canonical tenants, authority, presence, capacity, reconnec
     await until(() => !(local.state as OfficeState).players.has(leaseClient.sessionId), "hard authorization lease expiry");
     console.info(JSON.stringify({ scope: "isolated real transport, synthetic auth/chat store", firstRemoteMovementMs: Math.round(latency), committedChatObservedMs: chatLatencyMs, stateUpdatesDuringScenario: stateUpdates, configuredTickHz: 20, twoTenantRooms: true, tenPlayerMeasurement: measured }));
   } finally {
+    await voice.close();
     for (const room of rooms) { room.reconnection.enabled = false; if (room.connection.isOpen) await room.leave(); room.removeAllListeners(); }
     await server.gracefullyShutdown(false);
   }
