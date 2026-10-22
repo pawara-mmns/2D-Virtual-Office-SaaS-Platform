@@ -27,7 +27,7 @@ export async function authorizeIdentity(token: unknown, officeId: unknown, sourc
   if (!activeOrganization || !activeMember) throw new AccessDenied();
   const name = avatarDisplayName(profile?.displayName);
   return { userId: user.id, organizationId: office.organizationId, officeId, token, expiresAt, checkedAt: now,
-    avatarKey: safeAvatarKey(profile?.avatarKey), displayName: name === "You" ? "Member" : name };
+    avatarKey: safeAvatarKey(profile?.avatarKey), displayName: name };
 }
 export function supabaseAuthorizer(url: string, key: string): Authorize {
   return async (token, officeId) => {
