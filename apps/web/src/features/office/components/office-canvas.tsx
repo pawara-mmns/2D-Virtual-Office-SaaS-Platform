@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { mountOffice } from "../engine/lifecycle";
 import { AvatarSettings } from "@/features/avatars/avatar-settings";
 import type { AvatarAppearance, AvatarKey } from "@/features/avatars/presets";
@@ -11,6 +11,8 @@ import { ChatPanel } from "@/features/chat/chat-panel";
 import { Participants } from "@/features/chat/participants";
 import { createChatEvents } from "@/features/chat/events";
 import { isAvailability } from "../../../../../../packages/shared/src/chat.ts";
+import { VoiceBar } from "@/features/voice/voice-bar";
+import { sameVoiceState, type VoiceZoneState } from "../../../../../../packages/shared/src/voice.ts";
 
 export default function OfficeCanvas({ appearance, profileWarning, officeId }: { appearance: AvatarAppearance; profileWarning?: string; officeId: string }) {
   const host = useRef<HTMLDivElement>(null);
@@ -24,6 +26,8 @@ export default function OfficeCanvas({ appearance, profileWarning, officeId }: {
   const [chatEvents] = useState(createChatEvents);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [availabilityError, setAvailabilityError] = useState("");
+  const [voice,setVoice] = useState<VoiceZoneState | null>(null);
+  const leaveVoice = useCallback(() => network.current?.leaveVoice?.(),[]);
   const chatToggle = useRef<HTMLButtonElement>(null);
   const own = participants.find((person) => person.isSelf);
   const avatarKey = savedKey ?? appearance.avatarKey;
@@ -58,6 +62,7 @@ export default function OfficeCanvas({ appearance, profileWarning, officeId }: {
             const client = createClient();
             const connected = connectOffice({ url, officeId, mapVersion: version!, onPresence: (value) => { if (active) setPresence(value); },
               onChat: chatEvents.emit,
+              onVoice: (value) => { if (active) setVoice((previous) => sameVoiceState(previous,value) ? previous : value); },
               onParticipants: (value) => { if (active) setParticipants(value); },
               onAvailabilityError: (message) => { if (active) setAvailabilityError(message); },
               async getToken() { const { data, error } = await client.auth.getSession(); return error ? null : data.session?.access_token ?? null; },
@@ -98,6 +103,7 @@ export default function OfficeCanvas({ appearance, profileWarning, officeId }: {
     </div>
     <ChatPanel key={officeId} officeId={officeId} open={chatOpen} onClose={() => { setChatOpen(false); chatToggle.current?.focus(); }} events={chatEvents} userId={own?.userId} send={(body, id) => network.current?.sendChat?.(body, id) ?? false} />
     </div>
+    {voice?.zone && <VoiceBar key={voice.sessionId} officeId={officeId} state={voice} leave={leaveVoice} />}
     <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-5 py-3 text-xs leading-6 text-muted">
       <p>{presence.status === "online" ? `${presence.count} online` : presence.status === "connecting" ? "Connecting" : presence.status === "reconnecting" ? "Reconnecting" : "Offline"} · Keyboard required</p>
       <p role="status" aria-live="polite">{presence.notice}</p>
