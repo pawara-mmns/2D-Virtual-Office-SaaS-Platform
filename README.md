@@ -2,9 +2,10 @@
 
 A multi-tenant 2D virtual office SaaS platform for distributed teams, with private
 pixel-art offices, realtime movement, chat and meeting-zone voice. **Phase 5
-Step 2 adds operational readiness checks and configuration/logging safeguards.**
-See the [current private-beta validation and release checklist](docs/communication-polish-validation.md)
-for executed checks, user-reported Step 1 results and deployment prerequisites.
+Step 3 prepares the hosted private-beta pilot and closes new admissions during
+shutdown.** The hosted environment and real pilot participants are not configured.
+See the [current private-beta validation, host requirements and pilot runbook](docs/communication-polish-validation.md)
+for executed checks and outstanding release gates. No deployment is authorized.
 
 Six original characters can be previewed and saved through Avatar settings in
 the office. Preferences use existing self-scoped Supabase profiles; movement and
@@ -373,7 +374,9 @@ terminals using the host's managed lifecycle. Run exactly one voice authority fo
 a LiveKit project/namespace: its restart sweep removes orphaned participants.
 Do not perform overlapping realtime restarts or start a second Cloud-enabled
 test server. Graceful realtime shutdown immediately reports not-ready and awaits
-voice cleanup before closing rooms. Budget at least 15 seconds for shutdown and
+voice cleanup before closing rooms; new office/voice admission and WebSocket
+upgrades are rejected during drain, including late office authorization results.
+Budget at least 15 seconds for shutdown and
 verify actual host signal delivery before beta. A restart interrupts active calls;
 users explicitly rejoin. Keep the prior application artifact and compatible
 environment for rollback; no database rollback is needed for this step.
@@ -485,8 +488,10 @@ These are scope boundaries; completed foundations and future work are distinguis
 Each phase requires a separate implementation task. The local office engine is
 implemented with chat/status and meeting-zone voice. Phase 5 Steps 1–2 add
 stabilization and private-beta operational readiness; see the current validation
-report above. Container infrastructure and later product features remain deferred.
-Stop at Phase 5 Step 2.
+report above. Step 3 adds the private-beta environment requirements and real-team
+pilot runbook; its real pilot remains blocked on configuration and participants.
+Container infrastructure and later product features remain deferred.
+Stop at Phase 5 Step 3.
 
 ## Organization setup
 

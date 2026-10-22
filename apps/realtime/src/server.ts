@@ -28,6 +28,11 @@ export function createRealtimeServer(options: { authorize: Authorize; map: Offic
   // Only bounded counters, no tokens/IP logs; don't trust forwarded IP headers.
   const requests = new Map<string, { count: number; at: number }>();
   let shuttingDown = false;
+  const rejectDuringShutdown = (res: Response) => {
+    if (!shuttingDown) return false;
+    res.status(503).json({ error: "The office server is restarting. Retry shortly." });
+    return true;
+  };
   const server = defineServer({
     greet: false, devMode: false, auth: false,
     // Library error objects can include request data: never forward them to logs.
@@ -35,6 +40,7 @@ export function createRealtimeServer(options: { authorize: Authorize; map: Offic
     transport: new OfficeTransport({
       maxPayload: 12_288, pingInterval: 3000, pingMaxRetries: 2,
       beforeUpgrade(request) {
+        if (shuttingDown) return new Response(null, { status: 503 });
         if (!origins.has(request.headers.get("origin") ?? "")) return new Response(null, { status: 403 });
         const query = new URL(request.url).searchParams;
         if (query.has("_authToken") || query.has("reconnectionToken")) return new Response(null, { status: 403 });
@@ -57,6 +63,7 @@ export function createRealtimeServer(options: { authorize: Authorize; map: Offic
       // supplies identity proof, never trusted coordinates or zone assertions.
       app.post("/voice/token", async (req: Request, res: Response) => {
         res.setHeader("Cache-Control","private, no-store"); res.setHeader("Referrer-Policy","no-referrer");
+        if (rejectDuringShutdown(res)) return;
         if (!origins.has(req.get("origin") ?? "")) { res.status(403).json({ error: "Voice origin denied." }); return; }
         const address = `voice:${req.socket.remoteAddress ?? "unknown"}`, now = Date.now();
         for (const [id,item] of requests) if (now-item.at>=60_000) requests.delete(id);
@@ -73,6 +80,7 @@ export function createRealtimeServer(options: { authorize: Authorize; map: Offic
           const header = req.get("authorization");
           const auth = await options.authorize(header?.startsWith("Bearer ") ? header.slice(7) : undefined,body.officeId);
           if (res.destroyed) return;
+          if (rejectDuringShutdown(res)) return;
           if (!options.voice) throw new VoiceError(503,"Voice is not configured.");
           const voice = options.voice;
           const cancelled = () => { if (!res.writableEnded) void voice.cancel(auth,body.sessionId); };
@@ -89,6 +97,7 @@ export function createRealtimeServer(options: { authorize: Authorize; map: Offic
       app.post("/office/join", async (req: Request, res: Response) => {
         res.setHeader("Cache-Control", "no-store");
         res.setHeader("Vary", "Origin");
+        if (rejectDuringShutdown(res)) return;
         if (!origins.has(req.get("origin") ?? "")) { res.status(403).json({ error: "Origin denied." }); return; }
         const now = Date.now(), address = req.socket.remoteAddress ?? "unknown";
         for (const [id, item] of requests) if (now - item.at >= 60_000) requests.delete(id);
@@ -109,7 +118,9 @@ export function createRealtimeServer(options: { authorize: Authorize; map: Offic
           if (input.mapVersion !== mapVersion(options.map)) { res.status(409).json({ error: "Office map changed. Reload this page." }); return; }
           const header = req.get("authorization");
           const auth = await options.authorize(header?.startsWith("Bearer ") ? header.slice(7) : undefined, input.officeId);
+          if (rejectDuringShutdown(res)) return;
           const seat = await admission.reserve(auth);
+          if (rejectDuringShutdown(res)) return;
           res.json(seat);
         } catch (error) {
           if (error instanceof AccessDenied) res.status(403).json({ error: error.message });

@@ -35,10 +35,13 @@ async function until(check: () => boolean, message: string, timeout = 6000) {
 }
 test("real transport: canonical tenants, authority, presence, capacity, reconnect and revocation", { timeout: 45_000 }, async () => {
   const removed = new Set<number>();
+  let releaseAuthorization:(()=>void)|undefined, authorizationPending=false;
+  let inFlightAdmission:Promise<Response>|undefined;
   const authorize: Authorize = async (token, officeId) => {
     const n = typeof token === "string" && /^fixture-\d+$/.test(token) ? Number(token.slice(8)) : 0;
     const allowedOffice = n >= 20 ? id(102) : id(101);
     if (!n || n === 98 || removed.has(n) || officeId !== allowedOffice) throw new AccessDenied();
+    if (n===31) { authorizationPending=true; await new Promise<void>(resolve=>{releaseAuthorization=resolve;}); }
     return { userId: id(n), organizationId: n >= 20 ? id(202) : id(201), officeId: allowedOffice, token: String(token),
       expiresAt: Date.now() + 60_000, checkedAt: Date.now(), displayName: `Member ${n}`, avatarKey: n === 2 ? "slate" : "fern" };
   };
@@ -62,8 +65,15 @@ test("real transport: canonical tenants, authority, presence, capacity, reconnec
     async remove(room,identity,cutoff){voiceRemoved.push({identity,cutoff});mediaMembers.get(room)?.delete(identity);},
   };
   const voice = createVoiceService(authorize,voiceProvider); await voice.poll();
-  const closeVoice=voice.close; let voiceShutdownCompleted=false, readinessDuringShutdown:number|undefined;
-  voice.close=async()=>{readinessDuringShutdown=(await fetch(`${url}/ready`)).status;await delay(15);await closeVoice();voiceShutdownCompleted=true;};
+  const closeVoice=voice.close; let voiceShutdownCompleted=false, readinessDuringShutdown:number|undefined, admissionDuringShutdown:number|undefined, delayedAdmissionDuringShutdown:number|undefined, voiceDuringShutdown:number|undefined;
+  voice.close=async()=>{
+    readinessDuringShutdown=(await fetch(`${url}/ready`)).status;
+    admissionDuringShutdown=(await reserve(21,id(102))).status;
+    releaseAuthorization?.();
+    delayedAdmissionDuringShutdown=(await inFlightAdmission)?.status;
+    voiceDuringShutdown=(await fetch(`${url}/voice/token`,{method:"POST",headers:{Origin:origin,"Content-Type":"application/json"},body:"{}"})).status;
+    await delay(15);await closeVoice();voiceShutdownCompleted=true;
+  };
   const voiceStates = new Map<string,VoiceZoneState>();
   let dependencyReady=true;
   const server = createRealtimeServer({ authorize, map, origins: [origin], chat, voice,
@@ -246,9 +256,14 @@ test("real transport: canonical tenants, authority, presence, capacity, reconnec
   } finally {
     for (const room of rooms) { room.reconnection.enabled = false; if (room.connection.isOpen) await room.leave(); room.removeAllListeners(); }
     try {
+      inFlightAdmission=reserve(31,id(102));
+      await until(()=>authorizationPending,"authorization in flight before drain");
       await server.gracefullyShutdown(false);
       assert.equal(voiceShutdownCompleted,true,"Production server shutdown must await voice-service cleanup");
       assert.equal(readinessDuringShutdown,503,"A draining authority must stop reporting ready before awaiting media cleanup");
-    } finally {await closeVoice();}
+      assert.equal(admissionDuringShutdown,503,"A draining authority must not issue new office reservations while media cleanup runs");
+      assert.equal(delayedAdmissionDuringShutdown,503,"Authorization started before drain must not produce a late reservation");
+      assert.equal(voiceDuringShutdown,503,"Voice admission must also stop at the beginning of drain");
+    } finally {releaseAuthorization?.();await closeVoice();}
   }
 });
