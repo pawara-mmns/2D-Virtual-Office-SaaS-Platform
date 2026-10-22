@@ -196,3 +196,24 @@ prevent React updates for movement patches. User/office keys isolate cached chat
 and drafts across workspace switches. The existing 15-second authorization lease
 and reconnect checks apply to chat and status. See
 [migration status, validation and manual QA](workspace-chat-validation.md).
+
+## Meeting-zone voice (Phase 4 Step 1)
+
+The shared Tiled VoiceZones rectangle is evaluated against Colyseus-authoritative
+collision-body coordinates. Private zone/count events update the contextual UI
+only when presentation changes. Movement/chat remain on the existing socket;
+microphone media uses a lazily loaded LiveKit Cloud connection after explicit join.
+
+The same-origin Next.js voice token API verifies Supabase identity, then forwards
+the bearer to the configured realtime server. That server independently verifies
+Auth/RLS membership and binds the user to the actual connected in-zone office
+session. It reserves one voice admission per user and signs a short microphone-only
+token for an opaque tenant room. Server API credentials never enter web bundles.
+No zone coordinates or eligibility claims from the browser are trusted.
+
+Zone/socket/office loss schedules Cloud removal with an explicit token cutoff.
+Independent voice authorization checks, a six-second lease and orphan sweeps back
+client track cleanup. New joins pause when Cloud checks fail; process/provider
+outages cannot guarantee the ten-second removal target. Cloud replay/removal and
+actual two-way audio still require live verification. See
+[voice architecture, setup and actual results](livekit-voice-validation.md).

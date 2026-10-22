@@ -97,6 +97,9 @@ const map = { type: "map", version: "1.10", tiledversion: "1.11.2", orientation:
   tilesets: [{ firstgid: 1, name: "office", tilewidth: 32, tileheight: 32, tilecount: 128, columns: 16, spacing: 0, margin: 0, image: "office-tiles.png", imagewidth: 512, imageheight: 256 }],
 };
 const mapFile = output + "studio.json";
+map.nextlayerid = 7; map.nextobjectid = 7;
+map.layers.push({ id: 6, name: "VoiceZones", type: "objectgroup", x: 0, y: 0, opacity: 1, visible: false,
+  objects: [{ id: 6, name: "Meeting Room", type: "voice", x: 24*32, y: 32, width: 11*32, height: 11*32, visible: false, rotation: 0 }] });
 const lineEnding = existsSync(mapFile) && readFileSync(mapFile, "utf8").includes("\r\n") ? "\r\n" : "\n";
 writeFileSync(mapFile, (JSON.stringify(map, null, 2) + "\n").replace(/\n/g, lineEnding));
 console.log("Generated original office atlas, avatar sheet and editable Tiled JSON.");
