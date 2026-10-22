@@ -62,10 +62,13 @@ test("real transport: canonical tenants, authority, presence, capacity, reconnec
     async remove(room,identity,cutoff){voiceRemoved.push({identity,cutoff});mediaMembers.get(room)?.delete(identity);},
   };
   const voice = createVoiceService(authorize,voiceProvider); await voice.poll();
-  const closeVoice=voice.close; let voiceShutdownCompleted=false;
-  voice.close=async()=>{await delay(15);await closeVoice();voiceShutdownCompleted=true;};
+  const closeVoice=voice.close; let voiceShutdownCompleted=false, readinessDuringShutdown:number|undefined;
+  voice.close=async()=>{readinessDuringShutdown=(await fetch(`${url}/ready`)).status;await delay(15);await closeVoice();voiceShutdownCompleted=true;};
   const voiceStates = new Map<string,VoiceZoneState>();
-  const server = createRealtimeServer({ authorize, map, origins: [origin], chat, voice });
+  let dependencyReady=true;
+  const server = createRealtimeServer({ authorize, map, origins: [origin], chat, voice,
+    readiness: async()=>({status:dependencyReady?"ready":"not_ready",checks:{database:dependencyReady?"ready":"unavailable"}}),
+  });
   const rooms: SDKRoom[] = [];
   await server.listen(0, "127.0.0.1");
   const address = server.transport.server!.address(); assert.ok(address && typeof address === "object");
@@ -89,6 +92,13 @@ test("real transport: canonical tenants, authority, presence, capacity, reconnec
     rooms.push(room); await until(() => !!room.state?.players?.get(room.sessionId), "first state"); return room;
   };
   try {
+    assert.equal((await fetch(`${url}/ready`)).status,200);
+    dependencyReady=false;
+    const readiness=await fetch(`${url}/ready`);
+    assert.equal(readiness.status,503); assert.match(readiness.headers.get("cache-control")??"",/no-store/);
+    assert.deepEqual(await readiness.json(),{status:"not_ready",checks:{database:"unavailable"}});
+    assert.equal((await fetch(`${url}/health`)).status,200,"Dependency failure must not trigger process restart loops");
+    dependencyReady=true;
     assert.equal((await reserve(1, id(101), {}, "https://untrusted.example")).status, 403);
     for (const token of ["", "invalid", "fixture-98"]) assert.equal((await reserve(token)).status, 403);
     assert.equal((await reserve(1, id(102))).status, 403);
@@ -238,6 +248,7 @@ test("real transport: canonical tenants, authority, presence, capacity, reconnec
     try {
       await server.gracefullyShutdown(false);
       assert.equal(voiceShutdownCompleted,true,"Production server shutdown must await voice-service cleanup");
+      assert.equal(readinessDuringShutdown,503,"A draining authority must stop reporting ready before awaiting media cleanup");
     } finally {await closeVoice();}
   }
 });

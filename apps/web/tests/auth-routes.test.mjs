@@ -20,6 +20,18 @@ test("foundation homepage and health endpoint remain available", async () => {
   assert.deepEqual(await health.json(), { status: "ok", service: "web" });
 });
 
+test("public readiness is dynamic, uncached and exposes only operational statuses", async () => {
+  const response = await fetch(base + "/api/ready", { headers: { Authorization: "Bearer deliberately-invalid-proof" } });
+  assert.ok([200,503].includes(response.status));
+  assert.match(response.headers.get("cache-control"), /no-store/);
+  const report = await response.json();
+  assert.equal(response.status === 200, report.status === "ready");
+  assert.deepEqual(Object.keys(report).sort(), ["checks","status"]);
+  assert.deepEqual(Object.keys(report.checks).sort(), ["authentication","configuration","database","realtime"]);
+  assert.ok(Object.values(report.checks).every(value => ["ready","unavailable"].includes(value)));
+  assert.equal(JSON.stringify(report).includes("proof"), false);
+});
+
 test("homepage and login initial scripts do not include the deferred Phaser runtime", async () => {
   const scripts = new Set();
   for (const path of ["/", "/login"]) {

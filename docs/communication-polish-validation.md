@@ -1,12 +1,243 @@
-# Communication and MVP stabilization validation
+# Communication, stabilization and private-beta validation
 
-## Phase 5 Step 1 — MVP stabilization and security hardening
+## Phase 5 Step 2 — Private beta readiness and operational reliability
+
+Date: 2026-10-22. Current branch confirmed by reading `.git/HEAD`:
+`feature/p5-s02-private-beta-readiness`. No Git commands, migration, deployment,
+new dependency, account creation, email send or tenant-data mutation was performed.
+This section is the current result; Step 1 and Phase 4 below are historical.
+
+**Merge-ready: YES. Private-beta deployment-ready: NO.** The scoped operational
+changes and available regressions pass. The supplied Step 2 brief reports that
+the outstanding Step 1 manual checks have passed; that is accepted as
+**user-reported PASS**, rather than agent-executed Cloud/audio evidence. No new
+authenticated or audio test is claimed here. Deployment settings, host-level
+operational rehearsal and measured real-team workload remain release gates.
+
+### Implementation and audit findings
+
+| Finding | Change and evidence |
+| --- | --- |
+| Existing health endpoints showed process availability without dependency readiness | Preserve web `/api/health` and realtime `/health`; add separate `/api/ready` and `/ready` with fixed check names/statuses and HTTP 200/503. A live dependency check and the intentionally voice-disabled compiled-server fixture exercise their actual behavior. |
+| Realtime accepted malformed Supabase service URLs, including credentials, path/query/fragment, and non-HTTP localhost protocols | Require an HTTPS origin, or development/test loopback HTTP, before constructing the adapter. The added malformed-origin assertion failed before the fix and passes afterward. No credential values are used in regression fixtures. |
+| A draining server could still report ready while media cleanup was being awaited | Set shutdown readiness false before awaiting the existing voice close hook; check again after pending readiness work. The actual HTTP/WebSocket regression observed 200 before the fix and now receives 503 during cleanup. Existing awaited shutdown/revocation regressions remain intact. |
+| Next development access logs excluded invitations but not Auth confirmation/recovery query proof | Exclude `/auth/confirm` as well as `/invite` from incoming-request logging. The proof-path regression failed before the configuration change. Installed Next code confirms its access logger otherwise prints the request URL. |
+| Default framework Server Function logging serializes prior action state, which can contain a one-time invitation URL | Disable `logging.serverFunctions`. A regression exercises the installed Next formatter with the actual prior-state shape and synthetic proof, confirming that its default formatter does not redact the URL. The configuration guard failed before the fix and now passes. No real proof was used or logged. |
+
+Readiness uses one small shared server-side utility. It is not imported by client
+components or normal page loads. No UI, map, sprite, movement protocol, database
+schema, RLS rule or admission permission was changed.
+
+### Readiness contract and safety
+
+| Endpoint | Contract |
+| --- | --- |
+| Web `/api/health` | Existing HTTP 200 `{"status":"ok","service":"web"}`; liveness only |
+| Realtime `/health` | Existing HTTP 200 `{"status":"ok"}`; now explicitly no-store |
+| Web `/api/ready` | Configuration, Auth availability, database permission round trip and configured realtime `/ready`; HTTP 200 only if all are ready |
+| Realtime `/ready` | Validated startup configuration/map, Auth, database round trip and recent voice control-plane availability; HTTP 503 during drain or missing/unavailable voice |
+
+- Reports contain only `status` and fixed `checks` with `ready`/`unavailable`.
+  Missing monitor wiring or shutdown can return just `{"status":"not_ready"}`.
+  No provider errors, URLs, credentials, database schema names, user information,
+  room inventory or timings are returned by these endpoints.
+- Probes run in parallel with a **3-second deadline**, abort outbound fetches,
+  reject redirects, use no-store and accept no request-selected destination.
+  Only the configured public project key is sent to Supabase. Request cookies,
+  bearer tokens and privileged keys are never forwarded. Incoming query strings
+  do not control probes. A stalled dependency regression resolves in about 3s.
+- One in-flight probe is shared per process and the completed result is retained
+  for **5 seconds**. One hundred concurrent unit calls executed one dependency
+  request; expiry and recovery were checked without an automatic retry loop.
+  HTTP responses remain no-store. Aggregated status can lag a dependency change
+  by this cache/deadline; it is not an authorization or revocation timer.
+- Database availability expects the existing anonymous PostgreSQL `42501`
+  privilege denial on `profiles?select=id&limit=0`. This is a safe round trip
+  through PostgREST into PostgreSQL, not a tenant read or write. Missing schema,
+  invalid keys, redirects and unexpected public read grants all fail readiness.
+  It does not validate all migrations, positive authenticated queries or RLS.
+- Voice readiness reuses the running authority's existing sweeps. It requires a
+  successful control-plane observation less than **6 seconds** old and no known
+  revocation failure. No second authority or extra Cloud sweeper is started.
+  Missing voice leaves existing movement/chat behavior available while full-beta
+  readiness is 503. The existing single-authority architecture is preserved.
+- Email configuration is checked for required values/syntax; domain verification,
+  recipient support and delivery are not probed. No automatic email is sent.
+  Production rejects development link mode and public HTTP origins. Server-only
+  loopback HTTP to realtime remains supported behind a trusted TLS proxy.
+- Readiness proves service availability only. It does not prove end-to-end
+  WebSockets, media, audible audio, issued-token replay protection or revocation
+  timing. Use liveness for process restart decisions and readiness for alerts/
+  host admission; dependency outages should not cause repeated restarts.
+
+### Actual live observations and environment review
+
+| Check | Result | Observation |
+| --- | --- | --- |
+| Existing development target and project consistency | PASS | Both app configurations match `rofutnholbtdmxccrkbs`; values/keys suppressed |
+| Running web/realtime liveness | PASS | Both HTTP 200 at 04:18 UTC |
+| Running realtime full readiness | PASS | HTTP 200 in 660ms at 04:18 UTC; configuration/Auth/database/voice ready |
+| LiveKit Cloud read-only control API | PASS | 04:19:11 UTC, inventory completed in **529ms**, zero application rooms; no joins or participant changes |
+| Final production web liveness using local development settings | PASS | 04:24:12 UTC, HTTP 200 in **7ms** |
+| Final production web readiness correctly rejects development settings | PASS | 04:24:13 UTC, HTTP **503** in **229ms**: configuration unavailable, authentication/database/realtime ready |
+| Built realtime with Cloud deliberately disabled | PASS | HTTP 503 readiness with only voice unavailable; liveness 200; actual configured-project DB/Auth checks succeeded |
+| Dedicated test account configuration preflight | NOT TESTED prerequisite | No configured login or three dedicated UUIDs. `node scripts/test-organizations.mjs --check` reports the missing three authorized verified accounts and exits nonzero; no live rollback suite was attempted |
+| Step 1 authenticated isolation, real audio, original/refreshed replay and <=10s Cloud revocation | PASS — user-reported | Supplied Step 2 context states outstanding checks passed manually. No raw timing, token proof, credentials or recordings were supplied or requested. Agent did not repeat these scenarios |
+| Hosted beta TLS/WebSocket/media, process-manager shutdown and external logging | NOT TESTED | No target deployment configured or performed in this task |
+
+The existing local web file is `.env`, not `.env.local`; both are supported and
+ignored. Next's production order is inherited process environment, then
+`.env.production.local`, `.env.local`, `.env.production`, `.env`. Public Next
+variables are embedded at build time. The Node realtime start command loads only
+its `.env`, preserving inherited values; dev explicitly sets development mode.
+No local or production secret value was changed.
+
+Current local settings use loopback HTTP for the application and public realtime
+origin, a development HTTP allowed origin, and `INVITATION_DELIVERY_MODE=link`.
+Email and server-only Cloud values are present. Their presence is not evidence
+of a verified sender or working deployed email. Private beta needs HTTPS public
+origins, exact matching realtime origin allowlists, production mode and normal
+email invitations. This expected local/deployment separation explains readiness
+503 in the production web observation; it is not a database outage.
+
+### Automated validation executed
+
+| Check | Result / scope |
+| --- | --- |
+| `pnpm lint` | PASS, both apps, no warnings |
+| `pnpm typecheck` | PASS, both apps with generated Next route types |
+| `pnpm build` | PASS, frontend and compiled realtime backend; rerun after final logging changes |
+| `pnpm test` | PASS, **95 web + 24 realtime = 119**, zero failures/skips in final run |
+| Database security/setup runners | PASS, **6 tests**: 14 chat, 54 team and 26 foundation SQL assertions plus avatar/name and anonymous/cross-user guards; disposable PostgreSQL, rollback fixtures |
+| Production routes and live-negative Supabase suites | PASS, **43 tests**, final build; Auth/organization/invitation/chat/voice denials and public readiness response contract |
+| Compiled realtime live-negative fixture | PASS, **1 test**, including actual DB/Auth readiness and intentional voice-unavailable 503; isolated child has Cloud credentials blanked |
+| Actual Chromium chat suite | PASS, drafts, failure/idempotent retry, history/disconnect race, scroll/pagination, plain text, mobile and movement focus |
+| Actual Chromium office composition suite | PASS, names, presets, focus, draft/panel persistence, responsive layouts, equivalent snapshot/render suppression and cleanup |
+| Actual Chromium Phaser suite | PASS, controls/collisions, camera/resize, 10-avatar rendering/reuse and repeated teardown/remount |
+| Actual Chromium voice UI suite | PASS, explicit capture, cancellation, mute/unmute, device/error observers, reconnection feedback and track/listener cleanup using synthetic media/participants |
+| Agent-executed positive authenticated remote DB/Cloud workflow in Step 2 | NOT TESTED; no accessible dedicated account/session configuration |
+| Real mobile keyboard/screen reader, prolonged memory soak, real 6–10-person browser/audio benchmark | NOT TESTED in this pass |
+
+The focused tests deliberately reproduced the pre-fix failures described above.
+**FAIL: no unresolved failures in final executed regression checks.** The account
+preflight's nonzero exit is a documented prerequisite result, not a passing live
+database test. UI browser fixtures use actual React/Phaser/SDK controls with
+synthetic identity/store/provider boundaries; they are not Cloud/audio proof.
+
+Commands beyond normal root scripts (production-route command runs in `apps/web`):
+
+```powershell
+node --test scripts/chat-database.test.mjs scripts/team-database.test.mjs scripts/test-organizations.test.mjs
+node --test --test-concurrency=1 scripts/test-chat-browser.mjs scripts/test-communication-browser.mjs scripts/test-office-browser.mjs scripts/test-voice-browser.mjs
+node --experimental-strip-types --test scripts/test-realtime-live.mjs
+node --test --experimental-strip-types tests/auth-routes.test.mjs tests/voice-routes.test.mjs tests/auth-live.test.mjs tests/organizations-live.test.mjs tests/team-live.test.mjs tests/chat-live.test.mjs
+```
+
+### Measured performance and recovery review
+
+- Final full realtime run: **10 synthetic-authorized clients**, real local
+  HTTP/WebSocket/Schema transport. **23 ticks over 1.200s (19.2Hz sampled,
+  configured 20Hz)**, **0.211ms** average simulation work/tick. One observer
+  received **1,500 payload bytes / 20 packets / 1,250 bytes/s**, excluding framing.
+  First remote movement was observed in **103ms**; committed synthetic-store
+  chat in **21ms**, including the fixture's 15ms store delay. This is not WAN,
+  Supabase persistence latency or Cloud capacity.
+- Chrome 155 / i7-1165G7 / SwiftShader software WebGL, separate short render
+  samples: **29.9fps one avatar**, **30.8fps ten avatars**, about 1.2s each.
+  This does not establish sustained hardware-GPU 60fps or real-user capacity.
+  No rendering change or measured speed improvement is claimed. Real team
+  hardware, prolonged usage and concurrent voice require the beta rehearsal.
+- Actual chat fixture: **40ms** committed synthetic event to DOM observation,
+  panel closed/open **50.0/60.0fps** short samples. No live chat latency claim.
+- Desktop 1422x804 kept a 1388x634 canvas; tablet 820x1180 with open chat kept
+  446x1010 canvas; mobile 390x844 and settings at 320x740 had no horizontal
+  overflow. Fresh desktop/mobile screenshots were visually inspected under
+  ignored `.cache/`; controls, draft and the original pixel-art direction remain.
+- Existing bounded reconnect, non-retryable auth denials, idempotent chat retry
+  and draft retention, microphone permission feedback and explicit rejoin were
+  reviewed and retested. Late history/state, Strict Mode replay, cancelled
+  capture, shutdown and listener cleanup regressions remain passing. No new UI
+  defect was reproduced, so no UI redesign or retry mechanism was added.
+
+### Modified files
+
+- Operational utility: `packages/shared/src/readiness.ts`.
+- Web route/service/tests: `apps/web/src/app/api/ready/route.ts`,
+  `apps/web/src/lib/readiness.ts`, `readiness.test.ts`, `logging.test.ts`,
+  `apps/web/tests/auth-routes.test.mjs`, `apps/web/next.config.ts`.
+- Realtime wiring/config/lifecycle: `apps/realtime/src/index.ts`, `server.ts`,
+  `config/environment.ts`, `voice/service.ts`.
+- Regressions: `apps/realtime/src/tests/security.test.ts`, `voice.test.ts`,
+  `realtime.test.ts`, `scripts/test-realtime-live.mjs`.
+- Existing docs/config examples: `README.md`, `docs/architecture.md`, this
+  validation report, `apps/web/.env.example`, `apps/realtime/.env.example`.
+
+### Remaining environment requirements and manual beta checklist
+
+1. Provision no new infrastructure through this task. In the intended existing
+   beta host, configure HTTPS `APP_URL`, public `NEXT_PUBLIC_REALTIME_URL`, exact
+   `REALTIME_ALLOWED_ORIGINS`, the same intended Supabase project/public key on
+   both apps, and server-only LiveKit values. Set realtime `NODE_ENV=production`.
+   A server-only loopback internal origin is supported behind trusted TLS.
+   Rebuild web after public-variable changes; restart after server changes.
+2. Use `INVITATION_DELIVERY_MODE=email`, a verified sender domain and permitted
+   Resend recipients. `onboarding@resend.dev` is restricted to the account's
+   registered recipient and is insufficient for general team onboarding.
+   Retain email confirmation; configure exact HTTPS Supabase Site URL/redirects
+   and existing SSR confirmation/recovery templates from README. Verify a real
+   invitation and Auth email manually; no email was sent here.
+3. Build, start one realtime authority and the web process, allow warm-up, then
+   check liveness and readiness. Probe every 10–15s using your existing host,
+   with transient-failure tolerance. Verify alerts/traffic handling distinguish
+   unavailable dependencies from a dead process. Require healthy readiness before
+   inviting a team; no monitor/dashboard integration was installed here.
+4. Confirm proxy TLS/WSS upgrades, timeouts, trusted origin forwarding, privacy
+   headers and log redaction. Remove proof from invitation paths/Auth callback
+   queries, request/action bodies, cookies, Authorization and reconnect
+   subprotocol headers in proxy/error telemetry. Public health URLs need no proof.
+5. With dedicated normally verified beta accounts, rehearse 6–10 concurrent team
+   members and a second company: names, movement, presence, chat persistence,
+   drafts, refresh/drop/reconnect, leaving and signed-out/cross-tenant denial.
+   Record actual devices, duration, frame/latency/resource observations, not
+   synthetic fixture numbers. Do not select unrelated tenant accounts.
+6. Recheck real two-way audio/device/permission behavior on the target network;
+   leave, zone exit, sign-out and interruption must release microphone/tracks.
+   Preserve the user-reported Step 1 security results; capture safe timing-only
+   evidence on the deployed configuration if repeating original/refreshed replay
+   and active-member revocation against the 10-second target. Never log tokens.
+7. Rehearse temporary Auth/database/realtime/Cloud failures without altering tenant
+   data or RLS. Confirm feedback/drafts, bounded retries and readiness recovery.
+   Verify the host delivers graceful shutdown to the actual Node process, allows
+   at least 15 seconds for drain and does not overlap Cloud authorities. Check
+   microphone/room cleanup and explicit voice rejoin after restart.
+
+Known limits: readiness is cached availability, not security/E2E certification;
+email delivery and real audio are external; office movement remains keyboard-
+based; rendering samples use software GPU; no prolonged memory soak or hosted
+operational rehearsal was performed. One voice authority per Cloud namespace is
+required; horizontal scaling/failover infrastructure is outside this step.
+
+Rollback: retain the prior compatible web/realtime artifact, environment and map
+pair. Stop admission, gracefully drain and stop the current authority before
+starting the prior one; expect users to reconnect/rejoin voice. Restore monitor
+paths if the prior artifact lacks readiness endpoints. Do not roll back or reset
+the database: this step contains no migration or tenant-data change. Do not
+rotate keys or change namespaces as an unreviewed rollback shortcut.
+
+**Final decision:** scoped code is merge-ready, with all executed checks passing
+and the user's reported Step 1 manual sign-off recorded. Private-beta deployment
+is not signed off until the intended host has correct production settings and
+the target-environment checklist/rehearsal above is completed. No deployment was
+attempted. Phase 5 Step 2 stops here; Step 3 was not started.
+
+## Historical record — Phase 5 Step 1 — MVP stabilization and security hardening
 
 Date: 2026-10-22. Branch confirmed by reading `.git/HEAD`:
 `feature/p5-s01-mvp-stabilization`. Phase 4 merge status and successful manual
 voice use were reported by the user; no Git history operation was performed to
 verify that merge. The Phase 4 sections below are historical records. This
-section is the current stabilization result.
+section records the stabilization result at that time; the Step 2 section above
+records the subsequent user-reported manual sign-off and current decisions.
 The latest real-world validation preflight is recorded in the continuation below
 at 04:02 UTC; it remains blocked on accessible authenticated test sessions.
 

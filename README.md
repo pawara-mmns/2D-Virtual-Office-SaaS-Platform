@@ -1,9 +1,10 @@
 # Virtual Office
 
-A multi-tenant 2D virtual office SaaS platform for distributed teams. The planned
-product will give companies private pixel-art offices with realtime movement,
-chat, and voice. **Phase 4 — Step 1 adds meeting-zone voice with LiveKit Cloud.
-Cloud configuration/reachability checks pass; real two-browser audio remains manual.**
+A multi-tenant 2D virtual office SaaS platform for distributed teams, with private
+pixel-art offices, realtime movement, chat and meeting-zone voice. **Phase 5
+Step 2 adds operational readiness checks and configuration/logging safeguards.**
+See the [current private-beta validation and release checklist](docs/communication-polish-validation.md)
+for executed checks, user-reported Step 1 results and deployment prerequisites.
 
 Six original characters can be previewed and saved through Avatar settings in
 the office. Preferences use existing self-scoped Supabase profiles; movement and
@@ -34,11 +35,12 @@ invitation email and authenticated team workflows remain unverified; see
 - Supabase Auth through `@supabase/supabase-js` and `@supabase/ssr`
 - Phaser 4.2.1, loaded only when entering the protected office
 - Colyseus 0.18.9 server, SDK 0.18.5 and Schema 5.0.42
+- LiveKit client 2.23.0, React controls 2.9.24 and server SDK 2.19.1
 
 Supabase PostgreSQL organization migrations and server data access are included;
 check [migration and validation status](docs/organization-validation.md) before
-using them. LiveKit remains planned and is not installed. Storage remains
-deferred.
+using them. LiveKit Cloud is configured only on the realtime server; storage
+remains deferred.
 
 ESLint is pinned to the latest 9.x release for compatibility with the React lint
 plugin supplied by `eslint-config-next`. npm currently marks that major as
@@ -52,6 +54,7 @@ apps/
     src/
       app/
         api/health/route.ts
+        api/ready/route.ts
         (auth)/
           layout.tsx
           login/page.tsx
@@ -322,11 +325,63 @@ After `pnpm build`, run `pnpm start`. `GET /api/health` returns HTTP 200:
 { "status": "ok", "service": "web" }
 ```
 
-The endpoint checks that the web application is running. It does not check future
-backend dependencies. The landing page is a static Server Component with an
+The endpoint checks that the web application is running. It does not check
+dependencies. The landing page is a static Server Component with an
 original pixel-office illustration; its links navigate to the vision section.
 The existing landing design is preserved, with a sign-in link added. It provides
 no office interaction.
+
+### Operational readiness
+
+Use `/api/health` (web) and `/health` (realtime) for liveness. Use `/api/ready`
+(web) and `/ready` (realtime) for full-beta dependency readiness: HTTP 200 with
+`status: "ready"`, otherwise HTTP 503 with `status: "not_ready"`. Reports expose
+only fixed check names and `ready`/`unavailable`, never endpoints or provider
+errors. Responses are uncached by HTTP; each process coalesces concurrent probes
+and caches the outcome for five seconds. Outbound checks run in parallel with
+a three-second deadline and do not use user sessions or privileged keys.
+
+The database probe expects the existing anonymous PostgreSQL privilege denial
+on a zero-row profile query. It reads no tenant records and performs no writes.
+Auth checks service health. Realtime readiness also requires a successful voice
+control-plane sweep less than six seconds old. Missing voice configuration can
+leave movement/chat available while full-beta readiness returns 503. Web
+readiness requires the realtime `/ready` result and valid application, public
+realtime and invitation delivery configuration. Development link mode is allowed
+locally; production readiness rejects it and public HTTP origins. Email checks
+validate configuration presence/syntax, not verified-domain status or delivery.
+
+These checks do not prove authenticated tenancy, WebSocket/media connectivity,
+audible audio or timely Cloud revocation. Probe every 10–15 seconds, allowing
+startup warm-up and transient failures; dependency failure should alert or pause
+admission through your existing host, rather than restart healthy processes.
+No monitoring service or deployment infrastructure is introduced here.
+
+For a deployed beta, supply HTTPS `APP_URL` and `NEXT_PUBLIC_REALTIME_URL`, exact
+HTTPS `REALTIME_ALLOWED_ORIGINS`, and email-mode invitations with a verified
+sender. Keep LiveKit credentials only on the realtime process. An optional
+server-only `REALTIME_INTERNAL_URL` may use loopback HTTP behind a trusted TLS
+proxy. Set `NODE_ENV=production` for the compiled realtime service; `dev` explicitly
+uses development mode. Next loads `.env.production.local`, `.env.local`,
+`.env.production`, `.env` after inherited process variables in production; Node's
+realtime command loads only `.env`, preserving inherited values. Keep these files
+environment-specific, restart after server setting changes and rebuild after
+public setting changes.
+
+Start with `pnpm build`, then run `pnpm start:realtime` and `pnpm start` in separate
+terminals using the host's managed lifecycle. Run exactly one voice authority for
+a LiveKit project/namespace: its restart sweep removes orphaned participants.
+Do not perform overlapping realtime restarts or start a second Cloud-enabled
+test server. Graceful realtime shutdown immediately reports not-ready and awaits
+voice cleanup before closing rooms. Budget at least 15 seconds for shutdown and
+verify actual host signal delivery before beta. A restart interrupts active calls;
+users explicitly rejoin. Keep the prior application artifact and compatible
+environment for rollback; no database rollback is needed for this step.
+
+Deployment proxy/error logs must redact `/invite/*`, `/auth/confirm` query strings,
+cookies, Authorization headers, WebSocket subprotocol proof and request/action
+bodies. Next development logs suppress one-time-link routes and Server Function
+arguments. Do not add token-bearing URLs to diagnostics or external monitors.
 
 ## Authentication behavior and manual test checklist
 
@@ -428,8 +483,10 @@ These are scope boundaries; completed foundations and future work are distinguis
    actual results and the remaining authenticated/Cloud merge gates.
 
 Each phase requires a separate implementation task. The local office engine is
-implemented with chat/status and meeting-zone voice. Container infrastructure and
-later product features remain deferred. Stop at Phase 4 Step 2.
+implemented with chat/status and meeting-zone voice. Phase 5 Steps 1–2 add
+stabilization and private-beta operational readiness; see the current validation
+report above. Container infrastructure and later product features remain deferred.
+Stop at Phase 5 Step 2.
 
 ## Organization setup
 

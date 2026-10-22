@@ -40,5 +40,9 @@ test("built realtime server connects safely and rejects anonymous, invalid-token
     assert.equal((await request("Bearer deliberately-invalid-proof")).status, 403);
     assert.equal((await request(undefined, "https://untrusted.example")).status, 403);
     assert.deepEqual(await (await fetch(`${base}/health`)).json(), { status: "ok" });
+    const readiness = await fetch(`${base}/ready`);
+    assert.equal(readiness.status,503,"An intentionally voice-disabled process is alive but not ready for the complete beta");
+    assert.match(readiness.headers.get("cache-control"),/no-store/);
+    assert.deepEqual(await readiness.json(),{status:"not_ready",checks:{configuration:"ready",authentication:"ready",database:"ready",voice:"unavailable"}});
   } finally { if (child.exitCode === null) { child.kill(); await new Promise((done) => child.once("exit", done)); } }
 });

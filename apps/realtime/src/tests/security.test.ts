@@ -66,4 +66,7 @@ test("configuration restricts origins, HTTPS and publishable keys", () => {
   assert.throws(() => realtimeConfig({ ...env, REALTIME_ALLOWED_ORIGINS: "*" }));
   assert.throws(() => realtimeConfig({ ...env, NODE_ENV: "production" }));
   assert.equal(realtimeConfig({ ...env, NODE_ENV: "production", REALTIME_ALLOWED_ORIGINS: "https://office.example.test" }).origins[0], "https://office.example.test");
+  for (const url of ["https://user:password@example.supabase.co", "https://example.supabase.co/path", "https://example.supabase.co?key=private", "https://example.supabase.co#fragment", "ftp://localhost"]) {
+    assert.throws(() => realtimeConfig({ ...env, SUPABASE_URL: url }), "Reject malformed service origins before initializing clients");
+  }
 });
