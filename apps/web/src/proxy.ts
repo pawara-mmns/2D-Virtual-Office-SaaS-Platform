@@ -11,5 +11,6 @@ export const config = {
     "/auth/:path*", "/dashboard/:path*",
     "/organizations/:path*", "/workspace/:path*",
     "/invite/:path*",
+    "/api/v1/voice/:path*",
   ],
 };
