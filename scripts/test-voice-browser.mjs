@@ -26,7 +26,7 @@ test("actual voice UI: no auto capture, explicit join, cancellation, real SDK de
     plugin.onResolve({filter:/^livekit-client$/},args=>args.importer.replaceAll('\\','/').endsWith('/voice-session.tsx')?{path:'sdk-room-fixture',namespace:'fixture'}:undefined);
     plugin.onLoad({filter:/.*/,namespace:'fixture'},()=>({resolveDir:web,loader:'js',contents:`
       import{Room as NativeRoom,ConnectionError,Track}from'livekit-client';export*from'livekit-client';
-      export class Room extends NativeRoom{constructor(...args){super(...args);const connect=this.connect;this.connect=async(...params)=>{const f=window.voiceFixture;f.connects++;f.activeRoom=this;if(f.mode==='connected'){await this.simulateParticipants({publish:{audio:true,video:false,useRealTracks:false},participants:{count:2,video:false,audio:false}});return;}if(f.mode==='invalid-token')throw ConnectionError.notAllowed('Synthetic rejected token',401);return connect(...params)};const publish=this.localParticipant.publishTrack.bind(this.localParticipant);this.localParticipant.publishTrack=async(...params)=>window.voiceFixture.mode==='connected'?this.localParticipant.getTrackPublication(Track.Source.Microphone):publish(...params)}}
+      export class Room extends NativeRoom{constructor(...args){super(...args);const connect=this.connect;this.connect=async(...params)=>{const f=window.voiceFixture;f.connects++;f.activeRoom=this;if(f.mode==='connected'){await this.simulateParticipants({publish:{audio:true,video:false,useRealTracks:false},participants:{count:2,video:false,audio:false}});this.localParticipant.name='Taylor';let index=0;for(const person of this.remoteParticipants.values())person.name=++index===1?'Morgan':'private@example.invalid';return;}if(f.mode==='invalid-token')throw ConnectionError.notAllowed('Synthetic rejected token',401);return connect(...params)};const publish=this.localParticipant.publishTrack.bind(this.localParticipant);this.localParticipant.publishTrack=async(...params)=>window.voiceFixture.mode==='connected'?this.localParticipant.getTrackPublication(Track.Source.Microphone):publish(...params)}}
     `}));
   }}],stdin:{resolveDir:web,loader:"tsx",contents:`
     import React,{useState,useEffect,useCallback,StrictMode}from'react';import{createRoot}from'react-dom/client';
@@ -75,6 +75,14 @@ test("actual voice UI: no auto capture, explicit join, cancellation, real SDK de
     assert.equal(await evaluate("voiceFixture.captures"),capturesBefore+1,"Strict Mode replay must not request capture twice");assert.equal(await evaluate("voiceFixture.connects"),connectsBefore+1);
     for(let n=0;n<20;n++)await evaluate("voiceFixture.setState(s=>({...s}));voiceFixture.rerender()");
     assert.equal(await evaluate("voiceFixture.connects"),connectsBefore+1,"Equivalent parent props must not reconnect the Room");
+    await evaluate("document.querySelector('.voice-details').open=true");
+    assert.equal(await evaluate("document.querySelector('.voice-details ul').textContent.includes('Taylor (you)') && document.querySelector('.voice-details ul').textContent.includes('Morgan')"),true,"Voice uses the authorized participant profile names");
+    assert.equal(await evaluate("document.querySelector('.voice-details ul').textContent.includes('@')"),false,"Email-like participant names use a private fallback");
+    await evaluate("voiceFixture.activeRoom.state='reconnecting';voiceFixture.activeRoom.emit('connectionStateChanged','reconnecting')");
+    await until(()=>evaluate("document.body.textContent.includes('Voice reconnecting')"));
+    assert.equal(await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent==='Mute microphone').matches(':disabled')"),true);
+    await evaluate("voiceFixture.activeRoom.state='connected';voiceFixture.activeRoom.emit('connectionStateChanged','connected')");
+    await until(()=>evaluate("document.body.textContent.includes('Voice connected')"));
     await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent==='Mute microphone').click()");await until(()=>evaluate("!![...document.querySelectorAll('button')].find(b=>b.textContent==='Unmute microphone')"));
     await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent==='Unmute microphone').click()");await until(()=>evaluate("!![...document.querySelectorAll('button')].find(b=>b.textContent==='Mute microphone')"));
     await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent==='Leave Voice').click()");await until(()=>evaluate("voiceFixture.activeRoom.state==='disconnected' && voiceFixture.tracks.every(track=>track.readyState==='ended')"));

@@ -135,7 +135,7 @@ test("real Chromium validates Phaser rendering, input, collisions, camera, resiz
     }
     assert.equal(await evaluate("office.game.anims.anims.size"), 24, "Animation definitions are registered once per game");
     await evaluate("office.setAppearance({avatarKey:'fern',displayName:'private@example.invalid'})"); await delay(70);
-    assert.equal(await evaluate("office.game.scene.getScene('Office').avatar.label.text"), "You", "Account emails never appear as player labels");
+    assert.equal(await evaluate("office.game.scene.getScene('Office').avatar.label.text"), "Member", "Account emails never appear as player labels");
     await evaluate("office.setAppearance({avatarKey:'slate',displayName:'Alexandria Long Profile Name'});office.game.scene.getScene('Office').player.body.reset(800,40)");
     await press("KeyW", "w", 300);
     assert.equal(await evaluate("(()=>{const s=office.game.scene.getScene('Office');return s.avatar.label.getBounds().top>=s.cameras.main.worldView.top})()"), true, "Name label stays inside the top camera boundary");
