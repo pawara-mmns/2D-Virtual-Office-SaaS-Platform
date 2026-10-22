@@ -2,8 +2,8 @@
 
 A multi-tenant 2D virtual office SaaS platform for distributed teams. The planned
 product will give companies private pixel-art offices with realtime movement,
-chat, and voice. **Phase 3 — Step 2 adds Office Chat and availability; its approved
-development migration is applied. Authenticated live verification remains manual.**
+chat, and voice. **Phase 4 — Step 1 adds meeting-zone voice with LiveKit Cloud.
+Cloud configuration/reachability checks pass; real two-browser audio remains manual.**
 
 Six original characters can be previewed and saved through Avatar settings in
 the office. Preferences use existing self-scoped Supabase profiles; movement and
@@ -11,6 +11,10 @@ collision now use server authority. See [multiplayer setup, verification and man
 Chat uses the same socket, persists through a user-scoped database RPC, and loads
 bounded history. Available, Busy and Do Not Disturb remain separate from online
 presence. See [chat validation and migration review](docs/workspace-chat-validation.md).
+Voice reuses authoritative meeting-zone eligibility with explicit microphone consent.
+See [LiveKit setup, security model and verification](docs/livekit-voice-validation.md).
+See [voice runtime fixes and current Cloud verification](docs/livekit-voice-runtime-fix.md)
+for render stability, staged connection diagnostics and remaining manual checks.
 
 The protected office route now uses Phaser 4.2.1, an original 32×32 pixel-art map,
 shared avatar movement, collision and camera controls. See
@@ -127,6 +131,7 @@ docs/
   avatar-system-validation.md
   realtime-multiplayer-validation.md
   workspace-chat-validation.md
+  livekit-voice-validation.md
 supabase/
   config.toml
   .env.organization-tests.example
@@ -273,6 +278,8 @@ install pnpm 10.34.7 with `npm install --global pnpm@10.34.7` first.
 | `pnpm test:chat:database` | Validate chat grants, RLS, persistence and pagination in disposable PostgreSQL |
 | `pnpm test:chat:browser` | Exercise the actual chat UI and Phaser together with isolated synthetic history; build first |
 | `pnpm test:chat:anonymous` | Verify the configured development Supabase chat API rejects anonymous and invalid-token requests; no writes |
+| `pnpm test:voice:routes` | Check production voice API denials, no-store responses and browser credential boundaries |
+| `pnpm test:voice:browser` | Isolated voice UI with synthetic authorization/microphone denial; no real media or Cloud; build first |
 | `pnpm test:realtime:live` | Start the built server and check configured-project negative paths; no accounts |
 | `pnpm check:realtime:env` | Report configuration presence and matching project identity without values |
 | `pnpm test:smoke` | Start a production build temporarily and check HTTP routes |
@@ -411,12 +418,13 @@ These are scope boundaries; completed foundations and future work are distinguis
    tenant isolation and presence. Office Chat and availability are implemented;
    their approved development migration is applied; authenticated live verification
    remains pending manual testing.
-7. **Voice and production hardening:** LiveKit, communication controls, operational
-   validation, accessibility, security, and performance work.
+7. **Meeting-zone voice (Phase 4 Step 1 implemented; Cloud QA pending):** explicit
+   LiveKit audio join, microphone/device controls and server-enforced revocation.
+   Configure Cloud and complete the security/manual checks in the voice report.
 
 Each phase requires a separate implementation task. The local office engine is
-implemented with the Phase 3 Step 2 chat/status changes. Voice, container
-infrastructure and later product features remain deferred. Stop at Phase 3 Step 2.
+implemented with chat/status and meeting-zone voice. Container infrastructure and
+later product features remain deferred. Stop at Phase 4 Step 1.
 
 ## Organization setup
 

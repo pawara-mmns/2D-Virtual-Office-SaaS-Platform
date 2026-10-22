@@ -15,7 +15,11 @@ test("built realtime server connects safely and rejects anonymous, invalid-token
     const socket = createServer(); socket.listen(0, "127.0.0.1", () => { const number = socket.address().port; socket.close(() => done(number)); });
   });
   const child = spawn(process.execPath, ["--env-file-if-exists=.env", "dist/apps/realtime/src/index.js"], {
-    cwd, env: { ...process.env, NODE_ENV: "test", PORT: String(port), REALTIME_ALLOWED_ORIGINS: "http://localhost:3000" }, stdio: "ignore", windowsHide: true,
+    // These are negative office/Auth checks, never a second Cloud voice authority.
+    // Empty child-only values override the env file and prevent orphan sweeps
+    // from removing participants owned by the user's running development server.
+    cwd, env: { ...process.env, NODE_ENV: "test", PORT: String(port), REALTIME_ALLOWED_ORIGINS: "http://localhost:3000",
+      LIVEKIT_URL: "", LIVEKIT_API_KEY: "", LIVEKIT_API_SECRET: "" }, stdio: "ignore", windowsHide: true,
   });
   const base = `http://127.0.0.1:${port}`;
   try {

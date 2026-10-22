@@ -9,8 +9,8 @@
   "height": 26,
   "tilewidth": 32,
   "tileheight": 32,
-  "nextlayerid": 6,
-  "nextobjectid": 6,
+  "nextlayerid": 7,
+  "nextobjectid": 7,
   "layers": [
     {
       "id": 1,
@@ -3875,6 +3875,28 @@
           "height": 0,
           "point": true,
           "visible": true,
+          "rotation": 0
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "name": "VoiceZones",
+      "type": "objectgroup",
+      "x": 0,
+      "y": 0,
+      "opacity": 1,
+      "visible": false,
+      "objects": [
+        {
+          "id": 6,
+          "name": "Meeting Room",
+          "type": "voice",
+          "x": 768,
+          "y": 32,
+          "width": 352,
+          "height": 352,
+          "visible": false,
           "rotation": 0
         }
       ]

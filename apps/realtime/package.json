@@ -15,7 +15,8 @@
     "@colyseus/schema": "5.0.42",
     "@colyseus/ws-transport": "0.18.4",
     "@supabase/supabase-js": "2.118.0",
-    "colyseus": "0.18.9"
+    "colyseus": "0.18.9",
+    "livekit-server-sdk": "2.19.1"
   },
   "devDependencies": {
     "@colyseus/sdk": "0.18.5",

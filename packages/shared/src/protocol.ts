@@ -20,6 +20,7 @@ export type OfficeNetwork = {
   close(): void;
   sendChat?(body: string, clientMessageId: string): boolean;
   setAvailability?(status: Availability): boolean;
+  leaveVoice?(): void;
 };
 export function validInput(value: unknown): value is MoveInput {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;

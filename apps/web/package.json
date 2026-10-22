@@ -14,12 +14,15 @@
     "test:live": "node --experimental-strip-types --test tests/auth-live.test.mjs",
     "test:organizations:anonymous": "node --experimental-strip-types --test tests/organizations-live.test.mjs",
     "test:team:anonymous": "node --experimental-strip-types --test tests/team-live.test.mjs",
-    "test:chat:anonymous": "node --experimental-strip-types --test tests/chat-live.test.mjs"
+    "test:chat:anonymous": "node --experimental-strip-types --test tests/chat-live.test.mjs",
+    "test:voice:routes": "node --test tests/voice-routes.test.mjs"
   },
   "dependencies": {
     "@colyseus/sdk": "0.18.5",
+    "@livekit/components-react": "2.9.24",
     "@supabase/ssr": "0.12.7",
     "@supabase/supabase-js": "2.118.0",
+    "livekit-client": "2.23.0",
     "next": "16.4.2",
     "phaser": "4.2.1",
     "react": "19.3.1",
