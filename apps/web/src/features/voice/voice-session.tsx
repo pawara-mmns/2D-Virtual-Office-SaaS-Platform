@@ -21,7 +21,7 @@ function VoicePerson({ person, reconnecting }: { person: Participant; reconnecti
   const publication = person.getTrackPublication(Track.Source.Microphone);
   const displayName = avatarDisplayName(name);
   return <li className="flex min-w-0 items-center gap-2"><span aria-hidden="true" className="pixel-art shrink-0" style={{ width:32,height:32,backgroundImage:"url('/office/avatar.png')",backgroundPosition:`0 -${Math.floor(avatarBaseFrame(key)/3)*32}px` }} />
-    <div className="min-w-0"><p className="truncate text-xs font-medium">{displayName === "You" ? "Member" : displayName}{person.isLocal ? " (you)" : ""}</p><p className="text-xs text-muted">{reconnecting ? "Reconnecting" : "Connected"} · {publication && !publication.isMuted ? "Mic on" : "Mic muted"}{speaking ? " · Speaking" : ""}</p></div>
+    <div className="min-w-0"><p className="truncate text-xs font-medium">{displayName}{person.isLocal ? " (you)" : ""}</p><p className="text-xs text-muted">{reconnecting ? "Reconnecting" : "Connected"} · {publication && !publication.isMuted ? "Mic on" : "Mic muted"}{speaking ? " · Speaking" : ""}</p></div>
   </li>;
 }
 export function Controls({ leave, error }: { leave(): void; error(message: string): void }) {
@@ -33,11 +33,13 @@ export function Controls({ leave, error }: { leave(): void; error(message: strin
     <div className="mt-3 flex flex-wrap items-center gap-2">
       <span role="status" className="mr-2 text-xs">{connection === "connected" ? "Voice connected" : connection === "reconnecting" || connection === "signalReconnecting" ? "Voice reconnecting…" : "Voice connecting…"}</span>
       <span className="text-xs text-muted">{isMicrophoneEnabled ? "Mic on" : "Mic muted"}</span>
-      <TrackToggle source={Track.Source.Microphone} showIcon={false} className="office-control" disabled={connection !== "connected"} onDeviceError={onDeviceError}>{isMicrophoneEnabled ? "Mute microphone" : "Unmute microphone"}</TrackToggle>
+      {/* This SDK version replaces the button's disabled prop with its own
+          pending state. A native fieldset also enforces connection readiness. */}
+      <fieldset disabled={connection !== "connected"} className="m-0 min-w-0 border-0 p-0"><legend className="sr-only">Microphone control</legend><TrackToggle source={Track.Source.Microphone} showIcon={false} className="office-control" onDeviceError={onDeviceError}>{isMicrophoneEnabled ? "Mute microphone" : "Unmute microphone"}</TrackToggle></fieldset>
       <button className="office-control" onClick={leave}>Leave Voice</button>
       <StartAudio className="office-control" label="Enable audio playback" />
     </div>
-    <details className="mt-3"><summary className="cursor-pointer text-xs font-medium">Voice participants ({people.length}) and audio devices</summary>
+    <details className="voice-details mt-2"><summary className="cursor-pointer text-xs font-medium">Voice participants ({people.length}) and audio devices</summary>
       <ul className="my-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{people.map((person) => <VoicePerson key={person.identity} person={person} reconnecting={connection !== "connected"} />)}</ul>
       <div className="flex flex-wrap gap-3"><Devices kind="audioinput" error={error} />{supportsAudioOutputSelection() ? <Devices kind="audiooutput" error={error} /> : <p className="text-xs text-muted">Output device selection is managed by this browser or operating system.</p>}</div>
     </details>

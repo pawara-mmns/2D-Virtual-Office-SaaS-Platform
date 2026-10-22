@@ -34,7 +34,7 @@ export function decodeMessage(value: unknown): ChatMessage {
   if (!validCursor(message.id) || !isId(message.channelId) || !isId(message.senderId) || !isId(message.clientMessageId) ||
     normalizeBody(message.body) !== message.body || typeof message.createdAt !== "string" || !Number.isFinite(Date.parse(message.createdAt))) throw new Error("Invalid chat response");
   const name = avatarDisplayName(message.senderName);
-  return { id: message.id, channelId: message.channelId, senderId: message.senderId, senderName: name === "You" ? "Member" : name,
+  return { id: message.id, channelId: message.channelId, senderId: message.senderId, senderName: name,
     body: message.body, createdAt: message.createdAt, clientMessageId: message.clientMessageId };
 }
 export function decodePage(value: unknown): ChatPage {

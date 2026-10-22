@@ -21,7 +21,7 @@ export function connectOffice(options: {
   onVoice?(state: VoiceZoneState | null): void;
 }): OfficeNetwork {
   let room: OfficeRoom | undefined, state: OfficeSnapshot | undefined;
-  let closed = false, online = false, seq = 0, previousCount = 0;
+  let closed = false, denied = false, online = false, seq = 0, previousCount = 0;
   let lastX = 0, lastY = 0, lastSent = 0;
   let disposeTransport: (() => void) | undefined;
   let participantKey = "", chatReady = false;
@@ -37,16 +37,17 @@ export function connectOffice(options: {
     if (!closed) options.onPresence({ status, notice, count: online && state ? [...state.players.values()].filter((p) => p.connected).length : 0 });
   };
   const credential = async () => {
+    if (closed || denied) return;
     const token = await options.getToken();
     if (!closed && online && room && token) room.send("credential", token);
-    else if (!token && !closed) { online = false; void room?.leave(); state = undefined; disconnected(); presence("offline", "Your session ended. Sign in and retry."); }
+    else if (!token && !closed) { denied = true; online = false; clearInterval(refresh); if (room) room.reconnection.enabled = false; void room?.leave(); state = undefined; disconnected(); presence("denied", "Your session ended. Return to the workspace and sign in again."); }
   };
   const open = async () => {
     try {
       presence("connecting", "Connecting to your office…");
       const token = await options.getToken();
       if (closed) return;
-      if (!token) throw new Error();
+      if (!token) { denied = true; clearInterval(refresh); presence("denied", "Sign in with a verified account before entering the office."); return; }
       // Never set SDK auth.token: it appends the bearer to WebSocket URLs.
       const response = await fetch(`${options.url}/office/join`, {
         method: "POST", credentials: "omit", cache: "no-store",
@@ -54,8 +55,10 @@ export function connectOffice(options: {
         body: JSON.stringify({ officeId: options.officeId, mapVersion: options.mapVersion }), signal: AbortSignal.any([controller.signal, AbortSignal.timeout(8000)]),
       });
       if (!response.ok) {
-        const notice = response.status === 403 ? "Office access denied. Sign in and check your active membership." : response.status === 429 ? "Too many connection attempts. Wait a minute and retry." : "Unable to enter. Close other office tabs, check the server, wait ten seconds and retry.";
-        presence("offline", notice); return;
+        denied = response.status === 401 || response.status === 403;
+        clearInterval(refresh);
+        const notice = denied ? "Office access denied. Sign in and check your active membership." : response.status === 429 ? "Too many connection attempts. Wait a minute and retry." : "Unable to enter. Close other office tabs, check the server, wait ten seconds and retry.";
+        presence(denied ? "denied" : "offline", notice); return;
       }
       const reservation: SeatReservation = await response.json();
       if (closed) return;
@@ -75,7 +78,7 @@ export function connectOffice(options: {
       room.reconnection.maxEnqueuedMessages = 0;
       online = true;
       room.onStateChange((next) => {
-        if (closed) return;
+        if (closed || denied) return;
         if (next.officeId !== options.officeId || next.mapVersion !== options.mapVersion) { close(); options.onPresence({ status: "offline", count: 0, notice: "Office map changed. Reload this page." }); return; }
         state = next;
         if (!chatReady && online) { chatReady = true; options.onChat?.({ type: "connection", online: true }); }
@@ -98,10 +101,10 @@ export function connectOffice(options: {
         if (!closed && online && value?.sessionId === room?.sessionId && (value.zone === null || value.zone === "Meeting Room") && typeof value.configured === "boolean" &&
           (value.participants === null || Number.isInteger(value.participants) && value.participants >= 0 && value.participants <= 10)) publishVoice(value);
       });
-      room.onDrop(() => { online = false; disconnected(); presence("reconnecting", "Connection lost. Reconnecting…"); });
-      room.onReconnect(() => { online = true; lastSent = 0; presence("online", "Reconnected."); void credential(); });
-      room.onLeave(() => { online = false; state = undefined; disconnected(); presence("offline", "Disconnected. Verify your session and membership, then retry."); });
-      room.onError(() => { online = false; disconnected(); presence("offline", "Office connection failed. Check access and retry."); });
+      room.onDrop(() => { if (closed || denied) return; online = false; disconnected(); presence("reconnecting", "Connection lost. Reconnecting…"); });
+      room.onReconnect(() => { if (closed || denied) return; online = true; lastSent = 0; presence("online", "Reconnected."); void credential(); });
+      room.onLeave((code) => { if (closed) return; denied ||= code === 4000; online = false; state = undefined; disconnected(); clearInterval(refresh); if (denied && room) room.reconnection.enabled = false; presence(denied ? "denied" : "offline", denied ? "Office access ended. Return to the workspace and check your membership." : "Disconnected. Verify your session and membership, then retry."); });
+      room.onError((code) => { if (closed) return; denied ||= code === 401 || code === 403; online = false; disconnected(); if (denied) { clearInterval(refresh); if (room) room.reconnection.enabled = false; } presence(denied ? "denied" : "offline", denied ? "Office access denied. Return to the workspace and check your membership." : "Office connection failed. Check access and retry."); });
       presence("online", "Connected.");
     } catch { if (!closed) presence("offline", "Could not connect. Check your session and the realtime server, then retry."); }
   };

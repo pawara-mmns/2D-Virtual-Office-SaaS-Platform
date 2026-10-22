@@ -18,11 +18,11 @@ export function avatarBaseFrame(key: AvatarKey) { return avatarPresets.find((pre
 export function avatarIdleFrame(key: AvatarKey, direction: AvatarDirection) { return avatarBaseFrame(key) + avatarDirections.indexOf(direction) * 3; }
 export function avatarAnimationKey(key: AvatarKey, direction: AvatarDirection) { return `avatar-${key}-${direction}-walk`; }
 export function avatarDisplayName(value: unknown) {
-  if (typeof value !== "string") return "You";
+  if (typeof value !== "string") return "Member";
   const normalized = value.normalize("NFKC");
-  if (normalized.includes("@")) return "You";
+  if (normalized.includes("@")) return "Member";
   const cleaned = normalized.replace(/[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g, " ").replace(/\s+/g, " ").trim();
-  if (!cleaned) return "You";
+  if (!cleaned) return "Member";
   const characters = [...cleaned];
   return characters.length > 18 ? characters.slice(0, 17).join("") + "…" : cleaned;
 }

@@ -11,7 +11,7 @@ export type PlayerSnapshot = AvatarAppearance & {
 };
 export type OfficeSnapshot = { officeId: string; mapVersion: string; players: Map<string, PlayerSnapshot> };
 export type Participant = Pick<PlayerSnapshot, "sessionId" | "userId" | "displayName" | "avatarKey" | "connected" | "availability"> & { isSelf?: boolean };
-export type Presence = { status: "connecting" | "online" | "reconnecting" | "offline"; count: number; notice: string };
+export type Presence = { status: "connecting" | "online" | "reconnecting" | "offline" | "denied"; count: number; notice: string };
 export type OfficeNetwork = {
   snapshot(): OfficeSnapshot | undefined;
   sessionId(): string | undefined;
