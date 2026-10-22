@@ -108,5 +108,8 @@ export function createRealtimeServer(options: { authorize: Authorize; map: Offic
       });
     },
   });
+  // Await media revocation and stop its background sweeps before Colyseus tears
+  // down rooms/transports or exits. Test harness cleanup is not a server hook.
+  if (options.voice) server.onBeforeShutdown(() => options.voice!.close());
   return server;
 }

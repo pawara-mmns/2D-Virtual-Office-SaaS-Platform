@@ -35,6 +35,14 @@ test("web token boundary independently verifies identity and forwards only offic
   for (const status of [403,409,429,503]) assert.equal((await issueVoiceToken(input,{ ...dependencies,forward:async () => ({status,data:{error:"raw provider detail"}}) })).status,status);
   assert.equal((await issueVoiceToken(input,{ ...dependencies,forward:async () => ({status:200,data:{url:"https://untrusted.example",token:"fixture"}}) })).status,503);
 });
+test("an Auth outage reports temporary unavailability without suggesting a credential failure or forwarding a token", async () => {
+  const result=await issueVoiceToken(input,{
+    user:async()=>({status:"unavailable"}),session:async()=>assert.fail("No session lookup after unavailable Auth"),
+    forward:async()=>assert.fail("No voice admission during an Auth outage"),
+  });
+  assert.equal(result.status,503);assert.match(result.data.error!,/Authentication is temporarily unavailable/);
+  assert.equal("token" in result.data,false);
+});
 test("voice lifecycle captures microphone only after explicit start and releases it on normal leave", async () => {
   const events: string[] = [];
   const lifecycle = startVoice({

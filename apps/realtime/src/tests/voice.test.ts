@@ -127,3 +127,59 @@ test("missing voice configuration is unavailable and does not mint any token", a
   try {service.observe("session_A",auth(),"Meeting Room",()=>{});await assert.rejects(()=>service.join(auth(),"session_A"),(error:unknown)=>error instanceof VoiceError && error.status===503);}
   finally {await service.close();}
 });
+
+test("a closed voice authority cannot resume an in-flight orphan sweep against a replacement authority", async () => {
+  for (const stage of ["rooms", "participants"] as const) {
+    const f=fixture(); let release!:()=>void, participantReads=0;
+    const gate=new Promise<void>(resolve=>{release=resolve;});
+    f.provider.rooms=async()=>{if(stage==="rooms")await gate;return["replacement-room"];};
+    f.provider.participants=async()=>{participantReads++;if(stage==="participants")await gate;return["replacement-participant"];};
+    const service=createVoiceService(async()=>auth(),f.provider);
+    const polling=service.poll();
+    try {
+      await new Promise(resolve=>setImmediate(resolve));
+      await service.close(); release(); await polling;
+      assert.equal(f.removed.length,0,"A late inventory response must not remove the next authority's media");
+      assert.equal(participantReads,stage==="rooms"?0:1,"No new participant inventory after shutdown");
+    } finally {release();await polling;await service.close();}
+  }
+});
+
+test("a slow token signer cannot return an admission after its verified authorization lease expires", async () => {
+  const f=fixture(); let time=100_000;
+  f.provider.token=async()=>{time+=VOICE_LEASE_MS+1;return"late-synthetic-admission";};
+  const service=createVoiceService(async()=>auth(time),f.provider,()=>time);
+  try {
+    await service.poll();service.observe("session_A",auth(time),"Meeting Room",()=>{});
+    await assert.rejects(()=>service.join(auth(time),"session_A"),error=>error instanceof VoiceError&&error.status===403);
+    assert.equal(f.removed.length,1);
+  } finally {await service.close();}
+});
+
+test("overlapping shutdown requests both wait for the same in-flight media removal", async () => {
+  const f=fixture();let release!:()=>void,removals=0,secondFinished=false;
+  const gate=new Promise<void>(resolve=>{release=resolve;});
+  f.provider.remove=async()=>{removals++;await gate;};
+  const service=createVoiceService(async()=>auth(),f.provider);
+  try {
+    await service.poll();service.observe("session_A",auth(),"Meeting Room",()=>{});await service.join(auth(),"session_A");
+    const first=service.close(),second=service.close().then(()=>{secondFinished=true;});
+    await new Promise(resolve=>setImmediate(resolve));
+    assert.equal(secondFinished,false,"A second shutdown cannot complete while the first still removes media");
+    release();await Promise.all([first,second]);assert.equal(removals,1);
+  } finally {release();await service.close();}
+});
+
+test("shutdown also awaits a zone-exit removal that was already running", async () => {
+  const f=fixture();let release!:()=>void,removals=0,finished=false;
+  const gate=new Promise<void>(resolve=>{release=resolve;});
+  f.provider.remove=async()=>{removals++;await gate;};
+  const service=createVoiceService(async()=>auth(),f.provider);
+  try {
+    await service.poll();service.observe("session_A",auth(),"Meeting Room",()=>{});await service.join(auth(),"session_A");
+    service.observe("session_A",auth(),null,()=>{});await new Promise(resolve=>setImmediate(resolve));
+    const closing=service.close().then(()=>{finished=true;});await new Promise(resolve=>setImmediate(resolve));
+    assert.equal(finished,false,"An existing revocation request belongs to shutdown cleanup too");
+    release();await closing;assert.equal(removals,1);
+  } finally {release();await service.close();}
+});
