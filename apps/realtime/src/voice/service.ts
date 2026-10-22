@@ -11,7 +11,7 @@ type Admission = { session: string; auth: Authorization; room: string; identity:
 export function createVoiceService(authorize: Authorize, provider: VoiceProvider | null, now = Date.now) {
   const sessions = new Map<string, Session>(), active = new Map<string, Admission>(), counts = new Map<string, number>();
   const attempts = new Map<string, number>();
-  let ready = false, closed = false, revision = 0;
+  let ready = false, closed = false, revision = 0, lastPoll = 0;
   let polling: Promise<void> | undefined;
   let closing: Promise<void> | undefined;
   const eligible = (record: Admission) => {
@@ -90,6 +90,7 @@ export function createVoiceService(authorize: Authorize, provider: VoiceProvider
         }
       }
       ready = ![...active.values()].some((item) => item.revoked);
+      lastPoll = now();
     } catch { ready = false; }
     })().finally(() => { polling = undefined; notify(); });
     return polling;
@@ -105,6 +106,9 @@ export function createVoiceService(authorize: Authorize, provider: VoiceProvider
   const pollTimer = setInterval(() => { void poll(); },2000); pollTimer.unref();
   void poll();
   return {
+    // A recent successful control-plane sweep is an availability indicator,
+    // never proof of working audio, valid client admission or Cloud revocation.
+    available: () => !!provider && ready && !closed && now() - lastPoll < 6000,
     observe(id: string, auth: Authorization, zone: string | null, send: Session["notify"]) {
       if (closed) return;
       const old = sessions.get(id);

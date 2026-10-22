@@ -9,8 +9,9 @@ import type { Request, Response } from "express";
 import type { ChatStore } from "./chat/store.ts";
 import { VoiceError, type VoiceService } from "./voice/service.ts";
 import { validVoiceRequest } from "../../../packages/shared/src/voice.ts";
+import type { ReadinessReport } from "../../../packages/shared/src/readiness.ts";
 
-export function createRealtimeServer(options: { authorize: Authorize; map: OfficeMap; origins: string[]; chat?: ChatStore; voice?: VoiceService }) {
+export function createRealtimeServer(options: { authorize: Authorize; map: OfficeMap; origins: string[]; chat?: ChatStore; voice?: VoiceService; readiness?: () => Promise<ReadinessReport> }) {
   const admission = createAdmission();
   const OfficeRoom = officeRoomClass({ ...admission, authorize: options.authorize, map: options.map, chat: options.chat, voice: options.voice });
   const origins = new Set(options.origins);
@@ -26,6 +27,7 @@ export function createRealtimeServer(options: { authorize: Authorize; map: Offic
   };
   // Only bounded counters, no tokens/IP logs; don't trust forwarded IP headers.
   const requests = new Map<string, { count: number; at: number }>();
+  let shuttingDown = false;
   const server = defineServer({
     greet: false, devMode: false, auth: false,
     // Library error objects can include request data: never forward them to logs.
@@ -41,7 +43,16 @@ export function createRealtimeServer(options: { authorize: Authorize; map: Offic
     rooms: { office: defineRoom(OfficeRoom) },
     express(app) {
       app.disable("x-powered-by");
-      app.get("/health", (_req: Request, res: Response) => res.json({ status: "ok" }));
+      app.get("/health", (_req: Request, res: Response) => { res.setHeader("Cache-Control", "no-store"); res.json({ status: "ok" }); });
+      app.get("/ready", async (_req: Request, res: Response) => {
+        res.setHeader("Cache-Control", "no-store, max-age=0"); res.setHeader("X-Robots-Tag", "noindex, nofollow");
+        try {
+          if (shuttingDown) { res.status(503).json({ status: "not_ready" }); return; }
+          const report = await options.readiness?.();
+          if (shuttingDown) { res.status(503).json({ status: "not_ready" }); return; }
+          res.status(report?.status === "ready" ? 200 : 503).json(report ?? { status: "not_ready" });
+        } catch { res.status(503).json({ status: "not_ready" }); }
+      });
       // Authenticated server-to-server validation from the web route. The caller
       // supplies identity proof, never trusted coordinates or zone assertions.
       app.post("/voice/token", async (req: Request, res: Response) => {
@@ -110,6 +121,6 @@ export function createRealtimeServer(options: { authorize: Authorize; map: Offic
   });
   // Await media revocation and stop its background sweeps before Colyseus tears
   // down rooms/transports or exits. Test harness cleanup is not a server hook.
-  if (options.voice) server.onBeforeShutdown(() => options.voice!.close());
+  server.onBeforeShutdown(async () => { shuttingDown = true; await options.voice?.close(); });
   return server;
 }

@@ -13,7 +13,11 @@ scripts. The office illustration is server-rendered SVG artwork, not a game runt
 
 `GET /api/health` returns HTTP 200 with `{"status":"ok","service":"web"}`
 and `Cache-Control: no-store`. It reports web process availability only; it does
-not check any future service or database.
+not check dependencies. Separate `/api/ready` and realtime `/ready` routes report
+bounded dependency readiness, without tenant reads or privileged credentials;
+see the operational contract in README. These checks do not authorize users or
+prove working media. The shared probe utility is server-only in usage and is
+not imported into Phaser, client components or normal page-loading paths.
 
 ## Code placement
 

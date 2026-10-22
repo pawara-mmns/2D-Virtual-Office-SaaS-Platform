@@ -128,6 +128,22 @@ test("missing voice configuration is unavailable and does not mint any token", a
   finally {await service.close();}
 });
 
+test("voice readiness requires recent successful Cloud control observations and stops at shutdown", async () => {
+  const f=fixture(); let time=100_000, fail=false;
+  f.provider.rooms=async()=>{if(fail)throw new Error("private Cloud failure");return[];};
+  const service=createVoiceService(async()=>auth(time),f.provider,()=>time);
+  const absent=createVoiceService(async()=>auth(time),null,()=>time);
+  try {
+    assert.equal(service.available(),false,"Startup sweep must finish first"); assert.equal(absent.available(),false);
+    await service.poll(); assert.equal(service.available(),true);
+    time+=6001; assert.equal(service.available(),false,"A stalled old successful sweep is not readiness");
+    await service.poll(); assert.equal(service.available(),true);
+    fail=true; await service.poll(); assert.equal(service.available(),false);
+    fail=false; await service.poll(); assert.equal(service.available(),true);
+    await service.close(); assert.equal(service.available(),false);
+  } finally {await service.close();await absent.close();}
+});
+
 test("a closed voice authority cannot resume an in-flight orphan sweep against a replacement authority", async () => {
   for (const stage of ["rooms", "participants"] as const) {
     const f=fixture(); let release!:()=>void, participantReads=0;
