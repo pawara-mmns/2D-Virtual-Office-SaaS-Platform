@@ -19,6 +19,13 @@ test("authorization accepts only independently verified active members; saved pr
   assert.equal(auth.userId, userId); assert.equal(auth.organizationId, orgId); assert.equal(auth.avatarKey, "slate"); assert.equal(auth.displayName, "Alice");
   assert.equal("email" in auth, false);
 });
+test("profile name normalization is consistent and private with one profile read per authorization", async () => {
+  for (const [name, expected] of [["  Alex  Lee ", "Alex Lee"], ["You", "You"], ["private@example.invalid", "Member"], ["", "Member"]]) {
+    let reads=0;
+    const auth=await authorizeIdentity(token(),officeId,{...source(),profile:async()=>{reads++;return{avatarKey:"plum",displayName:name};}});
+    assert.equal(auth.displayName,expected); assert.equal(reads,1); assert.equal("email" in auth,false);
+  }
+});
 test("anonymous, invalid, unverified, expired and inactive identities fail closed", async () => {
   for (const change of [
     { user: async () => null }, { user: async () => ({ id: userId, confirmed: false, anonymous: false }) },

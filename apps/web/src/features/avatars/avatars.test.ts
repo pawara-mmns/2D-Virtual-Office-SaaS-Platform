@@ -4,7 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 import type { Database } from "../../lib/supabase/database.types.ts";
 import { avatarBaseFrame, avatarBody, avatarDirections, avatarDisplayName, avatarIdleFrame, avatarPresets, defaultAvatar, isAvatarKey, safeAvatarKey } from "./presets.ts";
 import { animationDirection, avatarIsWalking } from "./animation.ts";
-import { loadAvatarProfile, saveAvatarPreference } from "./service.ts";
+import { loadAvatarProfile, saveAvatarPreference, validateDisplayName } from "./service.ts";
 import { movement } from "../office/input/movement.ts";
 
 const id = "250d1968-67d7-4d3c-8846-92f26747d76d";
@@ -27,9 +27,10 @@ test("six allowlisted presets occupy disjoint twelve-frame ranges with one colli
 });
 test("profile names are compact, strip controls and never disclose email-like display names", () => {
   assert.equal(avatarDisplayName("  Alex   Lee  "), "Alex Lee");
-  assert.equal(avatarDisplayName("test@example.invalid"), "You");
-  assert.equal(avatarDisplayName("   "), "You");
-  assert.equal(avatarDisplayName(null), "You");
+  assert.equal(avatarDisplayName("test@example.invalid"), "Member");
+  assert.equal(avatarDisplayName("   "), "Member");
+  assert.equal(avatarDisplayName(null), "Member");
+  assert.equal(avatarDisplayName("You"), "You", "A valid literal name is never mistaken for a missing profile");
   assert.equal(avatarDisplayName("A\nB\u202eC"), "A B C");
   assert.equal([...avatarDisplayName("A".repeat(100))].length, 18);
 });
@@ -50,7 +51,7 @@ test("saved profile loads only for the supplied authenticated identity and safel
     const client = database(async (url) => { const parsed = new URL(String(url)); assert.equal(parsed.searchParams.get("id"), `eq.${id}`); return json(profile); });
     const result = await loadAvatarProfile(client, id);
     assert.equal(result.avatarKey, profile?.avatar_key === "plum" ? "plum" : defaultAvatar);
-    assert.equal(result.displayName, profile?.display_name || "You");
+    assert.equal(result.displayName, profile?.display_name || "Member");
   }
   await assert.rejects(loadAvatarProfile(database(async () => json({ code: "42501", message: "private" }, 403)), id), /could not be loaded/);
 });
@@ -113,4 +114,45 @@ test("RLS denial and unsuccessful writes never become a successful save", async 
     context.mock.method(client.auth, "getUser", async () => ({ data: { user: verified }, error: null }));
     await assert.rejects(saveAvatarPreference(client, "slate"), /could not be/);
   }
+});
+
+test("display-name edits validate Unicode length and privacy before any authenticated write", async () => {
+  assert.equal(validateDisplayName("  Alex   Lee  "), "Alex Lee");
+  assert.equal(validateDisplayName("é".repeat(18)), "é".repeat(18));
+  let writes = 0;
+  const client = database(async () => { writes++; return json([]); });
+  for (const value of [null, "", "a".repeat(19), "private@example.invalid", "private＠example.invalid", "A\u202eB", "A\u0001B"]) {
+    assert.throws(() => validateDisplayName(value));
+    await assert.rejects(saveAvatarPreference(client, "fern", value));
+  }
+  assert.equal(writes, 0);
+});
+
+test("appearance save uses verified own identity and existing narrow profile grants, then reloads the name", async (context) => {
+  let profile = { avatar_key: "fern", display_name: "Old name" };
+  const client = database(async (url, options) => {
+    assert.equal(new URL(String(url)).searchParams.get("id"), `eq.${id}`);
+    if (options?.method === "PATCH") {
+      assert.deepEqual(JSON.parse(String(options.body)), { avatar_key: "slate", display_name: "Alex Lee" });
+      profile = JSON.parse(String(options.body)); return json([{ avatar_key: profile.avatar_key }]);
+    }
+    return json(profile);
+  });
+  context.mock.method(client.auth, "getUser", async () => ({ data: { user: verified }, error: null }));
+  await saveAvatarPreference(client, "slate", "  Alex  Lee ");
+  assert.deepEqual(await loadAvatarProfile(client, id), { avatarKey: "slate", displayName: "Alex Lee" });
+});
+
+test("missing-profile creation race retains both explicitly edited appearance fields", async (context) => {
+  let calls = 0;
+  const client = database(async (_url, options) => {
+    calls++;
+    const body = JSON.parse(String(options?.body));
+    assert.deepEqual(body, calls === 2 ? { id, avatar_key: "plum", display_name: "Taylor" } : { avatar_key: "plum", display_name: "Taylor" });
+    if (calls === 1) return json([]);
+    if (calls === 2) return json({ code: "23505" }, 409);
+    return json([{ avatar_key: "plum" }]);
+  });
+  context.mock.method(client.auth, "getUser", async () => ({ data: { user: verified }, error: null }));
+  assert.equal(await saveAvatarPreference(client, "plum", "Taylor"), "plum"); assert.equal(calls, 3);
 });

@@ -34,7 +34,8 @@
     "test:team:anonymous": "pnpm --filter @virtual-office/web test:team:anonymous",
     "assets:office": "node --experimental-strip-types scripts/generate-office-assets.mjs",
     "assets:avatars": "node --experimental-strip-types scripts/generate-avatar-assets.mjs",
-    "test:office:browser": "node --test scripts/test-office-browser.mjs"
+    "test:office:browser": "node --test scripts/test-office-browser.mjs",
+    "test:communication:browser": "node --test scripts/test-communication-browser.mjs"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.10",

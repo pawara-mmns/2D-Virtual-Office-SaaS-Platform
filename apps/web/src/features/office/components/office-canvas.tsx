@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { mountOffice } from "../engine/lifecycle";
 import { AvatarSettings } from "@/features/avatars/avatar-settings";
 import type { AvatarAppearance, AvatarKey } from "@/features/avatars/presets";
@@ -14,12 +14,13 @@ import { isAvailability } from "../../../../../../packages/shared/src/chat.ts";
 import { VoiceBar } from "@/features/voice/voice-bar";
 import { sameVoiceState, type VoiceZoneState } from "../../../../../../packages/shared/src/voice.ts";
 
-export default function OfficeCanvas({ appearance, profileWarning, officeId }: { appearance: AvatarAppearance; profileWarning?: string; officeId: string }) {
+export default function OfficeCanvas({ appearance, profileWarning, officeId, userId }: { appearance: AvatarAppearance; profileWarning?: string; officeId: string; userId?: string }) {
   const host = useRef<HTMLDivElement>(null);
   const controls = useRef<ReturnType<typeof mountOffice> | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [savedKey, setSavedKey] = useState<AvatarKey | null>(null);
+  const [savedName, setSavedName] = useState<string | null>(null);
   const network = useRef<OfficeNetwork | null>(null);
   const [presence, setPresence] = useState<Presence>({ status: "connecting", count: 0, notice: "Connecting to your office…" });
   const [chatOpen, setChatOpen] = useState(false);
@@ -30,13 +31,17 @@ export default function OfficeCanvas({ appearance, profileWarning, officeId }: {
   const leaveVoice = useCallback(() => network.current?.leaveVoice?.(),[]);
   const chatToggle = useRef<HTMLButtonElement>(null);
   const own = participants.find((person) => person.isSelf);
+  const names = useMemo(() => new Map(participants.map((person) => [person.userId, person.displayName])), [participants]);
+  const sendChat = useCallback((body: string, id: string) => network.current?.sendChat?.(body, id) ?? false, []);
+  const closeChat = useCallback(() => { setChatOpen(false); chatToggle.current?.focus(); }, []);
   const avatarKey = savedKey ?? appearance.avatarKey;
+  const displayName = savedName ?? appearance.displayName;
   const latestAppearance = useRef<AvatarAppearance>({ ...appearance, avatarKey });
   useEffect(() => {
-    const current = { avatarKey, displayName: appearance.displayName };
+    const current = { avatarKey, displayName };
     latestAppearance.current = current;
     controls.current?.setAppearance(current);
-  }, [avatarKey, appearance.displayName]);
+  }, [avatarKey, displayName]);
   useEffect(() => {
     if (!host.current) return;
     const element = host.current;
@@ -69,7 +74,7 @@ export default function OfficeCanvas({ appearance, profileWarning, officeId }: {
             });
             network.current = connected; controls.current?.setNetwork(connected);
             authSubscription = client.auth.onAuthStateChange((event) => {
-              if (event === "SIGNED_OUT") leave();
+              if (event === "SIGNED_OUT") { leave(); if (active) setPresence({ status: "denied", count: 0, notice: "Your session ended. Return to the workspace and sign in again." }); }
               else if (event === "TOKEN_REFRESHED") authTimer = setTimeout(() => connected.appearanceChanged(), 0);
             }).data.subscription;
           } catch { setPresence({ status: "offline", count: 0, notice: "Multiplayer unavailable. Configure NEXT_PUBLIC_REALTIME_URL and start the realtime server, then retry." }); }
@@ -80,17 +85,20 @@ export default function OfficeCanvas({ appearance, profileWarning, officeId }: {
     controls.current = controller;
     return () => { active = false; window.clearTimeout(timeout); clearTimeout(authTimer); authSubscription?.unsubscribe(); window.removeEventListener("pagehide", leave); network.current?.close(); network.current = null; controls.current = null; void controller.dispose(); };
   }, [attempt, officeId, chatEvents]);
-  return <>
-    {profileWarning && <p role="alert" className="mt-4 text-sm leading-6 text-muted">{profileWarning}</p>}
-    <AvatarSettings currentKey={avatarKey} onSaved={(key) => { setSavedKey(key); network.current?.appearanceChanged(); }} onReturn={() => host.current?.focus({ preventScroll: true })} />
-    <section aria-label="Interactive office" className="mt-6 overflow-hidden rounded-md border border-line bg-white">
-    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3 sm:px-5">
-      <p id="office-instructions" className="text-xs leading-6 text-muted">Click or Tab into the office to move. <kbd>W A S D</kbd> or arrow keys. Tab to leave the canvas.</p>
-      <div role="group" aria-label="Office zoom" className="flex gap-2">
+  return <section aria-label="Interactive office" className="office-shell">
+    <div className="office-toolbar">
+      <div className="flex flex-wrap items-center gap-2">
+        <AvatarSettings currentKey={avatarKey} displayName={displayName} onSaved={(key, name) => { setSavedKey(key); if (name) setSavedName(name); network.current?.appearanceChanged(); }} />
+        <Participants participants={participants} />
         <button ref={chatToggle} className="office-control" aria-expanded={chatOpen} aria-controls="office-chat" onClick={() => setChatOpen((value) => !value)}>Office Chat</button>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <label htmlFor="office-availability" className="sr-only">Your availability</label><select id="office-availability" className="office-control" value={own?.availability ?? "AVAILABLE"} disabled={presence.status !== "online" || !own?.connected} onChange={(event) => { setAvailabilityError(""); const value = event.target.value; if (isAvailability(value) && !network.current?.setAvailability?.(value)) setAvailabilityError("Reconnect before changing availability."); }}><option value="AVAILABLE">Available</option><option value="BUSY">Busy</option><option value="DO_NOT_DISTURB">Do not disturb</option></select>
+        <div role="group" aria-label="Office zoom" className="flex gap-1">
         <button className="office-control" disabled={status !== "ready"} onClick={() => controls.current?.zoomBy(-1)} aria-label="Zoom out">−</button>
         <button className="office-control" disabled={status !== "ready"} onClick={() => controls.current?.resetZoom()}>Reset zoom</button>
         <button className="office-control" disabled={status !== "ready"} onClick={() => controls.current?.zoomBy(1)} aria-label="Zoom in">+</button>
+        </div>
       </div>
     </div>
     <div className={`office-work-area${chatOpen ? " chat-open" : ""}`}>
@@ -101,17 +109,15 @@ export default function OfficeCanvas({ appearance, profileWarning, officeId }: {
         {status === "loading" ? <p role="status" className="text-sm text-muted">Preparing your office…</p> : <div><h2 className="font-semibold">Office unavailable</h2><p role="alert" className="mt-3 max-w-sm text-sm leading-7 text-muted">The office engine or artwork could not load. Check your connection and browser graphics support, then try again.</p><button className="auth-button mt-5" onClick={() => { setStatus("loading"); setAttempt((value) => value + 1); }}>Try again</button></div>}
       </div>}
     </div>
-    <ChatPanel key={officeId} officeId={officeId} open={chatOpen} onClose={() => { setChatOpen(false); chatToggle.current?.focus(); }} events={chatEvents} userId={own?.userId} send={(body, id) => network.current?.sendChat?.(body, id) ?? false} />
+    <ChatPanel key={officeId} officeId={officeId} open={chatOpen} onClose={closeChat} events={chatEvents} userId={userId ?? own?.userId} names={names} send={sendChat} />
     </div>
     {voice?.zone && <VoiceBar key={voice.sessionId} officeId={officeId} state={voice} leave={leaveVoice} />}
-    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-5 py-3 text-xs leading-6 text-muted">
-      <p>{presence.status === "online" ? `${presence.count} online` : presence.status === "connecting" ? "Connecting" : presence.status === "reconnecting" ? "Reconnecting" : "Offline"} · Keyboard required</p>
-      <p role="status" aria-live="polite">{presence.notice}</p>
+    <footer className="office-status">
+      <p role="status" aria-live="polite"><span className="font-medium text-ink">{presence.status === "online" ? `Connected · ${presence.count} online` : presence.status === "connecting" ? "Connecting" : presence.status === "reconnecting" ? "Reconnecting" : presence.status === "denied" ? "Access denied" : "Disconnected"}</span>{presence.notice !== "Connected." && <> · {presence.notice}</>}</p>
       {presence.status === "offline" && <button className="office-control" onClick={() => { setStatus("loading"); setPresence({ status: "connecting", count: 0, notice: "Connecting to your office…" }); setAttempt((value) => value + 1); }}>Retry connection</button>}
-    </div>
-  </section>
-  <div className="mt-4 flex flex-wrap items-center gap-3 text-sm"><label htmlFor="office-availability" className="font-medium">Your availability</label><select id="office-availability" className="office-control" value={own?.availability ?? "AVAILABLE"} disabled={presence.status !== "online" || !own?.connected} onChange={(event) => { setAvailabilityError(""); const value = event.target.value; if (isAvailability(value) && !network.current?.setAvailability?.(value)) setAvailabilityError("Reconnect before changing availability."); }}><option value="AVAILABLE">Available</option><option value="BUSY">Busy</option><option value="DO_NOT_DISTURB">Do not disturb</option></select><span className="text-xs text-muted">Availability is separate from your connection status.</span></div>
-  {availabilityError && <p role="alert" className="mt-2 text-sm text-red-800">{availabilityError}</p>}
-  <Participants participants={participants} />
-  </>;
+      <p id="office-instructions">Keyboard required: click or Tab into the office, then use WASD or arrows. Tab to leave.</p>
+      {availabilityError && <p role="alert" className="text-red-800">{availabilityError}</p>}
+      {profileWarning && <p role="alert">{profileWarning}</p>}
+    </footer>
+  </section>;
 }

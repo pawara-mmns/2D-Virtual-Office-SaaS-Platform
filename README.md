@@ -421,10 +421,15 @@ These are scope boundaries; completed foundations and future work are distinguis
 7. **Meeting-zone voice (Phase 4 Step 1 implemented; Cloud QA pending):** explicit
    LiveKit audio join, microphone/device controls and server-enforced revocation.
    Configure Cloud and complete the security/manual checks in the voice report.
+8. **Communication polish (Phase 4 Step 2):** viewport office layout, compact
+   avatar/profile and participant panels, persistent chat drafts/reading position,
+   shared private display-name formatting, and voice/reconnection controls.
+   See [communication validation](docs/communication-polish-validation.md) for
+   actual results and the remaining authenticated/Cloud merge gates.
 
 Each phase requires a separate implementation task. The local office engine is
 implemented with chat/status and meeting-zone voice. Container infrastructure and
-later product features remain deferred. Stop at Phase 4 Step 1.
+later product features remain deferred. Stop at Phase 4 Step 2.
 
 ## Organization setup
 

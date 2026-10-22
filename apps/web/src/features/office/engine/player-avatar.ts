@@ -40,7 +40,9 @@ export class PlayerAvatar {
     const identity = `${state.avatarKey}/${state.displayName}`;
     if (this.networkAppearance !== identity) {
       this.networkAppearance = identity;
-      this.setAppearance({ avatarKey: state.avatarKey, displayName: local ? `You · ${state.displayName}` : state.displayName });
+      // The green local label identifies self without consuming the profile's
+      // character budget or truncating its name differently from chat/voice.
+      this.setAppearance({ avatarKey: state.avatarKey, displayName: state.displayName });
       if (local) this.label.setBackgroundColor("#245743");
     }
     this.sprite.setVelocity(0, 0);
