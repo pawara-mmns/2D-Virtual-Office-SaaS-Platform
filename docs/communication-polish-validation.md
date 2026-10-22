@@ -7,6 +7,8 @@ remote migrations, email delivery, Auth user creation or production data changes
 Implementation is complete. **Not merge-ready until the authenticated browser
 and LiveKit Cloud security/media checks below have been completed.** Local tests
 and synthetic browser fixtures cannot establish those live guarantees.
+The validation-only continuation below reconfirmed the available environment and
+live denial paths; the authenticated/media gates remain blocked, not passed.
 
 ## UX changes and inspection
 
@@ -123,7 +125,7 @@ than the installed Chromium remain manual checks.
 | Voice cancellation races, lease expiry, membership removal and provider failure | PASSED with fake provider; explicit cutoff/removal calls asserted |
 | Microphone capture consent, leave/cancel/unmount cleanup | PASSED in lifecycle and actual UI tests using synthetic tracks |
 | Browser bundles contain no server LiveKit credential references/admin SDK | PASSED in production bundle checks |
-| LiveKit Cloud control API connectivity | PASSED: read-only inventory, 496ms single request; no application rooms at observation |
+| LiveKit Cloud control API connectivity | PASSED: latest read-only inventory 477ms, zero application rooms at observation; earlier sample 496ms |
 | Actual initial/refreshed token replay after revocation | NOT TESTED: requires authorized Cloud sessions |
 | Actual active-session revocation within 10 seconds | NOT TESTED: no authorized live sessions; no timing guarantee inferred from fake provider |
 | Two-user authenticated office/chat/audio and remote-device playback | NOT TESTED: no dedicated test logins or connected authorized sessions |
@@ -135,7 +137,7 @@ auth architecture were weakened. Cloud removal failure still pauses admission;
 provider/API outage prevents promising a hard 10-second removal bound. See the
 [LiveKit token revocation contract](https://docs.livekit.io/frontends/reference/tokens-grants/).
 
-## Executed checks
+## Executed checks (implementation baseline)
 
 | Command/check | Result |
 | --- | --- |
@@ -208,6 +210,120 @@ with stable production props; no new library was installed.
 No new dependencies or environment variables are required. Existing ignored
 `apps/web/.env` and `apps/realtime/.env` remain the configuration sources.
 No migration was created or applied; existing grants already support name edits.
+
+## Validation-only continuation — 2026-10-22
+
+Observed at 02:40–02:41 UTC (08:10–08:11 Asia/Colombo). The branch was reconfirmed
+by reading `.git/HEAD`; no Git operations were performed. Only this existing
+report was edited. No application defect was established, so no code, dependency,
+environment or migration changes were made. The baseline checks above were not
+relabelled as newly executed authenticated or Cloud media tests.
+
+### Available environment and actual observations
+
+- **PASS:** the effective development web environment loads `apps/web/.env`.
+  Web and realtime public configuration both match the approved Supabase project
+  `rofutnholbtdmxccrkbs`. Configured web `/api/health` and realtime `/health`
+  returned HTTP 200 from the already-running services.
+- **PASS:** all required server-side LiveKit configuration is present and passes
+  the existing Cloud-only configuration validation. An authenticated, read-only
+  Cloud room-list request completed in **477ms** and found **zero application
+  rooms**. This was a single control-API sample, not media or revocation latency.
+  No room was created and no participant was removed.
+- **PASS:** a signaling handshake using deliberately invalid, synthetic proof
+  was rejected by the actual configured LiveKit Cloud endpoint with **HTTP 401**.
+  No issued application token was used. This proves invalid-proof rejection,
+  **not replay rejection of an originally valid or refreshed token**.
+- **BLOCKED prerequisite:** browser inventory returned **0 connected browsers,
+  0 connected apps, 0 inventory errors**. There are no accessible signed-in
+  sessions for either approved test member. The two running services do not
+  themselves provide an authenticated user session.
+- **BLOCKED prerequisite:** the recognized local env files present were
+  `apps/web/.env` and `apps/realtime/.env`; no populated test email/password,
+  test session/token or authorized test-user UUID settings were found in those
+  files or the current process. The ignored organization-test configuration file
+  was absent. No arbitrary real user was selected and no Auth user was created.
+- **NOT TESTED prerequisite:** physical input/output devices, browser microphone
+  permissions and a listening second user could not be inspected through an
+  accessible browser. This does **not** establish that the machine has no audio
+  hardware. No real microphone was captured or audio playback claimed.
+
+No credentials, account addresses, participant identities, invitation links or
+issued tokens were printed, persisted for testing or requested from the user.
+No Cloud administrator token was used to bypass normal application admission.
+No production data, membership, profile or chat record was changed. The existing
+configured voice authority was left running; no competing Cloud-enabled realtime
+process was started.
+
+### Requested scenario results
+
+These rows concern **actual authenticated application/Cloud workflows**. Earlier
+synthetic fixtures remain separate evidence and cannot change these results.
+
+| Requested check | Result | Observation / blocker |
+| --- | --- | --- |
+| Two different authenticated users join the office | NOT TESTED | No accessible authorized sessions or configured test logins |
+| Both users observe correct participant presence | NOT TESTED | Requires those two live office sessions |
+| Display names match across avatars, chat, office and voice lists | NOT TESTED | Requires authenticated profiles and actual voice admissions |
+| Chat synchronizes between users and persists after reload | NOT TESTED | No authorized send/history workflow executed |
+| Authenticated authorization and cross-company office/chat isolation | NOT TESTED | No authorized test identities and isolated tenant fixtures available |
+| Two users join the same real voice room through normal admission | NOT TESTED | No authenticated office/zone sessions; zero application Cloud rooms observed |
+| Real microphone enable/disable | NOT TESTED | No accessible signed-in browser/audio device session |
+| Bidirectional audible audio | NOT TESTED | No two real endpoints or listening users; no sound observation |
+| Real input/output device switching where supported | NOT TESTED | Browser/device capabilities unavailable for inspection |
+| Real voice leave and rejoin | NOT TESTED | No valid Cloud participant session established |
+| Real network reconnection | NOT TESTED | No valid Cloud participant session to interrupt/recover |
+| Zone exit disconnects voice and stops microphone tracks | NOT TESTED | No authenticated in-zone media session |
+| No duplicate tracks or listeners after real join/reconnect/leave | NOT TESTED | No actual media lifecycle to inspect; baseline simulated checks are insufficient |
+| Revoked members lose active voice access and cannot rejoin | NOT TESTED | No dedicated authorized removable membership/media session was available |
+| Previously issued initial-token replay after revocation | NOT TESTED | No legitimately admitted test participant or original issued token |
+| Refreshed-token replay after revocation | NOT TESTED | No established participant/session refresh; invalid-proof 401 is not a substitute |
+| Revocation completes within 10 seconds | NOT TESTED | No removal was performed; elapsed revocation time was **not measured** |
+| Cross-company voice access is rejected for an authenticated user | NOT TESTED | No authorized cross-company test identity/fixture; anonymous rejection does not prove tenant isolation |
+| Unauthenticated users cannot obtain application voice admission | PASS | Running web token endpoint returned 401; running realtime token endpoint returned 403; neither returned a token |
+| Missing/foreign Origin cannot obtain web voice admission | PASS | Both returned 403 from the running web service; no token returned |
+| Invalid proof cannot join the actual Cloud signaling endpoint | PASS | HTTP 401; fresh deliberately invalid proof only |
+
+All four direct running-service token-denial responses also had `Cache-Control:
+no-store`. Requests contained no valid user credentials and created no session.
+
+### Existing test infrastructure rerun
+
+| Executed command | Result / precise scope |
+| --- | --- |
+| `node scripts/check-realtime-environment.mjs` | PASS: matching development configuration; dedicated test login/trio unavailable; values suppressed |
+| `node --test tests/voice-routes.test.mjs` from `apps/web` | PASS: 3 production-build route/bundle checks; unsigned session 401, missing/foreign Origin 403, forged zone/input rejection, no server credential/admin SDK in browser bundles |
+| `node --experimental-strip-types --test scripts/test-realtime-live.mjs` | PASS: 1 built-server negative admission test against configured Supabase; anonymous/invalid proof/foreign Origin denied |
+
+The negative realtime child explicitly sets its LiveKit configuration empty and
+therefore cannot orphan-sweep or remove participants belonging to the running
+development authority. Its result is an office/Auth denial result, not an actual
+Cloud voice-session test. No simulated audio suites were rerun to fill the live
+testing gaps. Lint/typecheck/build and the broader baseline suites above remain
+their previously executed results; application code was unchanged in this pass.
+
+**FAIL:** no failures in checks actually executed during this continuation.
+Blocked or unexecuted scenarios are **NOT TESTED**, not successful assertions.
+
+### Remaining blockers and merge decision
+
+**Phase 4 Step 2 is NOT MERGE-READY.** Cloud credentials and connectivity are
+available; the blockers are authorized user/browser sessions and real audio
+endpoints, not a demonstrated Cloud configuration error.
+
+To finish the gate, make two existing, normally verified, authorized test accounts
+accessible in separate connected browser profiles, with real audio input/output
+and a listening participant at each end. Tenant/removal checks also need a
+dedicated non-production workspace/membership and another-company test context
+whose records are explicitly safe to exercise. Continue using normal Auth and
+application admission; do not paste passwords/tokens, select unrelated real users,
+weaken RLS or use admin-minted participant tokens as an authorization shortcut.
+Run the manual sequence below, retaining original/refreshed replay proof only in
+the authorized private test context and recording actual removal timestamps.
+Until that evidence exists, no 10-second revocation or real audio claim is made.
+
+This validation continuation stops after updating this report. Phase 4 Step 3,
+deployment and new feature development were not started.
 
 ## Manual verification before merge
 
