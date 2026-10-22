@@ -89,3 +89,26 @@ test("repeated voice snapshots, reconnection and stale handlers do not duplicate
     network.close();const before=values.length;receive({...state});assert.equal(values.length,before);assert.equal(messages.size,0);
   } finally {network.close();consume.mock.restore();globalThis.fetch=original;}
 });
+
+test("late state patches cannot restore presence after a drop or final leave", async () => {
+  const original=globalThis.fetch;
+  const events=new Map<string,(code?:number)=>void>(), states:Presence[]=[], roster:Participant[][]=[];
+  let changed!:(state:OfficeSnapshot)=>void;
+  const fake={sessionId:"self",connection:{transport:{isOpen:true,send(){},sendUnreliable(){},connect(){},close(){}},events:{}},reconnection:{},
+    onStateChange(callback:typeof changed){changed=callback;},onMessage(){},onDrop(callback:()=>void){events.set("drop",callback);},onReconnect(callback:()=>void){events.set("reconnect",callback);},onLeave(callback:(code:number)=>void){events.set("leave",callback as (code?:number)=>void);},onError(callback:(code:number)=>void){events.set("error",callback as (code?:number)=>void);},send(){},async leave(){},removeAllListeners(){},
+  };
+  const consume=mock.method(Client.prototype,"consumeSeatReservation",async()=>fake as unknown as Awaited<ReturnType<Client["consumeSeatReservation"]>>);
+  globalThis.fetch=async()=>new Response("{}",{status:200});
+  const network=connectOffice({url:"http://localhost:2567",officeId:"office",mapVersion:"map",getToken:async()=>"synthetic-proof",onPresence:value=>states.push(value),onParticipants:value=>roster.push(value)});
+  try {
+    await new Promise(resolve=>setImmediate(resolve));
+    const player={sessionId:"self",userId:"user",displayName:"Taylor",avatarKey:"fern" as const,x:100,y:100,direction:"down" as const,connected:true,isMoving:false};
+    const snapshot:OfficeSnapshot={officeId:"office",mapVersion:"map",players:new Map([["self",player]])};
+    changed(snapshot);events.get("drop")!();const before=roster.length;
+    snapshot.players.set("other",{...player,sessionId:"other"});changed(snapshot);
+    assert.equal(states.at(-1)?.status,"reconnecting");assert.equal(roster.length,before,"Dropped transport cannot repopulate the roster");
+    events.get("reconnect")!();changed(snapshot);assert.equal(states.at(-1)?.status,"online");
+    events.get("leave")!(1000);snapshot.players.delete("other");changed(snapshot);
+    assert.equal(states.at(-1)?.status,"offline");assert.deepEqual(roster.at(-1),[]);assert.equal(network.snapshot(),undefined);
+  } finally {network.close();consume.mock.restore();globalThis.fetch=original;}
+});

@@ -79,7 +79,13 @@ export const ChatPanel = memo(function ChatPanel({ officeId, open, onClose, even
           if (messageRef.current.length && (!nearBottom.current || historical.current)) setHasNew(true);
           else void load();
         }
-        else if (!event.online) { loaded.current = false; clearTimeout(timer.current); setSending(false); if (pending.current) setSendError("Delivery is unconfirmed. Your draft is kept; retry after reconnecting."); }
+        else if (!event.online) {
+          // A response authorized before a disconnect must not update a later
+          // connection generation or leave its loading/scroll state behind.
+          revision.current++; duringLoad.current = null; anchor.current = null;
+          loaded.current = false; setLoading(false); clearTimeout(timer.current); setSending(false);
+          if (pending.current) setSendError("Delivery is unconfirmed. Your draft is kept; retry after reconnecting.");
+        }
       } else if (event.type === "message") {
         confirm(event.message);
         if (duringLoad.current) duringLoad.current = mergeMessages(duringLoad.current, [event.message]);

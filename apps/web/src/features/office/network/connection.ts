@@ -78,7 +78,7 @@ export function connectOffice(options: {
       room.reconnection.maxEnqueuedMessages = 0;
       online = true;
       room.onStateChange((next) => {
-        if (closed || denied) return;
+        if (closed || denied || !online) return;
         if (next.officeId !== options.officeId || next.mapVersion !== options.mapVersion) { close(); options.onPresence({ status: "offline", count: 0, notice: "Office map changed. Reload this page." }); return; }
         state = next;
         if (!chatReady && online) { chatReady = true; options.onChat?.({ type: "connection", online: true }); }

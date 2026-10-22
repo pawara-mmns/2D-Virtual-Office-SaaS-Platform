@@ -62,6 +62,8 @@ test("real transport: canonical tenants, authority, presence, capacity, reconnec
     async remove(room,identity,cutoff){voiceRemoved.push({identity,cutoff});mediaMembers.get(room)?.delete(identity);},
   };
   const voice = createVoiceService(authorize,voiceProvider); await voice.poll();
+  const closeVoice=voice.close; let voiceShutdownCompleted=false;
+  voice.close=async()=>{await delay(15);await closeVoice();voiceShutdownCompleted=true;};
   const voiceStates = new Map<string,VoiceZoneState>();
   const server = createRealtimeServer({ authorize, map, origins: [origin], chat, voice });
   const rooms: SDKRoom[] = [];
@@ -232,8 +234,10 @@ test("real transport: canonical tenants, authority, presence, capacity, reconnec
     await until(() => !(local.state as OfficeState).players.has(leaseClient.sessionId), "hard authorization lease expiry");
     console.info(JSON.stringify({ scope: "isolated real transport, synthetic auth/chat store", firstRemoteMovementMs: Math.round(latency), committedChatObservedMs: chatLatencyMs, stateUpdatesDuringScenario: stateUpdates, configuredTickHz: 20, twoTenantRooms: true, tenPlayerMeasurement: measured }));
   } finally {
-    await voice.close();
     for (const room of rooms) { room.reconnection.enabled = false; if (room.connection.isOpen) await room.leave(); room.removeAllListeners(); }
-    await server.gracefullyShutdown(false);
+    try {
+      await server.gracefullyShutdown(false);
+      assert.equal(voiceShutdownCompleted,true,"Production server shutdown must await voice-service cleanup");
+    } finally {await closeVoice();}
   }
 });

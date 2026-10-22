@@ -36,7 +36,7 @@ async function bundleFixture() {
     plugins: [{ name: "isolated-history-action", setup(plugin) {
       plugin.onResolve({ filter: /^\.\/actions$/ }, (args) => args.importer.endsWith("chat-panel.tsx") ? { path: "chat-history-fixture", namespace: "fixture" } : undefined);
       plugin.onLoad({ filter: /.*/, namespace: "fixture" }, () => ({ loader: "js", contents: `
-        export async function loadOfficeChat(officeId,before){const f=window.chatFixture;f.requests++;await new Promise(r=>setTimeout(r,25));if(f.failHistory)return{ok:false,error:'Chat history could not load. Try again.'};const rows=f.messages.filter(m=>m.channelId===officeId&&(!before||BigInt(m.id)<BigInt(before))).sort((a,b)=>Number(b.id)-Number(a.id)).slice(0,31);const page=rows.slice(0,30).reverse();return{ok:true,page:{messages:page,olderCursor:rows.length>30?page[0].id:null}}}
+        export async function loadOfficeChat(officeId,before){const f=window.chatFixture;f.requests++;if(f.holdHistory)await new Promise(r=>{f.releaseHistory=r});else await new Promise(r=>setTimeout(r,25));if(f.failHistory)return{ok:false,error:'Chat history could not load. Try again.'};const rows=f.messages.filter(m=>m.channelId===officeId&&(!before||BigInt(m.id)<BigInt(before))).sort((a,b)=>Number(b.id)-Number(a.id)).slice(0,31);const page=rows.slice(0,30).reverse();return{ok:true,page:{messages:page,olderCursor:rows.length>30?page[0].id:null}}}
       ` }));
     } }],
   });
@@ -81,6 +81,14 @@ test("actual Chromium chat component: history, plain text, retries, drafts, scro
     await until(() => evaluate("document.querySelectorAll('#office-chat li').length===30"));
     assert.equal(await evaluate("document.querySelector('#office-chat ol img')===null && window.injected!==true"), true, "HTML-like messages remain text");
     assert.equal(await evaluate("document.activeElement.id"), "office-chat-draft");
+    await evaluate("chatFixture.holdHistory=true;[...document.querySelectorAll('button')].find(b=>b.textContent==='Load older messages').click()");
+    await until(()=>evaluate("typeof chatFixture.releaseHistory==='function'"));
+    await evaluate("chatFixture.events.emit({type:'connection',online:false});chatFixture.holdHistory=false;chatFixture.releaseHistory()");await delay(100);
+    assert.equal(await evaluate("document.querySelectorAll('#office-chat li').length"),30,"History completed after disconnect must not replace the visible window");
+    assert.equal(await evaluate("document.querySelector('[aria-label=\"Chat messages\"]').getAttribute('aria-busy')"),"false");
+    await evaluate("document.querySelector('[aria-label=\"Chat messages\"]').scrollTop=20;document.querySelector('[aria-label=\"Chat messages\"]').dispatchEvent(new Event('scroll'));chatFixture.events.emit({type:'connection',online:true})");
+    await until(()=>evaluate("[...document.querySelectorAll('button')].some(b=>b.textContent==='Show latest messages')"));
+    await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent==='Show latest messages').click()");await until(()=>evaluate("document.querySelectorAll('#office-chat li').length===30 && !document.querySelector('[aria-label=\"Chat messages\"]').getAttribute('aria-busy').includes('true')"));
     const counts = () => evaluate("document.querySelectorAll('#office-chat li').length");
     await evaluate("document.querySelector('[aria-label=\"Chat messages\"]').scrollTop=20;document.querySelector('[aria-label=\"Chat messages\"]').dispatchEvent(new Event('scroll'))");
     const scrollBefore = await evaluate("document.querySelector('[aria-label=\"Chat messages\"]').scrollTop");

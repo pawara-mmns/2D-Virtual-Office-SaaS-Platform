@@ -8,7 +8,8 @@ export async function issueVoiceToken(input: unknown, dependencies: {
 }) {
   if (!validVoiceRequest(input)) return { status: 400, data: { error: "Invalid voice request." } };
   const user = await dependencies.user();
-  if (user.status !== "authenticated") return { status: user.status === "unavailable" ? 503 : 401, data: { error: "Sign in with a verified account before joining voice." } };
+  if (user.status === "unavailable") return { status: 503, data: { error: "Authentication is temporarily unavailable. Try again shortly." } };
+  if (user.status !== "authenticated") return { status: 401, data: { error: "Sign in with a verified account before joining voice." } };
   const session = await dependencies.session();
   if (!session || session.userId !== user.user.id) return { status: 401, data: { error: "Your session ended. Sign in again." } };
   try {
