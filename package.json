@@ -15,6 +15,8 @@
     "test:chat:database": "node --test scripts/chat-database.test.mjs",
     "test:chat:browser": "node --test scripts/test-chat-browser.mjs",
     "test:chat:anonymous": "pnpm --filter @virtual-office/web test:chat:anonymous",
+    "test:voice:browser": "node --test scripts/test-voice-browser.mjs",
+    "test:voice:routes": "pnpm --filter @virtual-office/web test:voice:routes",
     "test:realtime:live": "node --experimental-strip-types --test scripts/test-realtime-live.mjs",
     "check:realtime:env": "node scripts/check-realtime-environment.mjs",
     "build": "pnpm -r build",
