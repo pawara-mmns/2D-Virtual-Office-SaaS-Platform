@@ -7,6 +7,8 @@ Date: 2026-10-22. Branch confirmed by reading `.git/HEAD`:
 voice use were reported by the user; no Git history operation was performed to
 verify that merge. The Phase 4 sections below are historical records. This
 section is the current stabilization result.
+The latest real-world validation preflight is recorded in the continuation below
+at 04:02 UTC; it remains blocked on accessible authenticated test sessions.
 
 **Implementation and available automated validation are complete. Merge-ready:
 NO.** Required authenticated multi-user, issued-token replay and measured Cloud
@@ -188,6 +190,176 @@ explicit until actual failure-path and Cloud enforcement tests supply evidence.
 No Git command, branch switch, commit, push, merge, deployment, remote migration,
 email delivery, production data reset or tenant-data write was performed. Stop
 after Phase 5 Step 1; Phase 5 Step 2 was not started.
+
+### Real-world validation continuation — 2026-10-22, 04:02 UTC
+
+This continuation inspected the current Auth, workspace membership and voice
+admission paths, the existing test-account configuration and available browser
+connections. Only this report was edited. No new application defect was
+established; no code, dependencies, migrations or test accounts were added.
+The previous 111 application/realtime tests and 42 route checks are historical
+executed results, not newly executed authenticated integration tests. They were
+not repeatedly rerun in the absence of authentication prerequisites.
+
+#### Actual prerequisite results
+
+| Prerequisite/check performed now | Result | Observation |
+| --- | --- | --- |
+| Expected branch | PASS | `.git/HEAD` identifies `feature/p5-s01-mvp-stabilization`; no Git command used |
+| Development project configuration | PASS | Web/realtime public configuration matches `rofutnholbtdmxccrkbs` |
+| Running web and realtime health | PASS | Both configured health endpoints returned HTTP 200 at 04:02:01 UTC |
+| Cloud configuration and control API | PASS | Existing server-only configuration valid; read-only room inventory completed in **466ms** at 04:02:02 UTC; zero application rooms observed |
+| Accessible authorized browser sessions | BLOCKED | Inventory: zero connected browsers/apps, zero inventory errors; existing account availability/roles cannot be inferred from this |
+| Dedicated login/session configuration | BLOCKED | Recognized local files present: `apps/web/.env`, `apps/realtime/.env`; no populated test email/password/session/token/user-UUID settings found, including in process environment; ignored organization-test config absent |
+| Physical audio endpoints | NOT TESTED | No connected signed-in browser/device session through which to inspect permissions or devices; no claim that hardware is absent |
+
+Cloud control-API credentials are available. They do not authenticate a person to
+Supabase or establish workspace membership. No account listing/admin Auth bypass
+was used to select real users. No tenant records, memberships, profiles or chat
+were changed. No media token, original/refreshed replay proof or audio was
+captured. The running realtime authority was not restarted or duplicated.
+
+#### Smallest safe account setup to unblock
+
+Reuse approved existing development test users and workspaces if already prepared.
+The minimum is **three accounts**, with A also acting as the administrator:
+
+| Test identity | Required company membership | Purpose | Current verification |
+| --- | --- | --- | --- |
+| A | OWNER of disposable test company X | Company administrator; observes B's movement/audio and removes only B's test membership | NOT TESTED |
+| B | Verified ACTIVE MEMBER of X | Second user, audio endpoint and revocation/replay subject; never the last owner | NOT TESTED |
+| C | Verified ACTIVE member/owner of separate disposable company Y, with no X membership | Cross-company isolation checks | NOT TESTED |
+
+1. In three separate browser profiles, sign in normally to the configured local
+   app's `/login` as A, B and C. Make those profiles/tabs accessible through this
+   workspace's browser connection. Merely opening unconnected browser windows or
+   providing user UUIDs does not provide authenticated sessions. Do not share
+   passwords, session cookies, invitation links or tokens. A and B alone unblock
+   the first same-office checks; C is additionally required to complete isolation.
+2. If membership setup is needed, use only approved disposable development data.
+   As A, open `/dashboard` → **Create workspace**, create test company X, and use
+   **Team members** to invite B as MEMBER. B must explicitly accept with the
+   invited, verified account. Reuse the existing permitted email or development
+   invitation-link mode; do not change sender/security configuration to bypass a
+   delivery restriction. As C, reuse or create test company Y and confirm X is
+   not among C's memberships. Never reuse a real company's records for removal.
+3. If an account is missing, its owner must first register through `/register`,
+   complete the real inbox confirmation and sign in normally. Do not auto-confirm
+   users, edit Auth tables or disable confirmation. Follow the existing
+   [dedicated account instructions](organizations.md#dedicated-test-accounts)
+   and [Supabase password-auth guidance](https://supabase.com/docs/guides/auth/passwords).
+   No new account was created by the agent during this pass.
+4. In each session, set distinguishable non-email display names in **Avatar
+   settings**, then use **Enter office**. Confirm A's OWNER role and B/C's expected
+   active memberships through normal application views before any destructive
+   test action. Remove only the explicitly designated disposable B membership.
+5. If using the existing rollback-only SQL suites as additional checks, place
+   only the approved test UUIDs in ignored
+   `supabase/.env.organization-tests.local`, following its existing example.
+   UUID configuration enables those database tests; it does **not** authenticate
+   browser, chat or voice sessions and cannot satisfy this integration gate.
+
+No further Cloud key setup is needed to begin. The smallest immediate action is
+to connect the already verified A/B browser profiles, then C's separate-company
+profile for isolation. If browser connection is unavailable, perform the manual
+sequence below and supply sanitized observations; those must be labelled
+user-observed, not agent-executed tests.
+
+#### Individual real-world results for this continuation
+
+| Test | Result | Evidence available now |
+| --- | --- | --- |
+| A and B authenticate and enter X's office | NOT TESTED | No accessible real account session |
+| A/B avatar movement synchronizes | NOT TESTED | No authenticated concurrent office users |
+| Join/leave presence updates match on both sides | NOT TESTED | No real presence lifecycle observed |
+| Chat synchronizes without duplicates; persists after refresh | NOT TESTED | No authenticated send/history request executed |
+| Refresh and temporary network reconnect restore state | NOT TESTED | No authenticated tab/socket available |
+| C cannot access X's office or see its presence | NOT TESTED | No verified C/X membership context |
+| C cannot read/send X's chat | NOT TESTED | No real C-authenticated request |
+| Authorized A/B obtain tokens and connect to Cloud | NOT TESTED | No valid application admission issued |
+| Unauthenticated admission fails in this continuation | NOT TESTED anew | Earlier actual denial checks remain recorded above; not rerun as a substitute for authentication |
+| C cannot obtain admission to X or receive X's audio | NOT TESTED | No authenticated cross-company request or C media endpoint |
+| Removed B cannot obtain a new token | NOT TESTED | No live disposable B membership removed |
+| Existing B participation ends after membership revocation | NOT TESTED | No established B Cloud participation or removal |
+| Original issued-token replay after revocation | NOT TESTED | No legitimately issued original proof, replay attempt or Cloud rejection captured |
+| Cloud-refreshed-token replay after revocation | NOT TESTED | No refresh event/proof observed and no replay attempt |
+| Effective revocation within 10 seconds | NOT TESTED | **No revocation time measured; no numeric removal latency available** |
+| Bidirectional audible audio | NOT TESTED | No two controlled physical audio endpoints/listeners |
+| Mic mute/unmute and supported device switching | NOT TESTED | No real microphone/device interaction |
+| Leave/rejoin/reconnect, zone exit and media cleanup | NOT TESTED | No actual media session or duplicate-track/listener observation |
+
+**FAIL:** no new executed check failed. Blocked/unexecuted cases remain NOT
+TESTED. User-reported basic voice success and the previously passing synthetic
+browser/provider tests do not change any of these live results.
+
+#### Controlled integration and audio checklist once accounts are connected
+
+1. Keep exactly one configured realtime/voice authority. A/B enter X concurrently;
+   move each avatar, change availability, send uniquely labelled non-sensitive
+   chat messages, and observe both sessions. Refresh B, then briefly interrupt
+   and restore only B's network. Check one participant per user, synchronized
+   presence/names, one copy of each message and restored valid state.
+2. As C, attempt X's office route and authenticated chat/admission requests using
+   X's test office identifier. Require permission denial and no X data, roster,
+   messages, token or audio. C's legitimate Y session must remain isolated.
+   An anonymous denial alone does not prove this authenticated isolation check.
+3. With two people/devices and headphones, A/B enter the server-authorized
+   Meeting Room and explicitly Join Voice. Allow microphone permission normally.
+   A speaks a unique test phrase; B confirms hearing it. Reverse direction. Mute
+   each side and verify the other stops hearing it, then unmute. A participant
+   count or speaking indicator alone is insufficient proof of audibility.
+4. Switch real input/output devices where supported; record unsupported output
+   switching as a capability limit. Verify Leave, explicit rejoin, temporary
+   reconnect and zone exit. Check the browser microphone indicator clears, remote
+   audio stops/tracks disappear and no duplicate participant/track remains.
+   Do not use fake/synthetic media or recordings as proof of this audio test.
+
+#### Replay and timing evidence required before a security PASS
+
+The original admission is signed by the existing application server after normal
+Supabase/member/zone checks and must actually be accepted by Cloud. A refreshed
+token must be genuinely delivered by Cloud during that participant session.
+Do not replace either with an admin-generated test JWT. The existing browser
+scripts simulate media and do not currently constitute a real-token replay
+harness. Ordinary UI-only voice use cannot establish either replay result.
+
+An authorized private, memory-only test controller must retain those proofs
+without console output, screenshots of token-bearing panels, HAR exports,
+clipboard sharing or persistent files. Once genuine admission is available,
+instrument that test session rather than adding a token/debug endpoint to the
+application. If refresh proof is not observed, leave its check NOT TESTED.
+The required [LiveKit token lifecycle and cutoff behavior](https://docs.livekit.io/frontends/reference/tokens-grants/)
+is separate from new-token-request authorization.
+
+- Run original-proof and refreshed-proof trials separately if necessary. The
+  original admission lifetime is currently 30 seconds. Join, revoke and attempt
+  replay while the proof is still unexpired; expiration rejection does not prove
+  revocation. Capture only sanitized validity-at-replay and rejection categories.
+- As A, remove only B's disposable membership through **Team members** while B
+  has an established, active voice session. Do not press Leave Voice or otherwise
+  voluntarily end B's session first. Observe B's actual Cloud disconnection and
+  A's loss of B's media; rejection of B's next token request is a separate test.
+- Using one measurement clock, record removal-request start `Tstart`, successful
+  commit acknowledgement `Tack`, and effective observed loss `Tloss`. Record
+  both `Tloss - Tstart` (conservative upper bound from commit) and
+  `Tloss - Tack` (lower bound). An upper bound <=10s establishes the target; a
+  lower bound >10s fails it. If the bounds straddle 10s, obtain more precise
+  commit timing instead of inventing a pass. Never subtract unrelated devices'
+  unsynchronized clocks. Check both actual disconnection and media loss.
+- Attempt reconnect with each saved proof using its original opaque identity;
+  require Cloud authorization rejection, not merely a later application sweep,
+  duplicate-identity conflict, timeout or expired-proof error. Then test fresh
+  application admission denial. Record each result independently.
+- Record safe timestamps, durations, token category (`original`/`refreshed`),
+  unexpired-at-replay boolean, sanitized Cloud rejection category and active
+  media-loss observation. Never record token values, keys or personal addresses.
+  Restore B only through a normal authorized invitation and explicit acceptance
+  if a second trial is needed; no production membership changes or SQL bypasses.
+
+No such timing or replay evidence exists from this continuation. Current
+merge-readiness remains **NO**. Authentication/session access is the immediate
+blocker; real audio and genuine replay instrumentation are additional requirements
+for their respective checks. No Phase 5 Step 2 work was started.
 
 ## Historical record — Phase 4 Step 2
 
