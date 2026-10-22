@@ -1,5 +1,5 @@
 export type TileLayer = { type: "tilelayer"; name: string; width: number; height: number; data: number[] };
-export type Marker = { name: string; type: string; x: number; y: number };
+export type Marker = { name: string; type: string; x: number; y: number; width?: number; height?: number };
 export type OfficeMap = { width: number; height: number; tilewidth: number; tileheight: number; layers: (TileLayer | { type: "objectgroup"; name: string; objects: Marker[] })[] };
 export const TILE_SIZE = 32;
 export const PLAYER_SPEED = 120;
