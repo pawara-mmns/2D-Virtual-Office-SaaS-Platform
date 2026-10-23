@@ -12,7 +12,8 @@ import { createReadinessCheck, supabaseReadiness } from "../../../packages/share
 try {
   process.env.NODE_ENV ??= "production";
   const config = realtimeConfig(process.env);
-  // Explicit cwd-independent path: the very same asset served to Phaser.
+  // The same asset served to Phaser. Default CWD is apps/realtime in both the
+  // workspace and hosted start commands; override explicitly if relocating it.
   const mapFile = process.env.OFFICE_MAP_PATH ?? resolve("../web/public/office/studio.json");
   const map = validateOfficeMap(JSON.parse(readFileSync(resolve(mapFile), "utf8")));
   const authorize = supabaseAuthorizer(config.url,config.key);

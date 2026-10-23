@@ -18,6 +18,7 @@
     "test:voice:browser": "node --test scripts/test-voice-browser.mjs",
     "test:voice:routes": "pnpm --filter @virtual-office/web test:voice:routes",
     "test:realtime:live": "node --experimental-strip-types --test scripts/test-realtime-live.mjs",
+    "test:deployment": "node --test scripts/deployment-config.test.mjs",
     "check:realtime:env": "node scripts/check-realtime-environment.mjs",
     "build": "pnpm -r build",
     "start": "pnpm --filter @virtual-office/web start",

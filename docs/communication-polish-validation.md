@@ -1,13 +1,404 @@
 # Communication, stabilization and private-beta validation
 
-## Phase 5 Step 3 — Private beta environment and real team pilot
+## Phase 5 Step 3A — Vercel + Railway hosting preparation
+
+Date: **2026-10-22, Asia/Colombo**. Existing branch confirmed by reading
+`.git/HEAD`: `feature/p5-s03-private-beta-pilot`. The unmerged Step 3 shutdown
+admission fixes are preserved. No Git operation, remote project configuration,
+deployment, account creation, email send, migration or tenant-data mutation was
+performed. Commands in the manual guide below are **future owner actions after
+separate approval**, not actions executed in Step 3A.
+
+**Merge-ready: YES for this preparation substep. Deployment preparation complete:
+YES. Hosted beta ready: NO.** The parent Step 3 real-team release gate remains
+blocked; the preparation decision does not mark its pilot/security tests passed.
+
+### Architecture verification
+
+| Component | Actual implementation / deployment boundary |
+| --- | --- |
+| Workspace | Shared pnpm monorepo: root `pnpm-workspace.yaml` includes `apps/*` and `packages/*`, with one root lockfile and `packageManager: pnpm@10.34.7`. Node 24 LTS is recorded in `.node-version`; root minimum `>=22.14.0` is not a provider version pin |
+| Frontend | `apps/web`, package `@virtual-office/web`, Next 16.4.2 App Router / React 19 / strict TS / Tailwind. `pnpm --filter @virtual-office/web build` produces Next server routes and static public assets; local start is `pnpm --filter @virtual-office/web start` |
+| Realtime | `apps/realtime`, package `@virtual-office/realtime`. `pnpm --filter @virtual-office/realtime build` runs TypeScript, emitting `apps/realtime/dist/apps/realtime/src/index.js` and shared JS under that dist tree. Persistent Node/Colyseus remains on Railway |
+| Shared source/assets | Both apps directly import `packages/shared/src/*.ts`; this small package has no separate build. Realtime validates the same `apps/web/public/office/studio.json` served to Phaser. An isolated upload of only `apps/realtime` omits required source/map files |
+| Frontend APIs | `/api/health`, `/api/ready`, `/api/v1/voice/token`, Auth confirmation/recovery routes and Server Actions remain Next Node runtime work. They perform bounded HTTP/data operations, not persistent multiplayer/media hosting |
+| Browser runtime | Phaser/office engine and LiveKit client load through existing client-only deferred paths. `/office/*` assets stay in web `public`; no `apps/web` URL prefix, CDN rewrite, game server or canvas SSR is required |
+| Auth/data | Existing Supabase SSR cookie refresh, fresh verified user lookup, explicit recovery proof, active membership/RLS and append-only chat RPCs. No new database service, privileged client key or OAuth callback is introduced |
+| Voice | Existing server-authorized Meeting Room zone and explicit microphone join. Railway alone holds LiveKit API credentials; Vercel forwards verified user/session admission via HTTPS. Browser receives its scoped short-lived token. This is zone-based eligibility, not a newly added distance-radius feature |
+| Health | Web `/api/health` and realtime `/health` are liveness. Web `/api/ready` and realtime `/ready` are dependency readiness, with 200/503, no-store, fixed statuses, bounded probes and no tenant data |
+
+Vercel Root Directory is **`apps/web`**, with outside-root source inclusion.
+Railway build Root Directory is **repository root `/`**, not `/apps/realtime`.
+This follows [Railway shared-monorepo guidance](https://docs.railway.com/deployments/monorepo)
+and [Vercel monorepo source inclusion](https://vercel.com/docs/monorepos/monorepo-faq).
+Direct relative shared imports are retained; no package/build framework was added.
+
+### Deployment configuration and modified files
+
+| File | Prepared change |
+| --- | --- |
+| `railway.json` | Railpack, realtime-only build, direct Node start with `exec`, `/ready`, 120s startup readiness timeout, one replica, ON_FAILURE with three retries, 0s additional overlap and 30s drain. Field types/options checked against the official Railway schema |
+| `.vercelignore` | Root CLI upload rules exclude both apps' local env files, private key/local tooling paths, pnpm/cache artifacts and emitted backend files; preserve examples, manifests, shared TypeScript and office assets. This is needed for manual source uploads, including the existing `.env` convention |
+| `scripts/deployment-config.test.mjs` | Two focused configuration/upload-policy regressions; no provider CLI or upload executed |
+| `scripts/test-realtime-live.mjs` | Exercises the Node entry arguments/CWD in Railway config, ephemeral dynamic PORT, readiness/denials, and missing-config exit. Child-only Cloud settings remain blank to prevent a second authority |
+| Root `package.json` | Adds `pnpm test:deployment`; no dependency/version/lockfile change |
+| `apps/web/.env.example`, `apps/realtime/.env.example` | Provider-specific comments for public build values, hosted HTTPS forwarding, Railway PORT and one-authority operation; no real environment file was changed |
+| `apps/realtime/src/index.ts` | Comment correction: the default map path depends on the documented `apps/realtime` CWD. Runtime logic and literal `0.0.0.0`/configured PORT binding remain unchanged |
+| `README.md`, this report | Exact settings, full variable matrix, deployment order, A–O manual guide, tests, risks and release decision |
+
+No Dockerfile, `vercel.json`, new dependency, database migration, Git hook or
+deployment workflow was added. The Step 3 server and lifecycle regressions remain
+in place, including rejection of new and late office admissions during drain.
+
+### Provider settings — prepared locally, not applied
+
+| Vercel setting | Required value |
+| --- | --- |
+| Project | Dedicated private-beta frontend project, initially **not Git-connected**; keep all deployment actions manual |
+| Root Directory | `apps/web` |
+| Framework / Node | **Next.js**, **24.x** |
+| Source inclusion | Enable **Include source files outside of the Root Directory in the Build Step** |
+| Dependency/build selection | Set provider `ENABLE_EXPERIMENTAL_COREPACK=1` to honor the root package-manager pin. Install override: `corepack pnpm install --frozen-lockfile`; build: `corepack pnpm build`, run from the selected web root |
+| Output / start | Framework default output, no static `out` override and no custom start command; Vercel handles Next API routes/SSR |
+| Shared-source rebuilds | Disable skipping unaffected projects if later connecting Git: shared imports are relative source, not a declared package dependency graph. Do not create automatic feature-branch deployments here |
+| Environment scope | This dedicated beta project's stable deployment scope must have the public build values and server-only values below. Its provider “Production” scope denotes this beta project, not permission to touch an existing production SaaS project |
+| Origin/protection | Use one stable HTTPS alias/domain. Confirm pilot users and callback links can reach it under intended deployment protection. Never put protection-bypass tokens in links or weaken application Auth/RLS |
+
+Corepack setup follows [Vercel build configuration](https://vercel.com/docs/builds/configure-a-build#corepack).
+Explicit Corepack avoids relying on an override's default pnpm binary. Upload
+exclusions follow [Vercel ignore behavior](https://vercel.com/docs/deployments/vercel-ignore).
+No provider build adapter, function limits or dashboard setting was exercised here.
+
+| Railway setting | Required value |
+| --- | --- |
+| Service / source | One empty persistent Node service named, for example, `realtime`, in an explicitly selected private-beta project/environment; manual CLI source uploads, no Git-triggered deploys |
+| Root / config file | Repository root `/`; config file `/railway.json` |
+| Builder / install | **Railpack**, root pnpm workspace/lockfile detection, including build-time dev dependencies. Confirm pinned pnpm 10.34.7 in build logs; do not isolate/filter away the shared source or map before compilation |
+| Build command | `pnpm --filter @virtual-office/realtime build` |
+| Start command | `cd apps/realtime && exec node --env-file-if-exists=.env dist/apps/realtime/src/index.js` |
+| Bind / networking | Existing code listens on `0.0.0.0` and the Railway-injected `PORT`; do not invent a HOST variable or copy local PORT=2567. Generate public HTTPS networking to that listener. The browser SDK upgrades the configured HTTPS origin to WSS |
+| Readiness | `/ready`, timeout 120s from config. Do not substitute `/health` to mask missing Cloud/Auth/database configuration. GET readiness does not require an Origin header, so the platform healthcheck host does not need admission permission |
+| Lifecycle | One replica/one region, Serverless/sleeping disabled; no scale-out. ON_FAILURE with max 3 retries; 0s extra overlap and 30s draining in config |
+| Replacement | Manual cold replacement only: stop the prior authority, verify process exit, then start the replacement. This also applies to local dev processes sharing the same Cloud namespace |
+
+Railpack shell start commands support `cd ... && exec node ...`, so the shell is
+replaced by Node for signal delivery. [Railway start-command behavior](https://docs.railway.com/deployments/start-command)
+was checked; the actual Linux/Railpack image was not built in this Windows pass.
+Node version selection is explicitly pinned through the documented
+`RAILPACK_NODE_VERSION` provider variable; see [Railpack Node support](https://railpack.com/languages/node/).
+
+**Important lifecycle finding:** Railway's ordinary replacement starts a new
+container before retiring the old deployment. `overlapSeconds: 0` removes extra
+overlap after activation; it does **not** prevent concurrent startup. This app's
+existing Cloud orphan sweep assumes a single authority and can remove another
+process's participants. A one-replica setting alone does not solve that race.
+Stop/confirm the old authority first, accepting pilot downtime, before manually
+uploading a replacement. See [Railway teardown lifecycle](https://docs.railway.com/deployments/deployment-teardown).
+No distributed lease/scaling feature was added to work around this constraint.
+
+Railway healthchecks gate activation, not continuous uptime monitoring. Use the
+existing readiness/liveness checks for manual pilot observation; do not claim a
+monitor was installed. [Railway healthcheck semantics](https://docs.railway.com/deployments/healthchecks)
+also require the service's injected PORT to match the actual listener.
+
+### Exact environment variable matrix
+
+All URLs/senders/keys in this table are placeholders, not configured hosted
+values. `WEB_ORIGIN` and `REALTIME_ORIGIN` below are explanatory labels, **not new
+application environment variables**: use the actual stable Vercel HTTPS origin
+and actual Railway public HTTPS origin, without trailing slash/path/query.
+
+| Exact variable | Purpose | Platform | Visibility | Development / hosted beta example | Requirement |
+| --- | --- | --- | --- | --- | --- |
+| `NEXT_PUBLIC_SUPABASE_URL` | Browser/SSR public project endpoint | Vercel | Public | `https://<existing-project-ref>.supabase.co` in both environments | Required, same approved project as realtime |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Public browser/SSR API key | Vercel | Public | `sb_publishable_<existing-project-key>` | Required at build and runtime; never service role/secret |
+| `NEXT_PUBLIC_REALTIME_URL` | Browser admission + SDK connection origin | Vercel | Public | Dev `http://localhost:2567`; beta `https://<service>.up.railway.app` | Required at build; **HTTPS**, not WSS in this variable |
+| `APP_URL` | Trusted invitation/voice request origin | Vercel | Server-only configuration | Dev `http://localhost:3000`; beta `https://<beta-project>.vercel.app` or stable custom domain | Required; matches chosen web origin/Site URL |
+| `REALTIME_INTERNAL_URL` | Optional server-to-server voice/readiness target | Vercel | Server-only configuration | Dev loopback allowed; beta omit or same public Railway HTTPS origin | Optional; Vercel cannot reach your localhost or Railway private HTTP DNS |
+| `INVITATION_DELIVERY_MODE` | Existing invitation delivery selector | Vercel | Server-only configuration | Dev `link` or `email`; beta `email` | Defaults to email; production rejects link |
+| `RESEND_API_KEY` | Existing invitation delivery credential | Vercel | Secret | `<sending-key-entered-in-provider>` | Required for beta email mode; never public |
+| `INVITATION_FROM_EMAIL` | Configured server sender | Vercel | Server-only configuration | Dev `onboarding@resend.dev` restricted; beta `invites@<verified-domain>` | Required for beta; verified domain for general team recipients |
+| `SUPABASE_URL` | Membership/Auth/data endpoint | Railway | Server-only configuration, public endpoint | `https://<existing-project-ref>.supabase.co` | Required, matches Vercel public project |
+| `SUPABASE_PUBLISHABLE_KEY` | User-scoped server API access | Railway | Public key held on server | `sb_publishable_<same-project-key>` | Required; no service-role/secret key |
+| `LIVEKIT_URL` | Cloud media/control endpoint | Railway | Server-only configuration | `wss://<existing-project>.livekit.cloud` | Required for full beta readiness |
+| `LIVEKIT_API_KEY` | Cloud server API identifier | Railway | Server-only credential | `<existing-cloud-api-key>` | Required; no Vercel/browser copy |
+| `LIVEKIT_API_SECRET` | Cloud signing/control secret | Railway | Secret | `<existing-cloud-api-secret>` | Required; no Vercel/browser copy |
+| `PORT` | Realtime listener port | Railway | Provider-managed | Dev default 2567; beta injected by Railway | Use injected value, not a new hardcoded port |
+| `OFFICE_MAP_PATH` | Alternate canonical map location | Railway | Server-only configuration | `/<deploy-root>/apps/web/public/office/studio.json` | Optional; omit with prepared root context/start CWD |
+| `NODE_ENV` | Runtime security/production behavior | Both | Non-secret | Dev `development`; beta `production` | Set on Railway; Vercel manages production builds/runtime. Never set development to enable link mode |
+| `RAILPACK_NODE_VERSION` | Provider Node version selection | Railway | Provider-only, non-secret | `24` | Set for beta to pin tested LTS; not read by application code |
+| `ENABLE_EXPERIMENTAL_COREPACK` | Provider honors root package-manager pin | Vercel | Provider-only, non-secret | `1` | Set for this preparation's pinned install/build instructions; not application code |
+
+No application environment variable was renamed or invented. The last two are
+documented provider settings. Teardown values live in `railway.json`; remove any
+conflicting provider-variable overrides rather than maintaining two settings.
+Next public changes require a rebuild; server changes require the appropriate
+manual redeploy/restart. Keep existing local `.env` files ignored and local.
+
+Test-only diagnostic settings such as `AUTH_TEST_EMAIL`/`AUTH_TEST_PASSWORD` and
+the existing `ORG_TEST_USER_A/B/C`, `ORG_TEST_CONFIRM_DEVELOPMENT`,
+`ORG_TEST_PROJECT_REF` belong in ignored local test configuration only, not either
+hosting platform. Their absence is not permission to use real tenant accounts.
+They do not automatically create/verify accounts or replace the real pilot.
+
+### Manual deployment guide A–O — not executed
+
+**Order:** reserve the stable frontend hostname/project without deployment →
+prepare Railway and stop any old/local authority → manually deploy realtime →
+obtain its HTTPS origin → complete Vercel, Supabase and email configuration →
+manually deploy frontend → verify end-to-end/security → run the pilot. There is
+no health dependency cycle: realtime readiness checks Supabase/Cloud, not the web.
+
+Before A, the owner reserves a stable HTTPS frontend alias or controlled domain.
+For a Vercel project without importing a Git repository/deploying, the documented
+interactive `vercel project add` and `vercel link` commands can create/link it;
+run linking from the repository root and choose the dedicated beta project.
+Record the exact domain shown under that project's Domains settings; do not
+guess a name or use an ephemeral preview URL. No command in this paragraph was
+run here. [Vercel project creation](https://vercel.com/docs/cli/project) and
+[project linking](https://vercel.com/docs/cli/link) do not authorize deployment.
+
+**A. Create/configure Railway service.** After separate approval, use the intended
+Railway workspace/project, create or select the private-beta environment, and add
+one **Empty Service**, named `realtime`. Do not select a database template or
+connect a Git deployment source. Keep staged configuration changes manual.
+
+**B. Build/start settings.** In that service's Settings, keep repository-root
+build context `/`, select `/railway.json`, and verify the build/start commands and
+readiness/lifecycle settings in the table above. Disable Serverless/sleeping and
+keep one replica. Do not upload only `apps/realtime`. The build needs the root
+lock/workspace, shared source and web public map. No pre-deploy migration command.
+
+**C. Railway variables.** Enter only Railway rows from the matrix in its beta
+environment. Use the reserved stable frontend origin for
+`REALTIME_ALLOWED_ORIGINS`; include neither wildcards nor a guessed Vercel
+preview hostname. Let Railway inject PORT. Supply the existing development
+Supabase public project/key and matching server-only Cloud values. Do not copy
+the web's Resend secret or any service-role key to realtime.
+
+**D. Manually deploy realtime.** First stop every old/local Colyseus authority
+using that Cloud namespace, including `pnpm dev:realtime` on a developer machine.
+For an existing Railway deployment, pause the pilot, remove/stop only that beta
+application deployment through its deployment menu, and confirm the old process
+has stopped before a replacement. Preserve the prior source/artifact/config first.
+Do not remove a project, database, volume or tenant record. Actual provider stop
+signal/drain behavior still needs the later hosted rehearsal.
+
+On the owner's machine, authenticate using the official Railway CLI interactively,
+then explicitly link the intended existing beta project/environment/service.
+From the **repository root**, review `railway status` before the separately
+approved manual upload:
+
+```sh
+railway login
+railway link
+railway status
+# Only after checking the selected beta project/environment and old-authority stop:
+railway up --service realtime --environment <beta-environment-name>
+```
+
+Do not use `--new`, `--yes`, `--no-gitignore` or a subdirectory upload. Railway CLI
+normally respects `.gitignore`, keeping local env/dependency files out; inspect
+source/build settings before uploading. [Railway CLI upload behavior](https://docs.railway.com/cli/up)
+is a future operator step, not a local test. Verify Railpack installs pinned pnpm,
+compiles realtime, starts Node with the expected CWD and passes `/ready` before
+proceeding. Stop on config/map/Cloud errors instead of changing the gate.
+
+**E. Obtain Railway HTTPS/WSS endpoint.** In the realtime service's Networking
+settings, Generate Domain targeting its actual injected listener port. Record the
+public `https://<generated>.up.railway.app` origin and verify its certificate,
+`/health`=200 and `/ready`=200. WSS uses the same hostname, but
+`NEXT_PUBLIC_REALTIME_URL` must contain **https://**, as required by the existing
+SDK adapter. Preserve Authorization, Origin and reconnect subprotocol proof
+through provider networking. A health response alone does not verify WS upgrade.
+
+**F. Configure Vercel frontend project.** Return to the reserved beta project;
+Settings → Build and Deployment: Root Directory `apps/web`, framework Next.js,
+Node 24.x, outside-root inclusion on, default output, and exact Corepack
+install/build settings above. Keep this project without a Git integration for
+manual uploads; do not use the feature branch as an automatic production source.
+Do not use `vercel link --repo`, which is the Git-integration workflow. If the
+owner later elects Git integration, they must review all triggers separately.
+
+**G. Vercel variables.** Add Vercel rows to this beta project's intended stable
+deployment scope, with its actual web origin and the actual Railway public HTTPS
+origin. Omit `REALTIME_INTERNAL_URL` or set it to the same public origin. Enter
+Resend credentials only in server settings and enable Corepack. Do not enter
+LiveKit server credentials on Vercel. Do not upload local `.env` files or pull
+remote variables over an existing local env file. `.vercelignore` excludes local
+env/keys from the manual source archive; inspect the future archive/build too.
+
+**H. Supabase Auth URLs.** In the existing designated development project's Auth
+URL Configuration, set Site URL to the exact stable Vercel beta HTTPS origin and
+allow these exact URLs there: `/auth/confirm`, `/reset-password`, `/dashboard`.
+Keep Confirm email enabled, email/password auth and the existing password policy.
+Keep these existing custom email links:
+
+```html
+<a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&amp;type=email">Verify email</a>
+<a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&amp;type=recovery">Reset password</a>
+```
+
+The templates use shared Site URL, so changing it also changes this project's
+development confirmation/recovery destination. Confirm environment ownership
+before editing it; extra redirect entries do not override these templates.
+The implemented SSR flow verifies email proof, or moves recovery proof into a
+scoped HttpOnly cookie and verifies it on password submission. Do not substitute
+default implicit links, an OAuth callback or a broad redirect allowlist. Manual
+Dashboard Auth configuration is not a schema migration; no setting was changed here.
+
+**I. Production-capable email.** In the existing Resend account, verify the chosen
+sender domain and DNS status, allow the sending key on that domain, and use its
+plain address as `INVITATION_FROM_EMAIL`. Beta mode is `email`. The existing
+`resend.dev` testing sender only delivers to its permitted account recipient and
+cannot onboard the whole pilot. Configure/verify Supabase Auth SMTP separately;
+the app adapter does not configure Auth mail. Keep link tracking disabled. The
+owner later verifies normal inbox delivery/confirmation/recovery; no real emails
+were sent automatically. The [Resend testing restriction](https://resend.com/docs/knowledge-base/403-error-resend-dev-domain)
+and [Supabase SMTP setup](https://supabase.com/docs/guides/auth/auth-smtp) remain
+external prerequisites.
+
+**J. Verify LiveKit Cloud integration.** Confirm the three Railway values belong
+to the same existing Cloud project; its URL must pass the existing strict Cloud
+origin parser. Keep microphone-only/tenant-room grants, 30s original token TTL,
+6s authorization lease, explicit removal cutoff and independent refresh/revoke
+loops unchanged. No key goes to browser/Vercel public env. Later verify real
+control-plane reachability and corporate WebRTC/TURN access before actual audio.
+Do not start a second service to test Cloud readiness. The Step 3 security protocol
+below specifies genuine original/refreshed replay and active voice timing; mocks
+and new-token denial are not substitutes.
+
+**K. Manually deploy Vercel beta.** Only after the separately approved beta
+environment/configuration is reviewed and Railway is ready, the owner may run
+from the linked **repository root**:
+
+```sh
+vercel deploy --prod
+```
+
+Here `--prod` selects the **dedicated beta project's** stable alias/environment;
+it is not permission to deploy the existing production SaaS. Confirm project/scope
+first; stop if either is wrong. Do not execute this command during preparation.
+No Vercel CLI build/deploy/project-link action was executed here. Verify the exact stable
+domain, `/api/health`=200, `/api/ready`=200 and server-only bundle boundaries after
+that future deploy; do not turn readiness 503 into an unconditional 200.
+
+**L. Authenticated end-to-end test.** Normally register/verify or sign in dedicated
+accounts; test protected workspace, refresh/logout/recovery, admission OPTIONS,
+real WSS upgrade/reconnect, names/presence, persisted/deduplicated chat, Phaser
+assets/canvas, explicit voice join and real bidirectional audio. Validate zone
+exit, tab refresh/close, microphone/device cleanup and UI error/draft retention.
+Vercel logs/platform request telemetry must redact callback/invitation proof,
+cookies, bodies and reconnect headers; inspect only sanitized evidence.
+
+**M. Multi-company isolation.** Use the designated second company and its own
+verified session; exercise office/chat/voice denials while positive own-company
+access works. Remove only the authorized disposable pilot member, test active
+voice removal against 10s and both original/refreshed Cloud token replay before
+expiry, retaining proof only in operator memory. Do not loosen RLS or use a
+privileged token to make these tests pass. The existing Step 3 protocol below
+details timing bounds and distinct original/refreshed runs.
+
+**N. Six–ten-member pilot.** Run the existing Step 3 schedule below with 6–10 total
+Company A members (admin included in capacity), a separate Company B and real
+headsets/listeners. Record actual counts, frame/latency/resource samples, chat
+persistence, voice, recovery and leave cleanup. Synthetic browser/transport
+numbers in this report are not completed pilot observations. All hosted pilot
+rows remain NOT TESTED until that session is actually executed.
+
+**O. Safe rollback.** Preserve a compatible known-good source/build and securely
+stored provider environment/map pair before replacement. Pause the beta, stop and
+confirm the failed/current Railway authority, then manually upload/redeploy the
+known-good backend as a **cold** replacement. Restore the matching Vercel beta
+deployment/alias through the intended beta project's deployment controls. Confirm
+health/readiness, Auth/origins and explicit user reconnect/rejoin. Do not invoke
+an overlapping Railway rollback/redeploy while an authority is still running.
+Never reset/delete Supabase data, down-migrate, delete Auth users or rotate Cloud
+keys as an unreviewed rollback shortcut. Hosted rollback is NOT TESTED here.
+
+### Automated validation and actual limitations
+
+| Check | Result / scope |
+| --- | --- |
+| Clean frozen install | PASS: isolated workspace copied only manifests/lock/workspace and then explicit sources/assets/config, **no env files**. pnpm 10.34.7 installed 549 locked packages. Backend and frontend builds also pass using that clean dependency tree |
+| Existing workspace install attempt | Initially blocked by pre-existing pnpm module metadata/purge-without-TTY guard; no current modules were purged. Isolated validation above completed instead. No production secret/config was involved |
+| Install-script policy | Existing allowlist retained; pnpm reported ignored optional esbuild/msgpackr-extract scripts. No approve-builds/security relaxation was made; both clean builds pass |
+| Lint/typecheck | PASS, both apps, zero lint warnings and strict route/type checks |
+| Production builds | PASS, exact filtered realtime and web commands in current workspace, and again from isolated clean dependencies |
+| Application/realtime suites | PASS, **95 + 24 = 119**, retaining Step 3 shutdown/admission and prior security regressions |
+| `pnpm test:deployment` | PASS, **2** configuration/upload-policy tests; public source inclusion and local secret/cache exclusions |
+| Database/setup regressions | PASS, **6** runner tests; 14 chat, 54 team, 26 foundation assertions plus profile access guards, disposable PostgreSQL/rollback fixtures |
+| Production routes/live Supabase denials | PASS, **43**; Auth/SSR/recovery, private caching, anonymous grants, malformed proof, voice API and deferred public bundles |
+| Configured compiled realtime entry | PASS, **2** tests: dynamic PORT + actual compiled/shared/map startup with Cloud intentionally disabled, readiness 503 when voice absent, denial paths, and missing-config exit **1** in ~595ms |
+| Chromium suites | PASS, **4/4**, actual chat/Phaser/composition/voice controls with synthetic identity/store/media boundaries |
+| Hosted Vercel / Railway | NOT TESTED / NOT CONFIGURED; no provider project/variables/domain/adapter/image/signal path certified |
+| Real pilot, audible Cloud media, replay and measured Cloud revocation | NOT TESTED in Step 3A; prior user-reported Step 1 results remain historical, not new hosted proof |
+
+An initial compiled-entry run exceeded the new test's 5s cold-import watchdog
+while installation/browser work was concurrent. An isolated diagnostic exited 1
+in ~678ms; the focused rerun exited 1 in ~636ms. The fixture watchdog was adjusted
+to 15s (20s test budget), and the final two-test rerun passes. This changes **no
+application security, token, lease or admission timeout**; no startup defect was
+claimed from that single harness timeout. No unresolved final test failure.
+
+Final lab measurements remain synthetic/local: ten transport clients, 24 ticks
+over 1.201s (20Hz), 0.187ms mean simulation work/tick, 1,429 payload bytes to one
+observer (~1,190 bytes/s), first remote movement 106ms, synthetic-store chat 21ms.
+Chrome software-rendering sample: 41.7fps one avatar, 43.7fps ten avatars; chat
+synthetic commit observation 45ms, short panel samples 48.3/60fps. These are not
+Vercel/Railway network latency, a real Cloud call or a hardware-GPU pilot benchmark.
+
+Validation commands:
+
+```sh
+pnpm lint
+pnpm typecheck
+pnpm --filter @virtual-office/realtime build
+pnpm --filter @virtual-office/web build
+pnpm test
+pnpm test:deployment
+node --test scripts/chat-database.test.mjs scripts/team-database.test.mjs scripts/test-organizations.test.mjs
+node --experimental-strip-types --test scripts/test-realtime-live.mjs
+node --test --test-concurrency=1 scripts/test-chat-browser.mjs scripts/test-communication-browser.mjs scripts/test-office-browser.mjs scripts/test-voice-browser.mjs
+```
+
+The existing 43 route/live-negative checks were executed from `apps/web` using
+the command recorded in the Step 3 section below. New configuration tests check
+the local glob policy; they do not claim an actual Vercel archive upload. The
+compiled tests execute Node arguments/CWD directly on Windows; Linux shell exec,
+Railpack image construction, provider TLS/WS forwarding and stop/replacement
+behavior remain future hosted checks.
+
+### Final state and blockers
+
+| State | Result |
+| --- | --- |
+| Prepared locally | YES — configuration, full matrix, A–O guide, fail-closed/local regressions and clean builds complete |
+| Configured remotely by this task | NO — no Vercel/Railway/Supabase/LiveKit/Resend setting changed |
+| Deployed | NO — no staging/beta/production deployment performed |
+| Tested with real hosted users | NO — no pilot group/session supplied or created |
+
+Remaining owner requirements: reserve actual stable domains and intended provider
+projects/environments; separately approve any deployment; configure secrets and
+verified invitation/Auth email delivery; enforce cold replacement/one authority;
+review host privacy logging and access/protection; prepare verified test companies,
+6–10 participants/admin and real audio devices; execute hosted isolation, replay,
+revocation, recovery and pilot measurements. Do not repeatedly retry unsupported
+email recipients or unavailable authenticated sessions to fill those gaps.
+
+**Step 3A preparation merge-ready: YES. Deployment preparation complete: YES.
+Hosted beta ready: NO.** Parent Step 3's real-world release gate remains NO until
+its actual pilot passes. Work stops at Step 3A; deployment and Step 3B were not begun.
+
+## Historical record — Phase 5 Step 3 — Private beta environment and real team pilot
 
 Date: 2026-10-22. Branch confirmed by reading `.git/HEAD`:
 `feature/p5-s03-private-beta-pilot`. The user explicitly answered **“not
 configured”** when asked about an existing hosted environment and pilot group.
 No staging/production deployment, infrastructure creation, Git command, migration,
 account creation, email send or tenant-data change was performed. The sections
-below Step 3 are historical; the Step 2 merge-ready result is preserved.
+below Step 3 are historical; the Step 2 merge-ready result is preserved. Step 3A
+above now records provider preparation; the real-team release gate here remains outstanding.
 
 **Merge-ready: NO for Step 3 acceptance. Private-beta deployment-ready: NO.**
 The narrow shutdown fix and all available regressions pass. Environment audit and
