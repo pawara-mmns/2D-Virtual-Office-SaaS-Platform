@@ -2,9 +2,10 @@
 
 A multi-tenant 2D virtual office SaaS platform for distributed teams, with private
 pixel-art offices, realtime movement, chat and meeting-zone voice. **Phase 5
-Step 2 adds operational readiness checks and configuration/logging safeguards.**
-See the [current private-beta validation and release checklist](docs/communication-polish-validation.md)
-for executed checks, user-reported Step 1 results and deployment prerequisites.
+Step 3A prepares Vercel frontend and Railway realtime hosting, preserving Step 3's
+shutdown admission fixes.** Hosting and the real pilot remain unconfigured.
+See the [provider settings, environment matrix and manual deployment guide](docs/communication-polish-validation.md)
+for the prepared configuration and outstanding release gates. No deployment was performed.
 
 Six original characters can be previewed and saved through Avatar settings in
 the office. Preferences use existing self-scoped Supabase profiles; movement and
@@ -284,6 +285,7 @@ install pnpm 10.34.7 with `npm install --global pnpm@10.34.7` first.
 | `pnpm test:voice:routes` | Check production voice API denials, no-store responses and browser credential boundaries |
 | `pnpm test:voice:browser` | Isolated voice UI with synthetic authorization/microphone denial; no real media or Cloud; build first |
 | `pnpm test:realtime:live` | Start the built server and check configured-project negative paths; no accounts |
+| `pnpm test:deployment` | Check Railway build/start/readiness settings and Vercel upload exclusions locally |
 | `pnpm check:realtime:env` | Report configuration presence and matching project identity without values |
 | `pnpm test:smoke` | Start a production build temporarily and check HTTP routes |
 | `pnpm test:live` | Opt-in configured-project connectivity and invalid-proof checks |
@@ -373,7 +375,9 @@ terminals using the host's managed lifecycle. Run exactly one voice authority fo
 a LiveKit project/namespace: its restart sweep removes orphaned participants.
 Do not perform overlapping realtime restarts or start a second Cloud-enabled
 test server. Graceful realtime shutdown immediately reports not-ready and awaits
-voice cleanup before closing rooms. Budget at least 15 seconds for shutdown and
+voice cleanup before closing rooms; new office/voice admission and WebSocket
+upgrades are rejected during drain, including late office authorization results.
+Budget at least 15 seconds for shutdown and
 verify actual host signal delivery before beta. A restart interrupts active calls;
 users explicitly rejoin. Keep the prior application artifact and compatible
 environment for rollback; no database rollback is needed for this step.
@@ -382,6 +386,39 @@ Deployment proxy/error logs must redact `/invite/*`, `/auth/confirm` query strin
 cookies, Authorization headers, WebSocket subprotocol proof and request/action
 bodies. Next development logs suppress one-time-link routes and Server Function
 arguments. Do not add token-bearing URLs to diagnostics or external monitors.
+
+### Prepared Vercel and Railway hosting
+
+This is a shared monorepo. Vercel uses Root Directory `apps/web`, Framework
+Preset **Next.js**, Node **24.x**, and includes source files outside that root.
+Use Corepack with the root `packageManager` pin: install
+`corepack pnpm install --frozen-lockfile` and build `corepack pnpm build` from
+the selected web root. Leave the framework output setting at its default.
+No `vercel.json`, custom server or multiplayer function is needed. The root
+`.vercelignore` excludes local env files/keys and dependency caches from CLI uploads.
+
+Railway uses the **repository root**, not an isolated `apps/realtime` upload,
+and `/railway.json`. It builds `pnpm --filter @virtual-office/realtime build`
+and starts `cd apps/realtime && exec node --env-file-if-exists=.env dist/apps/realtime/src/index.js`.
+The start command preserves the shared map path and forwards signals to Node.
+Use Railway-injected `PORT`, `NODE_ENV=production`, `RAILPACK_NODE_VERSION=24`,
+one replica, Serverless/sleeping disabled, and the existing `/ready` startup gate.
+The configuration allows 120s readiness warm-up, 30s drain and three failure restarts.
+
+Reserve a stable frontend HTTPS origin before configuring realtime's exact
+origin allowlist. After separate deployment approval, start Railway first, enter
+its public **HTTPS** origin as Vercel `NEXT_PUBLIC_REALTIME_URL`, configure
+Supabase callbacks/email, and manually deploy the frontend. The SDK upgrades
+that HTTPS realtime origin to WSS; LiveKit's server setting remains a WSS origin.
+Vercel must use Railway's public HTTPS URL, not localhost or private HTTP DNS.
+
+**Stop the previous authority before any Railway replacement**, including a local
+development server using the same LiveKit namespace. Railway's normal replacement
+can start the new container while the old one is running, even with zero extra
+overlap time. This application's orphan sweep requires a manual cold replacement;
+zero overlap seconds and one replica alone do not enforce it. Keep deployments
+manual with no Git-triggered pipeline. Full A–O setup, testing, rollback and provider
+documentation links are in the validation report. These instructions were not executed.
 
 ## Authentication behavior and manual test checklist
 
@@ -485,8 +522,11 @@ These are scope boundaries; completed foundations and future work are distinguis
 Each phase requires a separate implementation task. The local office engine is
 implemented with chat/status and meeting-zone voice. Phase 5 Steps 1–2 add
 stabilization and private-beta operational readiness; see the current validation
-report above. Container infrastructure and later product features remain deferred.
-Stop at Phase 5 Step 2.
+report above. Step 3 adds the private-beta environment requirements and real-team
+pilot runbook; its real pilot remains blocked on configuration and participants.
+Step 3A supplies the Vercel/Railway preparation and manual deployment instructions.
+Container infrastructure and later product features remain deferred.
+Stop at Phase 5 Step 3A; no deployment or Step 3B is included.
 
 ## Organization setup
 
