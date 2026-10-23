@@ -1,26 +1,31 @@
 # Architecture and scope
 
-## Current foundation
+## Current foundation, authentication, and organizations
 
 This repository uses pnpm workspaces without an additional task runner. Only
-`apps/web` is an executable workspace. Root build, lint, and typecheck commands
+`apps/web` and `apps/realtime` are executable workspaces. Root build, lint, and typecheck commands
 run recursively so future workspaces can participate by defining those scripts.
 
 The web application uses the Next.js App Router. Pages and layouts are Server
 Components by default. The landing page is statically rendered, uses system
-fonts, and has no application client components or third-party scripts. The
-office illustration is server-rendered SVG artwork, not a game runtime.
+fonts, and its page content has no application client components or third-party
+scripts. The office illustration is server-rendered SVG artwork, not a game runtime.
 
 `GET /api/health` returns HTTP 200 with `{"status":"ok","service":"web"}`
 and `Cache-Control: no-store`. It reports web process availability only; it does
-not check any future service or database.
+not check dependencies. Separate `/api/ready` and realtime `/ready` routes report
+bounded dependency readiness, without tenant reads or privileged credentials;
+see the operational contract in README. These checks do not authorize users or
+prove working media. The shared probe utility is server-only in usage and is
+not imported into Phaser, client components or normal page-loading paths.
 
 ## Code placement
 
 - `src/app`: routes, layouts, page composition, and route handlers.
 - `src/components`: reusable presentation components.
-- `src/features`: future feature-specific UI and business logic; create when needed.
-- `src/lib`: future shared utilities and server integrations; create when needed.
+- `src/features/auth`: authentication UI, validation, actions, and access rules.
+- `src/features/organizations`: organization validation, RPC/data access, and UI.
+- `src/lib/supabase`: centralized Supabase client and session-refresh utilities.
 
 Keep business rules in feature modules rather than presentation components.
 Introduce abstractions only when actual reuse or complexity calls for them.
@@ -28,27 +33,191 @@ Use `@/*` for imports within `apps/web/src`.
 
 ## Future service boundaries
 
-The workspace patterns reserve `apps/*` and `packages/*`. Add `apps/realtime`
-for a dedicated Colyseus process and `packages/shared` for cross-service contracts
-when those phases begin. No empty service packages are initialized now.
+`apps/realtime` runs one persistent Colyseus process. `packages/shared` contains
+map validation, avatar definitions, movement contracts and the reconnect transport
+adapter. Both applications compile these pure sources; no generated shared build
+is needed to run web tests. The map JSON remains the canonical existing web asset.
 
-Phaser will own rendering and local movement in a lazily loaded office view.
-Keep its game loop separate from React state. LiveKit will handle voice, while
-Supabase will supply PostgreSQL, authentication, and storage. None of these
-dependencies, credentials, schemas, or integrations are part of this step.
+Phaser owns rendering in the lazily loaded office view. Colyseus owns movement
+and collision simulation; its state drives interpolated sprites. React receives
+only connection and presence changes. LiveKit will handle future voice.
+Supabase Auth is configured through the two public environment variables in
+`apps/web/.env.example`. Organization schema/RLS and server data access are now
+defined in the Step 3 migration. Remote application has a separate approval gate.
+Storage, realtime, and voice integrations remain deferred.
 
-Tenant isolation must be designed and enforced at data and realtime service
-boundaries in its assigned phase; the foundation makes no isolation guarantees.
+## Authentication boundary
+
+`src/lib/supabase` owns browser/server clients and cookie refresh. Next.js 16
+`src/proxy.ts` refreshes sessions with `getClaims()` and marks auth/dashboard
+responses private and uncached. The Proxy does not grant access: the dashboard
+calls `requireUser()`, which uses a fresh `getUser()` lookup and checks
+`email_confirmed_at`. Authentication failures deny access. Never authorize using
+`getSession()` cookie user data.
+
+`src/features/auth` owns server actions, validation, access helpers, and form UI.
+Server Actions provide Next.js origin checks for form mutations. Passwords are
+validated on the server and never returned in action state. Errors shown to users
+are controlled messages, not raw provider exceptions. Session cookies follow the
+Supabase SSR package defaults, which permit browser-client access; do not treat
+cookie contents as trusted identity. No custom JWT signing or auth tables exist.
+
+Signup verification uses a `token_hash` email template and `verifyOtp`. Accepted
+types are limited to `email` and `recovery`; destinations are fixed local paths.
+Recovery GET requests transfer the opaque token to a 10-minute HttpOnly cookie
+scoped to `/reset-password`, then redirect to a clean URL. Presence of this cookie
+only enables a generic form. On submission Supabase must verify the token with
+`type: recovery` before `updateUser` can run; an existing session is insufficient.
+Deferring verification avoids consuming recovery tokens through email scanners.
+The cookie is cleared after the attempt. If verification consumes a token but the
+password update fails, users must request a new link. Successful resets attempt
+global sign-out and always clear the local session. Existing access tokens can
+remain valid until expiry, as with Supabase sign-out generally.
+
+Missing configuration disables forms with setup instructions, leaves public
+routes functional, and denies dashboard access. No placeholder credentials are
+used. Live Supabase tests require the user's existing configured project.
+
+## Organization boundary
+
+Organization creation uses one PostgreSQL RPC transaction for profile, organization,
+OWNER membership, and default office. User/request UUIDs give retries an exact
+idempotency key; tenant identity and roles come from trusted Auth/database context.
+All four public tables have RLS and restricted grants. Private read-only helpers
+avoid circular membership policies. Direct authenticated membership writes remain
+denied; Step 4 adds the narrowly authorized operations described below.
+
+The active organization is represented by `/workspace/[organizationId]`. Pages
+and data access verify the caller, membership, and RLS-visible records. The URL or
+a client state value never grants access. React request-scoped auth deduplication
+and pre-loading-boundary authentication preserve private HTTP redirects; pages
+and data helpers retain their checks. All private routes are no-store.
+
+See [organization architecture](organizations.md) and [actual validation status](organization-validation.md).
+SQL syntax/mock tests do not prove deployed tenant isolation. Real database tests
+and application require the approved development migration; no guarantees about
+remote RLS are claimed before execution. Realtime tenant authorization remains a
+future service responsibility.
+
+## Team and invitation boundary
+
+The applied Step 4 migration adds hashed invitations, private audit records,
+authorized membership functions and a last-owner guard. Organization row locks
+serialize reservations, acceptance and membership changes. Existing tables and
+Auth internals are preserved. Public-role table writes remain denied; scoped
+definer functions independently verify identity, tenant and permission hierarchy.
+
+`features/invitations` separates validation/token handling, data access and real
+Resend delivery; `features/members` separates server authorization/actions and
+membership presentation. Database and external email requests are separate steps,
+with explicit uncertainty handling and token rotation on intentional resend.
+Raw invitation proof never enters database rows or member-list props. The optional
+development/test-only link mode returns it once in the authorized manager's action
+result for copying, using the existing create/rotation RPCs. Production rejects
+link mode before writes. Email mode keeps proof in server delivery only. HttpOnly cookie
+continuation permits only fixed local post-login paths. All team/invite routes
+are private/no-store. Provider credentials are server-only.
+
+See [team architecture and security](team-invitations.md) and
+[actual validation/application status](team-invitations-validation.md). Isolated
+PostgreSQL tests execute real roles and RLS with synthetic local Auth fixtures;
+live Auth/PostgREST, provider delivery and concurrent sessions remain distinct
+verification requirements. Colyseus now revalidates Auth/membership on admission,
+reconnection and periodically, with a 15-second hard authorization lease. Future
+media services still need equivalent revocation handling. See
+[multiplayer validation](realtime-multiplayer-validation.md).
 
 ## Visual direction
 
-Use an original, top-down 2D pixel office on a 32×32 logical tile grid, crisp
+The first original, top-down 2D pixel office uses a 32×32 logical tile grid, crisp
 nearest-neighbor scaling, consistent sprite dimensions, and uncluttered layouts.
-Future assets should include office furniture and decoration. Four-direction
-avatars and subtle idle/walk animation belong to the engine phase. Load texture
-atlases and office assets only when entering an office.
+Office furniture, decoration and one four-direction animated avatar are included.
+Texture atlases and office assets load only when entering the office.
 
 Surrounding application UI uses clean typography, accessible controls, restrained
 colors, and consistent spacing. Avoid mixing realistic or 3D art with the pixel
-environment. The current static illustration establishes visual direction only;
-it is not a map format, sprite sheet, or avatar implementation.
+environment. The landing page's static illustration remains separate from the
+interactive Tiled map and sprite sheet; its page does not load Phaser.
+
+## Local office engine
+
+`/workspace/[organizationId]/office` verifies the user, active organization and
+membership before reading the existing office. Missing/inaccessible tenant IDs
+share a denied response. No schema change or synthetic office record is needed.
+
+`features/office` contains the server access boundary, client-only dynamic UI,
+engine lifecycle, scene, input and pure map/movement/camera rules. Only the effect
+imports the Phaser factory; a serialized lifecycle prevents remount races and
+awaits deferred destruction. The frame loop does not update React or Supabase.
+
+The original Tiled JSON separates Floor, Architecture, Furniture and binary
+Collision layers from spawn/area Markers. Phaser Arcade Physics uses a foot body
+and tile collisions. Focus-scoped input leaves form controls/Tab alone. Integer
+zoom, rounded pixels and a single ResizeObserver maintain crisp bounded rendering.
+The original standalone engine harness is retained for regressions. The actual
+application uses authorized multiplayer; disconnected state freezes/hides players
+instead of simulating a private fallback. Assets remain first-party. See
+[map/lifecycle history](phaser-office-validation.md) and the current
+[multiplayer report](realtime-multiplayer-validation.md).
+
+## Avatar preference boundary
+
+`packages/shared` owns the six-preset allowlist and safe names; `features/avatars` owns self-profile
+read/save service and settings action/UI. Saves resolve verified identity from
+Auth, update only `avatar_key`, and preserve other profile fields. The existing
+profiles grants and self-scoped RLS were verified in the deployed catalog; no
+migration or schema change was needed. Unknown legacy keys use the default.
+
+`office/engine/player-avatar.ts` owns one body, sprite and label, reusing the scene's
+renderer. All preset frames share one atlas and collision body. Multiplayer positions
+and animation intent come from validated server state.
+An appearance change updates the existing avatar without resetting the scene or
+camera. Frame-loop data is separate from React; animation follows actual resolved
+movement and stops at obstacles. Labels use profile names with email suppression,
+truncation and camera-edge handling. Full details and manual merge checks are in
+[avatar-system-validation.md](avatar-system-validation.md).
+
+## Office Chat and availability (Phase 3 Step 2)
+
+The existing office socket carries `chat.send`, committed `chat.message`, fixed
+`chat.error` and `availability.set` events. Chat content never enters movement
+Schema state. Each send rechecks verified active membership, then a user-scoped
+Supabase RPC serializes against organization membership changes and enforces
+sender identity, idempotency and five messages per ten seconds. No privileged
+application client is used. The narrowly scoped send function is SECURITY DEFINER
+because direct table writes are denied; the bounded history RPC is SECURITY
+INVOKER and uses RLS as well as explicit authorization.
+
+The approved development migration creates one fixed channel per organization/office and
+append-only messages. A trigger covers future offices and an idempotent backfill
+covers existing offices. Saved sender names avoid per-message profile lookups.
+Monotonic bigint IDs are transported as strings and used for keyset pagination.
+The UI retains at most 150 messages and advances its window for older pages.
+
+Availability is an ephemeral field of the existing player state; offline status
+still comes from the connection. Presentation-only participant fingerprints
+prevent React updates for movement patches. User/office keys isolate cached chat
+and drafts across workspace switches. The existing 15-second authorization lease
+and reconnect checks apply to chat and status. See
+[migration status, validation and manual QA](workspace-chat-validation.md).
+
+## Meeting-zone voice (Phase 4 Step 1)
+
+The shared Tiled VoiceZones rectangle is evaluated against Colyseus-authoritative
+collision-body coordinates. Private zone/count events update the contextual UI
+only when presentation changes. Movement/chat remain on the existing socket;
+microphone media uses a lazily loaded LiveKit Cloud connection after explicit join.
+
+The same-origin Next.js voice token API verifies Supabase identity, then forwards
+the bearer to the configured realtime server. That server independently verifies
+Auth/RLS membership and binds the user to the actual connected in-zone office
+session. It reserves one voice admission per user and signs a short microphone-only
+token for an opaque tenant room. Server API credentials never enter web bundles.
+No zone coordinates or eligibility claims from the browser are trusted.
+
+Zone/socket/office loss schedules Cloud removal with an explicit token cutoff.
+Independent voice authorization checks, a six-second lease and orphan sweeps back
+client track cleanup. New joins pause when Cloud checks fail; process/provider
+outages cannot guarantee the ten-second removal target. Cloud replay/removal and
+actual two-way audio still require live verification. See
+[voice architecture, setup and actual results](livekit-voice-validation.md).
