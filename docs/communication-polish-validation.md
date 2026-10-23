@@ -4,9 +4,11 @@
 
 **Merge-ready: YES for this scoped voice fix and preventive hardening.
 Broader Cloud security/release sign-off remains
-incomplete.** The user reports the existing hosted app stayed connected for at
-least 60 seconds and passed leave/rejoin after the conflicting local authority
-was stopped. This is a user-reported manual containment result, not an automated
+incomplete.** The user reports the existing hosted app passed single-user voice,
+at least 60 seconds of connection stability, leave/rejoin, simultaneous two-user
+voice, two-user audio communication and multiplayer presence, with no unexpected
+disconnections after the conflicting local authority was stopped. These are
+user-reported manual containment results, not automated
 test or a hosted test of the undeployed code. This checkout's `.git/HEAD` references `main`; no Git command,
 branch change, commit, deployment, migration or remote configuration change was
 performed. Existing historical validation sections below remain historical.
@@ -53,8 +55,9 @@ single-participant removal with two authorities sharing one provider namespace.
 The reported banner itself cannot prove PARTICIPANT_REMOVED: the old UI discarded
 the reason and used the same banner for every established-session disconnect.
 The shared-namespace operational conflict is confirmed and its failure mechanism
-reproduced. The subsequent user-reported hosted retest passed after the local
-authority was stopped, with no deployment or credential change. A matching
+reproduced. Subsequent user-reported hosted retests passed for one user and for
+two simultaneous voice users with audio communication and multiplayer presence
+after the local authority was stopped, with no deployment or credential change. A matching
 historical SDK/Cloud event is still missing. CLIENT_INITIATED, timeout and other
 reasons have not been conclusively ruled out for that incident.
 
@@ -68,7 +71,7 @@ reasons have not been conclusively ruled out for that incident.
 | `apps/web/src/features/voice/disconnect.ts` | Translate installed SDK disconnect enums into fixed safe reason/message categories. A service removal does not assert membership revocation |
 | `apps/web/src/features/voice/voice-session.tsx` | Record actual SDK reason, state, UTC timestamp, elapsed time and opaque participant correlation; record effect cleanup; remove added observers on cleanup. Preserve SDK reconnection and media teardown |
 | `apps/web/src/features/voice/voice-bar.tsx` | Distinguish an explicit user stop from a failure in timestamped diagnostics, without logging message contents or admission proof |
-| `apps/web/src/features/voice/voice.test.ts` | Reason-specific/unknown-reason privacy regression |
+| `apps/web/src/features/voice/voice.test.ts` | Reason-specific/unknown-reason privacy regression; finalization makes the existing watchdog-stage test deterministic with mocked timers |
 | `apps/realtime/src/tests/voice.test.ts` | One/two-user valid renewals, environment isolation through the actual provider inventory method, competing-authority reproduction and concurrent inventory/timer removal regression |
 | `scripts/test-voice-browser.mjs` | Single-user simulated session, distinct disconnect messages, explicit leave/rejoin, stopped tracks and application disconnect-listener cleanup |
 | `docs/communication-polish-validation.md` | This actual-results update |
@@ -76,7 +79,9 @@ reasons have not been conclusively ruled out for that incident.
 ### Follow-up scope review — 2026-10-23, Asia/Colombo
 
 Reviewed the **nine code/configuration/test files** listed above, plus this existing
-report. **Retained all nine; no further source changes were necessary.** The
+report. **Retained all nine; no unnecessary experimental application changes
+were identified.** Finalization changes only the existing timeout-stage test to
+remove a reproduced wall-clock race; production code remains as reviewed. The
 environment separation is a small guard against the observed configuration
 collision; it preserves production room names. Shared removal fixes a separately
 reproduced race. The fixed-category server/client diagnostics and accurate UI
@@ -155,8 +160,12 @@ cold handover; this fix is environment isolation, not distributed coordination.
 | Hosted Leave Voice | PASS — user-reported manual | Explicit leave passed |
 | Hosted Rejoin Voice | PASS — user-reported manual | Rejoin passed |
 | Hosted unexpected disconnects / additional errors during that retest | PASS — user-reported manual | User reported none; observation limited to this retest |
-| Hosted two-user bidirectional real audio | NOT TESTED | No controlled authenticated browser/audio sessions executed here |
+| Hosted two-user simultaneous voice | PASS — user-reported manual | Two users joined voice after the conflicting local server was stopped; agent did not operate their sessions |
+| Hosted two-user audio communication | PASS — user-reported manual | User confirmed real audio communication; no automated audio/per-direction measurements or session traces supplied |
+| Hosted multiplayer presence with two voice users | PASS — user-reported manual | User confirmed multiplayer presence passed |
+| Unexpected disconnections during the hosted two-user test | PASS — user-reported manual | User reported none; limited to the reported test, with no supplied duration |
 | Hosted revocation ≤10 seconds and original/refreshed replay | NOT TESTED | No membership mutation, replay attempt or actual Cloud revocation timing measurement performed |
+| Hosted cross-company Cloud room admission and revoked-member new-token denial | NOT TESTED | Separate authenticated Cloud security scenarios were not part of the reported voice tests |
 | Historical SDK reason / exact historical removal caller | NOT TESTED | Missing browser/Cloud event correlation; do not infer it from HTTP 200 or the old banner |
 
 The first root script invocation hit a global pnpm 12 versus pinned 10.34.7 PATH
@@ -176,7 +185,7 @@ ten synthetic rendered players on Chrome 156 / SwiftShader software WebGL; these
 short local laboratory samples are not hosted performance or real-user/audio
 measurements. The final freshly compiled backend rerun also passed **2/2**.
 
-**Follow-up regression run:** reran `pnpm test`, `pnpm lint`, `pnpm typecheck`
+**Previous follow-up regression run:** reran `pnpm test`, `pnpm lint`, `pnpm typecheck`
 and `node --test scripts/test-voice-browser.mjs` after reviewing the retained
 source. **All PASS: 124 tests (96 web + 28 realtime), both-app lint/typecheck,
 and the expanded voice browser suite (1/1).** No new failure was observed. The existing
@@ -186,11 +195,27 @@ as new hosted validation in this documentation-only follow-up. Local transport
 tests use an isolated fake voice provider; the browser uses simulated media/Auth.
 Neither starts the stopped conflicting Cloud authority.
 
+**Finalization regression run (2026-10-23, Asia/Colombo):** the first `pnpm test`
+run failed one existing watchdog-stage fixture: it expected `media` but observed
+`connected`. The fixture used 5 ms watchdogs and a 15 ms real sleep without
+ensuring the async stage had started; under concurrent load the gate could
+release first. Replaced these sleeps with Node's existing mocked timers and an
+explicit stage assertion before advancing the watchdog. The focused voice unit
+suite passed **9/9**. This is a test determinism correction, not evidence of a
+hosted product defect; no runtime timeout, lease, cleanup or authorization rule
+changed. **Final rerun: PASS — 124/124 application/realtime tests (96 web + 28
+realtime), both-app lint and both-app typecheck.** The isolated voice browser suite passed
+**1/1**, with synthetic media/Auth only. No conflicting local server was restarted,
+and no production configuration or credentials were changed during
+this finalization.
+
 ### Hosted follow-up (manual; no deployment performed)
 
 1. **Completed, user-reported manual PASS:** on the existing hosted Vercel app,
    initial connection, at least 60 seconds stationary in the meeting room,
    explicit leave and rejoin; no unexpected disconnections or additional errors.
+   A subsequent user report also confirms simultaneous two-user voice, audio
+   communication and multiplayer presence, with no unexpected disconnections.
    Do not restart the stopped conflicting server. The preventive code changes
    remain undeployed; this result verifies containment only.
 2. If it disconnects again on the existing deployment, open the corresponding
@@ -210,10 +235,11 @@ Neither starts the stopped conflicting Cloud authority.
    teardown. CONNECTION_TIMEOUT/JOIN_FAILURE/MEDIA_FAILURE direct investigation
    to signaling/WebRTC, not membership assumptions. Temporary reconnection must
    retain the session and recover without a new Join click or duplicate tracks.
-4. Use two dedicated verified members of a test company and a second test company
-   for real audio/tenant checks. Validate microphone controls, supported device
-   switching, audio both ways, network interruption, refresh, zone exit, departure
-   and rejoin. Record heard audio separately from synthetic tracks.
+4. **Two-user voice/audio/presence: completed by user report.** Separate tests of
+   device switching, network interruption, browser refresh, zone-exit cleanup
+   and cross-company Cloud access were not established by that report. Keep
+   those checks separate from the reported conversation; do not infer full
+   lifecycle or tenant-security coverage from working audio.
 5. Only with authorized disposable memberships, measure revocation from the
    authoritative database change to actual Cloud participant removal/audio loss;
    target **≤10 s**. Separately test original and SDK-refreshed unexpired token
@@ -222,9 +248,10 @@ Neither starts the stopped conflicting Cloud authority.
 
 Scoped merge recommendation: **YES** for the reviewed preventive fix, removal
 race correction, diagnostics and regressions. This does not authorize a merge or
-deployment. The single-user hosted containment check has passed by user report;
-two-user bidirectional audio, active Cloud revocation within 10 seconds and
-original/refreshed-token replay remain **NOT TESTED**, and broader release
+deployment. Single-user stability, leave/rejoin, simultaneous two-user voice,
+audio communication and multiplayer presence have passed by user report.
+Active Cloud revocation within 10 seconds, original/refreshed-token replay and
+the separately listed Cloud authorization scenarios remain **NOT TESTED**. Broader release
 security sign-off remains incomplete. Correlate actual SDK/Cloud events if the
 failure recurs. No hosted deployment/configuration change was performed.
 

@@ -95,15 +95,19 @@ test("microphone denial, absent devices, provider failure and timeout report fix
     await lifecycle.operation; assert.equal(disconnected,1); assert.equal(message,voiceError({name})); assert.equal(message.includes("sensitive"),false);
   }
 });
-test("permission time is not a network timeout and each network failure identifies its actual stage", async () => {
+test("permission time is not a network timeout and each network failure identifies its actual stage", async (context) => {
+  context.mock.timers.enable({apis:["setTimeout"]});
   let permit!: (track: Capture) => void, message="", stopped=false;
   const pending=startVoice({capture:()=>new Promise((resolve)=>{permit=resolve;}),async connect(){assert.fail();},async publish(){assert.fail();},async disconnect(){}},()=>assert.fail(),value=>{message=value;},5);
-  await new Promise((resolve)=>setTimeout(resolve,15)); assert.equal(message,"");
+  context.mock.timers.tick(15_000); assert.equal(message,"");
   await pending.stop();permit({stop(){stopped=true;}});await pending.operation;assert.equal(stopped,true);
   for(const stage of ["signaling","media","publication"] as const){
     let finish!:()=>void;const gate=new Promise<void>(resolve=>{finish=resolve;});const stages:VoiceStage[]=[];let failed="",released=false;
     const lifecycle=startVoice({async capture(){return{stop(){released=true;}};},async connect(signal){if(stage!=="signaling")signal();if(stage!=="publication")await gate;},async publish(){if(stage==="publication")await gate;},async disconnect(){}},()=>assert.fail(),value=>{failed=value;},{timeoutMs:5,onStage:next=>stages.push(next)});
-    await new Promise((resolve)=>setTimeout(resolve,15));finish();await lifecycle.operation;
+    // Wait for the async capture/connect/publish stage before advancing its
+    // watchdog. Wall-clock sleeps race with unrelated load on CI/desktop runs.
+    await new Promise((resolve)=>setImmediate(resolve));assert.equal(stages.at(-1),stage);
+    context.mock.timers.tick(5);finish();await lifecycle.operation;
     assert.equal(released,true);assert.equal(stages.at(-1),stage);assert.match(failed,stage==="signaling"?/signaling timed out/:stage==="media"?/WebRTC media establishment timed out/:/publication timed out/);
   }
   assert.match(voiceError({name:"ConnectionError",reason:0,status:401},"signaling"),/rejected voice authorization/);
