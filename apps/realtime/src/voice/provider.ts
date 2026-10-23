@@ -17,11 +17,16 @@ export function voiceConfig(env: NodeJS.ProcessEnv) {
   const url = new URL(env.LIVEKIT_URL);
   // This step deliberately supports Cloud only: strict token revocation is required.
   if (url.protocol !== "wss:" || !url.hostname.endsWith(".livekit.cloud") || url.port || url.username || url.password || url.pathname !== "/" || url.search || url.hash) throw new Error("Configure a LiveKit Cloud WSS origin.");
-  return { url: url.origin, key: env.LIVEKIT_API_KEY, secret: env.LIVEKIT_API_SECRET };
+  return { url: url.origin, key: env.LIVEKIT_API_KEY, secret: env.LIVEKIT_API_SECRET,
+    ...(env.NODE_ENV === "development" || env.NODE_ENV === "test" ? { scope: env.NODE_ENV } : {}) };
 }
 export function livekitProvider(config: NonNullable<ReturnType<typeof voiceConfig>>): VoiceProvider {
   const hash = (value: string) => createHmac("sha256",config.secret).update(value).digest("hex");
-  const prefix = `vo1_${hash("virtual-office-voice").slice(0,12)}_`;
+  // Each environment owns its own inventory. A local development/test process
+  // must never sweep production participants when Cloud credentials are reused.
+  // Preserve the existing production namespace and outstanding room grants.
+  const scope = config.scope === "development" || config.scope === "test" ? `:${config.scope}` : "";
+  const prefix = `vo1_${hash(`virtual-office-voice${scope}`).slice(0,12)}_`;
   const client = new RoomServiceClient(config.url.replace("wss:","https:"),config.key,config.secret,{ requestTimeout: 2, failover: false });
   return {
     url: config.url, prefix,

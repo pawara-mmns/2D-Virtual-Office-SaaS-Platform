@@ -5,6 +5,7 @@ import { RoomContext, RoomAudioRenderer, StartAudio, TrackToggle, useConnectionS
 import type { VoiceAdmission } from "../../../../../packages/shared/src/voice.ts";
 import { avatarBaseFrame, safeAvatarKey, avatarDisplayName } from "../avatars/presets";
 import { createVoiceMount, startVoice, voiceError, type VoiceStage } from "./lifecycle";
+import { voiceDisconnect } from "./disconnect";
 
 function Devices({ kind, error }: { kind: "audioinput" | "audiooutput"; error(message: string): void }) {
   const onError = useCallback(() => error("Device selection failed. Check browser permissions and reconnect the device."),[error]);
@@ -57,13 +58,27 @@ export default function VoiceSession({ admission,leave,failed }: { admission: Vo
     // SDK error objects can include signaling details. Use fixed UI categories.
     setLogLevel(LogLevel.silent);
     let active = true, established = false;
+    const began = performance.now();
+    let participantId: string | undefined;
+    const diagnostic = (event: string, detail: { reason?: string; state?: string } = {}) => {
+      console.info("Voice lifecycle.",{ event,at:new Date().toISOString(),elapsedMs:Math.round(performance.now()-began),participantId,...detail });
+    };
     // Initial connection failure is reported by the rejected connect promise with
     // its exact stage/reason; don't overwrite it with a generic disconnect notice.
-    const onDisconnect = () => { if (active && established) callbacks.current.failed("Voice disconnected or access was revoked. Re-enter the meeting room and join again."); };
+    const onDisconnect = (reason?: number) => {
+      if (!active) return;
+      const detail = voiceDisconnect(reason);
+      diagnostic("disconnected",{ reason:detail.reason });
+      if (established) callbacks.current.failed(detail.message);
+    };
+    const onConnectionState = (state: string) => {
+      if (active && ["connected","connecting","disconnected","reconnecting","signalReconnecting"].includes(state)) diagnostic("connection_state",{state});
+    };
     const onDevicesError = (error: Error) => { if (active) setNotice(voiceError(error)); };
     const onSubscriptionError = () => { if (active) { setNotice("Remote audio subscription failed. Check the connection and retry voice."); console.warn("Voice connection failed.",{stage:"remote_audio_subscription",category:"subscription"}); } };
     room.on(RoomEvent.Disconnected,onDisconnect); room.on(RoomEvent.MediaDevicesError,onDevicesError);
     room.on(RoomEvent.TrackSubscriptionFailed,onSubscriptionError);
+    room.on(RoomEvent.ConnectionStateChanged,onConnectionState);
     const mounting = mount(() => startVoice({
       async capture() {
         const track = await createLocalAudioTrack({ echoCancellation:true,noiseSuppression:true,autoGainControl:true });
@@ -77,8 +92,14 @@ export default function VoiceSession({ admission,leave,failed }: { admission: Vo
       },
       async publish(track) { await room.localParticipant.publishTrack(track as LocalAudioTrack,{ source:Track.Source.Microphone }); },
       disconnect: () => room.disconnect(true),
-    },() => { established = true; if (active) setConnected(true); },(message) => { if (active) callbacks.current.failed(message); },{onStage(next) { if (active) { setStage(next); console.info("Voice connection stage.",{stage:next}); } }}));
-    return () => { active = false; room.off(RoomEvent.Disconnected,onDisconnect); room.off(RoomEvent.MediaDevicesError,onDevicesError); room.off(RoomEvent.TrackSubscriptionFailed,onSubscriptionError); void mounting.dispose(); };
+    },() => {
+      established = true;
+      // The server mints a random UUID identity, unrelated to a user's ID/email.
+      const identity = room.localParticipant.identity;
+      if (/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(identity)) participantId = identity;
+      if (active) { diagnostic("connected"); setConnected(true); }
+    },(message) => { if (active) callbacks.current.failed(message); },{onStage(next) { if (active) { setStage(next); console.info("Voice connection stage.",{stage:next,at:new Date().toISOString()}); } }}));
+    return () => { diagnostic("client_cleanup"); active = false; room.off(RoomEvent.Disconnected,onDisconnect); room.off(RoomEvent.MediaDevicesError,onDevicesError); room.off(RoomEvent.TrackSubscriptionFailed,onSubscriptionError); room.off(RoomEvent.ConnectionStateChanged,onConnectionState); void mounting.dispose(); };
   },[room,url,token,mount]);
   return <RoomContext.Provider value={room}>
     <RoomAudioRenderer />

@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { TokenVerifier } from "livekit-server-sdk";
+import { RoomServiceClient,TokenVerifier } from "livekit-server-sdk";
 import { voiceConfig,livekitProvider,type VoiceProvider } from "../voice/provider.ts";
-import { createVoiceService,VoiceError } from "../voice/service.ts";
+import { createVoiceService,VoiceError,type VoiceDiagnostic } from "../voice/service.ts";
 import { AccessDenied,type Authorization } from "../auth/authorize.ts";
 import { VOICE_LEASE_MS,VOICE_TOKEN_SECONDS,type VoiceZoneState } from "../../../../packages/shared/src/voice.ts";
 const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12,"0")}`;
@@ -16,6 +16,59 @@ function fixture() {
   };
   return {provider,removed,issued,members};
 }
+
+test("one or two valid voice participants survive repeated independent lease renewals and inventory sweeps", async (context) => {
+  context.mock.timers.enable({apis:["setInterval"]});
+  for (const count of [1,2]) {
+    const f=fixture(), events:VoiceDiagnostic[]=[]; let time=100_000;
+    const service=createVoiceService(async(token)=>({...auth(time),userId:token==="second-fixture"?uuid(4):uuid(1),token:String(token)}),f.provider,()=>time,event=>events.push(event));
+    try {
+      await service.poll();
+      for(let index=0;index<count;index++) {
+        const who={...auth(time),userId:index?uuid(4):uuid(1),token:index?"second-fixture":"synthetic-supabase-proof"};
+        service.observe(`session_${index}`,who,"Meeting Room",()=>{}); await service.join(who,`session_${index}`);
+        f.members.add(f.issued.at(-1)!);
+      }
+      for(let cycle=0;cycle<8;cycle++) {
+        time+=2000;context.mock.timers.tick(2000);await new Promise(resolve=>setImmediate(resolve));
+        await service.poll();service.check();await new Promise(resolve=>setImmediate(resolve));
+        assert.equal(f.removed.length,0); assert.equal(f.members.size,count);
+      }
+      assert.equal(events.filter(event=>event.event==="authorization_renewed").length,8*count);
+      assert.equal(events.filter(event=>event.event==="admission_issued").length,count);
+      assert.doesNotMatch(JSON.stringify(events),/synthetic-supabase-proof|second-fixture|Test member/);
+    } finally {await service.close();}
+  }
+});
+
+test("inventory lease expiry shares one removal with the lease timer, preserves its reason and releases admission", async () => {
+  const f=fixture(),events:VoiceDiagnostic[]=[];let time=100_000,release!:()=>void;
+  const gate=new Promise<void>(resolve=>{release=resolve;}),remove=f.provider.remove;
+  f.provider.remove=async(...args)=>{await gate;await remove(...args);};
+  const service=createVoiceService(async()=>auth(time),f.provider,()=>time,event=>events.push(event));
+  try {
+    await service.poll();service.observe("session_A",auth(time),"Meeting Room",()=>{});await service.join(auth(time),"session_A");f.members.add(f.issued[0]!);
+    time+=VOICE_LEASE_MS+1;const polling=service.poll();await new Promise(resolve=>setImmediate(resolve));service.check();
+    release();await polling;
+    assert.equal(f.removed.length,1,"Inventory and timer must not issue concurrent duplicate Cloud removals");
+    assert.equal(events.find(event=>event.event==="removal_requested")?.reason,"lease_expired");
+    await service.join(auth(time),"session_A");assert.equal(f.issued.length,2,"Completed removal releases the old local admission");
+  } finally {release();await service.close();}
+});
+
+test("a competing authority reproduces orphan removal and emits a distinct authority and opaque participant correlation", async () => {
+  const f=fixture(),events:VoiceDiagnostic[]=[];
+  const a=createVoiceService(async()=>auth(),f.provider,Date.now,event=>events.push(event));
+  let b:ReturnType<typeof createVoiceService>|undefined;
+  try {
+    await a.poll();a.observe("session_A",auth(),"Meeting Room",()=>{});await a.join(auth(),"session_A");f.members.add(f.issued[0]!);
+    b=createVoiceService(async()=>auth(),f.provider,Date.now,event=>events.push(event));await b.poll();
+    assert.equal(f.members.size,0,"One participant is sufficient to reproduce conflicting inventory authorities");
+    const admission=events.find(event=>event.event==="admission_issued")!,orphan=events.find(event=>event.event==="orphan_removal_completed")!;
+    assert.equal(orphan.participantId,admission.participantId);assert.notEqual(orphan.authorityId,admission.authorityId);
+    assert.equal(orphan.reason,"unknown_admission");
+  } finally {await b?.close();await a.close();}
+});
 test("LiveKit configuration is optional, server-only and Cloud-only; malformed partial configuration fails closed", () => {
   assert.equal(voiceConfig({}),null);
   for (const env of [{LIVEKIT_URL:config.url},{LIVEKIT_API_KEY:"fixture"},{LIVEKIT_API_SECRET:"fixture"}]) assert.throws(()=>voiceConfig(env));
@@ -35,6 +88,24 @@ test("official SDK signs short room-scoped microphone-only grants with opaque te
   const decoded=JSON.parse(Buffer.from((await provider.token(who,room,identity)).split(".")[1]!,"base64url").toString());
   assert.ok(decoded.exp-decoded.nbf <= VOICE_TOKEN_SECONDS); assert.equal(claims.name,"Test member");
   assert.deepEqual(JSON.parse(claims.metadata!),{avatarKey:"slate"}); assert.equal(JSON.stringify(claims).includes(config.secret),false);
+});
+
+test("development and test authorities cannot sweep production rooms even with identical Cloud credentials", async (context) => {
+  const env={LIVEKIT_URL:config.url,LIVEKIT_API_KEY:config.key,LIVEKIT_API_SECRET:config.secret};
+  const production=livekitProvider(voiceConfig({...env,NODE_ENV:"production"})!);
+  const development=livekitProvider(voiceConfig({...env,NODE_ENV:"development"})!);
+  const testing=livekitProvider(voiceConfig({...env,NODE_ENV:"test"})!);
+  const original=livekitProvider(config);
+  assert.equal(production.prefix,original.prefix,"Existing production room names are stable");
+  const rooms=[production.room(auth()),development.room(auth()),testing.room(auth())];
+  assert.equal(new Set(rooms).size,3);
+  context.mock.method(RoomServiceClient.prototype,"listRooms",async()=>rooms.map(name=>({name})) as Awaited<ReturnType<RoomServiceClient["listRooms"]>>);
+  for(const [index,provider] of [production,development,testing].entries()) {
+    assert.deepEqual(await provider.rooms(),[rooms[index]],"The provider's actual inventory excludes another environment's rooms");
+    const claims=await new TokenVerifier(config.key,config.secret).verify(await provider.token(auth(),rooms[index]!,uuid(8)));
+    assert.equal(claims.video?.room,rooms[index]);assert.equal(claims.video?.roomJoin,true);
+    assert.equal(claims.video?.roomAdmin,false);assert.equal(claims.video?.canPublishData,false);
+  }
 });
 test("admission requires the matching connected verified session in the authoritative zone and prevents duplicate/simultaneous rooms", async () => {
   const f=fixture(), who=auth();

@@ -1,5 +1,233 @@
 # Communication, stabilization and private-beta validation
 
+## Hosted voice disconnect investigation — 2026-10-23
+
+**Merge-ready: YES for this scoped voice fix and preventive hardening.
+Broader Cloud security/release sign-off remains
+incomplete.** The user reports the existing hosted app stayed connected for at
+least 60 seconds and passed leave/rejoin after the conflicting local authority
+was stopped. This is a user-reported manual containment result, not an automated
+test or a hosted test of the undeployed code. This checkout's `.git/HEAD` references `main`; no Git command,
+branch change, commit, deployment, migration or remote configuration change was
+performed. Existing historical validation sections below remain historical.
+
+### Evidence and root-cause boundary
+
+**Confirmed condition: local and hosted voice authorities shared one Cloud
+namespace. Leading explanation for the incident: conflicting orphan sweeps.**
+The incident's exact disconnect reason and historical removal caller remain
+unconfirmed; the manual improvement after stopping the local server strengthens
+the explanation without proving that attribution definitively.
+Read-only Railway CLI access confirmed project `adventurous-joy`, environment
+`production`, service `realtime`. It had one active successful deployment and one
+instance. Its current deployment was created at **2026-10-23 05:05:44.790 UTC**;
+the preceding deployment was marked REMOVED. The deployment log snapshot contained
+four startup/entry messages, including server/container startup around 05:07:39
+UTC, and no per-admission authorization, removal or SDK-disconnection events.
+
+Ten `/voice/token` HTTP records between **05:54:17.901 and 05:59:11.188 UTC** all
+returned **200**, with recorded `totalDuration` **352–627 ms**. This verifies those
+initial admission requests succeeded; it does not establish continued membership,
+lease renewal, WebRTC media health, or why a later disconnection occurred.
+
+An elevated, read-only process inspection then found a **local development
+realtime watcher and child**, with the child listening on port **2567**. The watcher
+started at **03:18:34.794 UTC**. A normal sandboxed process query had not exposed
+these processes, so its earlier empty result was not evidence of their absence.
+Local `/ready` reported voice **ready**. Local and Railway LiveKit configuration
+was compared **only in memory**: Cloud URL, API key and derived namespace all
+matched. No values, tokens, variable dumps or tenant identifiers were printed or
+saved. Local `.env` leaves NODE_ENV unset; the existing development entry sets it
+to development.
+
+Before this fix, `livekitProvider()` derived the namespace only from the secret.
+`createVoiceService().poll()` runs initially and every two seconds; it removes
+participants missing from that process's `active` map. Thus the local authority
+can classify a valid Railway admission as an orphan and call `removeParticipant`
+with token revocation. This needs **only one voice user** and leaves Colyseus
+multiplayer connected. The new isolated regression reproduces that exact
+single-participant removal with two authorities sharing one provider namespace.
+
+**Historical SDK reason: NOT TESTED / unavailable.** No captured browser
+`RoomEvent.Disconnected` argument or matching Cloud session event was available.
+The reported banner itself cannot prove PARTICIPANT_REMOVED: the old UI discarded
+the reason and used the same banner for every established-session disconnect.
+The shared-namespace operational conflict is confirmed and its failure mechanism
+reproduced. The subsequent user-reported hosted retest passed after the local
+authority was stopped, with no deployment or credential change. A matching
+historical SDK/Cloud event is still missing. CLIENT_INITIATED, timeout and other
+reasons have not been conclusively ruled out for that incident.
+
+### Fix and modified files
+
+| File | Change |
+| --- | --- |
+| `apps/realtime/src/voice/provider.ts` | Scope development and test inventory namespaces separately. Production retains its existing prefix, room identities and scoped grants. Each provider's actual `rooms()` filter excludes the other environments |
+| `apps/realtime/src/voice/service.ts` | Timestamped fixed-category admission/renewal/removal/inventory/shutdown diagnostics with a random authority ID and only random UUID participant IDs. Record renewal duration, authorization age and remaining lease; retain the first removal cause. Route known inventory removals through the existing shared removal promise |
+| `apps/realtime/.env.example` | Document environment isolation and the remaining one-authority-per-namespace requirement; warn against local production entry with hosted Cloud credentials |
+| `apps/web/src/features/voice/disconnect.ts` | Translate installed SDK disconnect enums into fixed safe reason/message categories. A service removal does not assert membership revocation |
+| `apps/web/src/features/voice/voice-session.tsx` | Record actual SDK reason, state, UTC timestamp, elapsed time and opaque participant correlation; record effect cleanup; remove added observers on cleanup. Preserve SDK reconnection and media teardown |
+| `apps/web/src/features/voice/voice-bar.tsx` | Distinguish an explicit user stop from a failure in timestamped diagnostics, without logging message contents or admission proof |
+| `apps/web/src/features/voice/voice.test.ts` | Reason-specific/unknown-reason privacy regression |
+| `apps/realtime/src/tests/voice.test.ts` | One/two-user valid renewals, environment isolation through the actual provider inventory method, competing-authority reproduction and concurrent inventory/timer removal regression |
+| `scripts/test-voice-browser.mjs` | Single-user simulated session, distinct disconnect messages, explicit leave/rejoin, stopped tracks and application disconnect-listener cleanup |
+| `docs/communication-polish-validation.md` | This actual-results update |
+
+### Follow-up scope review — 2026-10-23, Asia/Colombo
+
+Reviewed the **nine code/configuration/test files** listed above, plus this existing
+report. **Retained all nine; no further source changes were necessary.** The
+environment separation is a small guard against the observed configuration
+collision; it preserves production room names. Shared removal fixes a separately
+reproduced race. The fixed-category server/client diagnostics and accurate UI
+messages address the inability to trace the original removal, without changing
+connection policy. The configuration comments and three test files document and
+exercise those specific behaviors. No unrelated existing modifications were
+discarded, and no extra lifecycle rewrite, timer adjustment or feature was added.
+
+**Single-authority operating requirement:** run exactly **one active realtime
+voice authority per LiveKit inventory namespace**. A local/older production-mode
+server must not share the hosted namespace. A replacement within the same
+namespace requires stopping the previous authority before starting the next;
+one configured replica does not by itself prove a rollout has no overlap.
+The retained environment-scoping code isolates updated development/test builds,
+but it does not protect against an old unpatched process, two processes in the
+same environment, or a local production-mode entry. Separate Cloud projects and
+credentials are preferable for independent environments; namespace filtering is
+an accidental-cleanup guard, not a credential/security boundary. Do not weaken
+or disable orphan cleanup to accommodate competing authorities. The conflicting
+local server remains stopped and was not restarted during this follow-up.
+
+**Security review:** retained token verification, verified membership/RLS checks,
+tenant/office/zone binding, short initial tokens, independent authorization
+renewal, lease expiry, explicit Cloud revocation cutoff and participant cleanup.
+Production namespace behavior and existing security timings are unchanged.
+
+**Operational containment performed:** stopped only the identified local Node
+watcher and its current development realtime child, after verifying the listener,
+entry flags and parent relationship. Port 2567 then had no listener. No local
+frontend, hosted process or tenant record was changed. The watcher could restart
+its child on source edits, so it was stopped before the namespace fix. Do not
+restart an old build against the hosted Cloud project. The updated local
+development command is `pnpm --filter @virtual-office/realtime dev`; a local
+production-mode entry still intentionally shares the production namespace and
+requires a different Cloud project or a cold stop of the hosted authority.
+
+**Additional confirmed race:** the old inventory path bypassed `remove(record)`.
+An inventory sweep and independent lease timer could issue concurrent removals
+for one expired admission, with the sweep alone also leaving its local reservation
+behind. An isolated in-memory before/after experiment restored just the old
+inventory branch: **2 provider removal calls before, 1 after**. The fix shares the
+existing removal promise, preserves its first cause and releases the admission
+only after successful removal. This race is not asserted to explain removal of
+an otherwise valid hosted participant.
+
+Security budgets remain unchanged: **6,000 ms lease**, **2,000 ms independent
+authorization/poll intervals**, **250 ms lease check**, **30 s initial token**,
+and explicit future Cloud token-revocation cutoff. Supabase Auth validation/RLS,
+membership checks, tenant-bound rooms, authoritative zone eligibility and orphan
+cleanup remain enforced. There is no lease extension, new dependency or migration.
+Multiple authorities within the **same** environment namespace still require a
+cold handover; this fix is environment isolation, not distributed coordination.
+
+### Checks executed
+
+| Check | Result | Evidence / limit |
+| --- | --- | --- |
+| `pnpm lint` | PASS | Both applications, zero warnings |
+| `pnpm typecheck` | PASS | Both applications and Next route generation |
+| `pnpm build` | PASS | Fresh web and realtime production builds after namespace fix |
+| `pnpm test` | PASS | **124**: 96 web + 28 realtime; synthetic Auth/media where applicable |
+| Valid one/two-user authorization | PASS | Eight independent renewal/sweep cycles per scenario, **16 s simulated time**; no valid participant removed |
+| Environment namespace isolation | PASS | Actual provider inventory with mocked SDK control-plane responses excludes production/development/test peers; signed room/microphone grants verified offline |
+| Single-user competing-authority reproduction | PASS | Second same-namespace authority removes first authority's participant; distinct authority IDs correlate to the same opaque participant |
+| Inventory/timer duplicate removal | PASS | Reproduced before/after 2→1 calls; no lost first cause; completed removal releases reservation |
+| Explicit leave, zone exit, reconnection, revoked membership, tenant isolation | PASS | Existing lifecycle, lease, real local Colyseus transport and authorization regressions; synthetic identities/provider, not hosted users |
+| Production routes / safe Supabase denials | PASS | **43/43**. Actual anonymous/invalid-proof Supabase requests and local production Next routes, no successful authenticated writes |
+| Database/setup and deployment configuration | PASS | **6 database/setup + 2 deployment tests**; disposable local PostgreSQL, not a remote migration or live cross-tenant account test |
+| Compiled realtime entry | PASS | **2/2**, including actual Supabase readiness and missing-config fail-closed startup; child Cloud settings explicitly blank |
+| Browser regression suites | PASS | **4/4 final sequential run**: chat, communication composition, office/Phaser, expanded voice. Real Chromium/React/SDK, synthetic Auth/network/media; no real audio |
+| Railway log/configuration inspection | PASS | Read-only; one hosted instance, 10 initial admissions HTTP 200; no captured removal/renewal events in the deployed version |
+| Local competing authority containment | PASS | Verified watcher/runtime stopped; listener absent |
+| Hosted realtime health/readiness after containment | PASS | **06:26:33 UTC**: `/health` 200; `/ready` 200 with configuration, authentication, database and voice ready. Control-plane readiness is not proof of audio stability |
+| Hosted initial one-user voice connection after containment | PASS — user-reported manual | Existing hosted Vercel app, after stopping the local authority; no deployment |
+| Hosted stationary voice maintained for at least 60 seconds | PASS — user-reported manual | User reported ≥60 seconds connected; no exact start/end timestamps supplied |
+| Hosted Leave Voice | PASS — user-reported manual | Explicit leave passed |
+| Hosted Rejoin Voice | PASS — user-reported manual | Rejoin passed |
+| Hosted unexpected disconnects / additional errors during that retest | PASS — user-reported manual | User reported none; observation limited to this retest |
+| Hosted two-user bidirectional real audio | NOT TESTED | No controlled authenticated browser/audio sessions executed here |
+| Hosted revocation ≤10 seconds and original/refreshed replay | NOT TESTED | No membership mutation, replay attempt or actual Cloud revocation timing measurement performed |
+| Historical SDK reason / exact historical removal caller | NOT TESTED | Missing browser/Cloud event correlation; do not infer it from HTTP 200 or the old banner |
+
+The first root script invocation hit a global pnpm 12 versus pinned 10.34.7 PATH
+conflict; validations then used the existing `.cache/corepack` shim without
+changing manifests. Initial sandboxed live requests failed for lack of network
+access; all 43 route/live checks and both compiled-entry checks passed with
+authorized network access. Initial sandboxed Chrome timed out. An elevated browser
+run exposed a timing-sensitive, unchanged office interpolation assertion (passed
+on isolated rerun) and a new fixture assertion that incorrectly expected zero
+SDK listeners. That fixture now checks removal of the application's own registered
+handler; the expanded voice suite passed. These failed attempts are not presented
+as successful tests or as confirmed product defects.
+
+The final sequential browser run passed all four suites without concurrent build
+work. The unchanged office fixture measured **21.7 FPS** solo and **26.6 FPS** with
+ten synthetic rendered players on Chrome 156 / SwiftShader software WebGL; these
+short local laboratory samples are not hosted performance or real-user/audio
+measurements. The final freshly compiled backend rerun also passed **2/2**.
+
+**Follow-up regression run:** reran `pnpm test`, `pnpm lint`, `pnpm typecheck`
+and `node --test scripts/test-voice-browser.mjs` after reviewing the retained
+source. **All PASS: 124 tests (96 web + 28 realtime), both-app lint/typecheck,
+and the expanded voice browser suite (1/1).** No new failure was observed. The existing
+production-build, 43-route, database/setup and four-suite browser results above
+belong to the preceding implementation run; they were not rerun or relabelled
+as new hosted validation in this documentation-only follow-up. Local transport
+tests use an isolated fake voice provider; the browser uses simulated media/Auth.
+Neither starts the stopped conflicting Cloud authority.
+
+### Hosted follow-up (manual; no deployment performed)
+
+1. **Completed, user-reported manual PASS:** on the existing hosted Vercel app,
+   initial connection, at least 60 seconds stationary in the meeting room,
+   explicit leave and rejoin; no unexpected disconnections or additional errors.
+   Do not restart the stopped conflicting server. The preventive code changes
+   remain undeployed; this result verifies containment only.
+2. If it disconnects again on the existing deployment, open the corresponding
+   LiveKit Cloud room/session diagnostics and record only the disconnect enum,
+   UTC time and opaque participant identity. Do not copy connection URLs,
+   headers, JWTs, refreshed tokens or raw diagnostic exports. The existing server
+   logs cannot retrospectively supply missing per-admission events.
+3. After a **separately approved** release of these code changes, preserve browser
+   Console logs filtered to `Voice lifecycle.` and Railway deployment logs filtered
+   to `Voice authority.`. Correlate `participantId`, UTC timestamps and server
+   `authorityId`. `admission_issued` → `authorization_renewed` should continue;
+   inspect `removal_requested.reason` and `removal_completed` if removed.
+   `orphan_removal_*` from a different authority indicates a competing server.
+   `lease_expired` includes whether refresh was in flight; `authorization_failed`
+   is not automatically proof of revocation rather than an Auth dependency failure.
+   `client_cleanup` / `stop_requested` preceding CLIENT_INITIATED traces client
+   teardown. CONNECTION_TIMEOUT/JOIN_FAILURE/MEDIA_FAILURE direct investigation
+   to signaling/WebRTC, not membership assumptions. Temporary reconnection must
+   retain the session and recover without a new Join click or duplicate tracks.
+4. Use two dedicated verified members of a test company and a second test company
+   for real audio/tenant checks. Validate microphone controls, supported device
+   switching, audio both ways, network interruption, refresh, zone exit, departure
+   and rejoin. Record heard audio separately from synthetic tracks.
+5. Only with authorized disposable memberships, measure revocation from the
+   authoritative database change to actual Cloud participant removal/audio loss;
+   target **≤10 s**. Separately test original and SDK-refreshed unexpired token
+   replay without logging either token. New-token HTTP rejection alone is not
+   evidence of active connection revocation or replay protection.
+
+Scoped merge recommendation: **YES** for the reviewed preventive fix, removal
+race correction, diagnostics and regressions. This does not authorize a merge or
+deployment. The single-user hosted containment check has passed by user report;
+two-user bidirectional audio, active Cloud revocation within 10 seconds and
+original/refreshed-token replay remain **NOT TESTED**, and broader release
+security sign-off remains incomplete. Correlate actual SDK/Cloud events if the
+failure recurs. No hosted deployment/configuration change was performed.
+
 ## Phase 5 Step 3A — Vercel + Railway hosting preparation
 
 Date: **2026-10-22, Asia/Colombo**. Existing branch confirmed by reading

@@ -8,7 +8,7 @@ export function VoiceBar({ officeId, state, leave }: { officeId: string; state: 
   const [joining,setJoining] = useState(false), [admission,setAdmission] = useState<VoiceAdmission | null>(null), [error,setError] = useState("");
   const request = useRef<AbortController | null>(null), active = useRef(false), mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; request.current?.abort(); leave(); }; },[leave]);
-  const stop = useCallback((message = "") => { request.current?.abort(); active.current = false; leave(); setAdmission(null); setJoining(false); setError(message); },[leave]);
+  const stop = useCallback((message = "") => { console.info("Voice lifecycle.",{event:"stop_requested",cause:message ? "failure" : "user_leave",at:new Date().toISOString()}); request.current?.abort(); active.current = false; leave(); setAdmission(null); setJoining(false); setError(message); },[leave]);
   const leaveSession = useCallback(() => stop(),[stop]);
   const join = async () => {
     if (active.current) return;

@@ -5,8 +5,25 @@ import { meetingZone, validVoiceRequest } from "../../../../../packages/shared/s
 import { validateOfficeMap } from "../../../../../packages/shared/src/map.ts";
 import { issueVoiceToken } from "./token-service.ts";
 import { createVoiceMount, startVoice, voiceError, type Capture, type VoiceStage } from "./lifecycle.ts";
+import { DisconnectReason } from "livekit-client";
+import { voiceDisconnect } from "./disconnect.ts";
 const officeId = "00000000-0000-4000-8000-000000000001", userId = "00000000-0000-4000-8000-000000000002";
 const input = { officeId, sessionId:"session_123" };
+
+test("disconnect diagnostics preserve SDK reasons without claiming membership revocation or exposing provider text", () => {
+  for (const reason of [DisconnectReason.CLIENT_INITIATED,DisconnectReason.PARTICIPANT_REMOVED,DisconnectReason.DUPLICATE_IDENTITY,DisconnectReason.CONNECTION_TIMEOUT,DisconnectReason.JOIN_FAILURE,DisconnectReason.MEDIA_FAILURE,DisconnectReason.SERVER_SHUTDOWN]) {
+    const detail = voiceDisconnect(reason);
+    assert.equal(detail.reason,DisconnectReason[reason]);
+    assert.doesNotMatch(detail.message,/access was revoked/);
+  }
+  assert.match(voiceDisconnect(DisconnectReason.PARTICIPANT_REMOVED).message,/service removed/);
+  assert.match(voiceDisconnect(DisconnectReason.CLIENT_INITIATED).message,/ended on this device/);
+  assert.match(voiceDisconnect(DisconnectReason.CONNECTION_TIMEOUT).message,/network/);
+  for (const input of [undefined,999,"private-token@example.invalid",{message:"private-token"}]) {
+    assert.equal(voiceDisconnect(input).reason,"UNKNOWN_REASON");
+    assert.doesNotMatch(voiceDisconnect(input).message,/private-token/);
+  }
+});
 
 test("voice zone follows the canonical Tiled rectangle and whole collision footprint, not an area label", () => {
   const map = validateOfficeMap(JSON.parse(readFileSync(new URL("../../../public/office/studio.json",import.meta.url),"utf8")));

@@ -26,7 +26,7 @@ test("actual voice UI: no auto capture, explicit join, cancellation, real SDK de
     plugin.onResolve({filter:/^livekit-client$/},args=>args.importer.replaceAll('\\','/').endsWith('/voice-session.tsx')?{path:'sdk-room-fixture',namespace:'fixture'}:undefined);
     plugin.onLoad({filter:/.*/,namespace:'fixture'},()=>({resolveDir:web,loader:'js',contents:`
       import{Room as NativeRoom,ConnectionError,Track}from'livekit-client';export*from'livekit-client';
-      export class Room extends NativeRoom{constructor(...args){super(...args);const connect=this.connect;this.connect=async(...params)=>{const f=window.voiceFixture;f.connects++;f.activeRoom=this;if(f.mode==='connected'){await this.simulateParticipants({publish:{audio:true,video:false,useRealTracks:false},participants:{count:2,video:false,audio:false}});this.localParticipant.name='Taylor';let index=0;for(const person of this.remoteParticipants.values())person.name=++index===1?'Morgan':'private@example.invalid';return;}if(f.mode==='invalid-token')throw ConnectionError.notAllowed('Synthetic rejected token',401);return connect(...params)};const publish=this.localParticipant.publishTrack.bind(this.localParticipant);this.localParticipant.publishTrack=async(...params)=>window.voiceFixture.mode==='connected'?this.localParticipant.getTrackPublication(Track.Source.Microphone):publish(...params)}}
+      export class Room extends NativeRoom{constructor(...args){super(...args);const connect=this.connect;this.connect=async(...params)=>{const f=window.voiceFixture;f.connects++;f.activeRoom=this;if(f.mode==='connected'){await this.simulateParticipants({publish:{audio:true,video:false,useRealTracks:false},participants:{count:f.remoteCount??2,video:false,audio:false}});this.localParticipant.name='Taylor';let index=0;for(const person of this.remoteParticipants.values())person.name=++index===1?'Morgan':'private@example.invalid';return;}if(f.mode==='invalid-token')throw ConnectionError.notAllowed('Synthetic rejected token',401);return connect(...params)};const publish=this.localParticipant.publishTrack.bind(this.localParticipant);this.localParticipant.publishTrack=async(...params)=>window.voiceFixture.mode==='connected'?this.localParticipant.getTrackPublication(Track.Source.Microphone):publish(...params)}}
     `}));
   }}],stdin:{resolveDir:web,loader:"tsx",contents:`
     import React,{useState,useEffect,useCallback,StrictMode}from'react';import{createRoot}from'react-dom/client';
@@ -86,6 +86,17 @@ test("actual voice UI: no auto capture, explicit join, cancellation, real SDK de
     await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent==='Mute microphone').click()");await until(()=>evaluate("!![...document.querySelectorAll('button')].find(b=>b.textContent==='Unmute microphone')"));
     await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent==='Unmute microphone').click()");await until(()=>evaluate("!![...document.querySelectorAll('button')].find(b=>b.textContent==='Mute microphone')"));
     await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent==='Leave Voice').click()");await until(()=>evaluate("voiceFixture.activeRoom.state==='disconnected' && voiceFixture.tracks.every(track=>track.readyState==='ended')"));
+    assert.equal(await evaluate("!!document.querySelector('[role=alert]')"),false,"Explicit leave is not an authorization or connection failure");
+    for(const [reason,message] of [[14,'network connection'],[4,'service removed this session'],[1,'ended on this device'],[2,'Another connection replaced'],[undefined,'lost unexpectedly']]) {
+      await evaluate("voiceFixture.mode='connected';voiceFixture.remoteCount=0;document.querySelector('button').click()");await until(()=>evaluate("document.body.textContent.includes('Voice connected')"));
+      assert.equal(await evaluate("voiceFixture.activeRoom.remoteParticipants.size"),0,"Single-user voice establishes without another voice participant");
+      await evaluate("voiceFixture.disconnectObserver=voiceFixture.activeRoom.listeners('disconnected').find(listener=>listener.name==='onDisconnect')");
+      assert.equal(await evaluate("typeof voiceFixture.disconnectObserver==='function'"),true,"Observe the application's registered handler");
+      await evaluate(`voiceFixture.activeRoom.emit('disconnected',${reason===undefined?'undefined':reason})`);
+      await until(()=>evaluate(`document.querySelector('[role=alert]')?.textContent.includes(${JSON.stringify(message)}) && voiceFixture.tracks.every(track=>track.readyState==='ended')`));
+      assert.equal(await evaluate("document.querySelector('[role=alert]').textContent.includes('access was revoked')"),false,"An SDK disconnect cannot prove membership revocation");
+      await until(()=>evaluate("!voiceFixture.activeRoom.listeners('disconnected').includes(voiceFixture.disconnectObserver)"));
+    }
     await evaluate("voiceFixture.mode='invalid-token';document.querySelector('button').click()");await until(()=>evaluate("document.querySelector('[role=alert]')?.textContent.includes('rejected voice authorization')"));
     await evaluate("voiceFixture.controls()");await until(()=>evaluate("!!document.querySelector('select[aria-label=\"Microphone input device\"]')"));
     const enumerations=await evaluate("voiceFixture.enumerations");
