@@ -8,9 +8,38 @@
   },
   "scripts": {
     "dev": "pnpm --filter @virtual-office/web dev",
+    "dev:realtime": "pnpm --filter @virtual-office/realtime dev",
+    "dev:all": "pnpm --parallel --filter @virtual-office/web --filter @virtual-office/realtime dev",
+    "start:realtime": "pnpm --filter @virtual-office/realtime start",
+    "test:realtime": "pnpm --filter @virtual-office/realtime test",
+    "test:chat:database": "node --test scripts/chat-database.test.mjs",
+    "test:chat:browser": "node --test scripts/test-chat-browser.mjs",
+    "test:chat:anonymous": "pnpm --filter @virtual-office/web test:chat:anonymous",
+    "test:voice:browser": "node --test scripts/test-voice-browser.mjs",
+    "test:voice:routes": "pnpm --filter @virtual-office/web test:voice:routes",
+    "test:realtime:live": "node --experimental-strip-types --test scripts/test-realtime-live.mjs",
+    "test:deployment": "node --test scripts/deployment-config.test.mjs",
+    "check:realtime:env": "node scripts/check-realtime-environment.mjs",
     "build": "pnpm -r build",
     "start": "pnpm --filter @virtual-office/web start",
     "lint": "pnpm -r lint",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "test:smoke": "pnpm --filter @virtual-office/web test:smoke",
+    "test:live": "pnpm --filter @virtual-office/web test:live",
+    "test:organizations": "node scripts/test-organizations.mjs",
+    "test:organizations:anonymous": "pnpm --filter @virtual-office/web test:organizations:anonymous",
+    "test:organization-setup": "node --test scripts/test-organizations.test.mjs",
+    "test:team:database": "node --test scripts/team-database.test.mjs",
+    "test:team:live": "node scripts/test-organizations.mjs --team",
+    "test:team:anonymous": "pnpm --filter @virtual-office/web test:team:anonymous",
+    "assets:office": "node --experimental-strip-types scripts/generate-office-assets.mjs",
+    "assets:avatars": "node --experimental-strip-types scripts/generate-avatar-assets.mjs",
+    "test:office:browser": "node --test scripts/test-office-browser.mjs",
+    "test:communication:browser": "node --test scripts/test-communication-browser.mjs"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.10",
+    "supabase": "^2.121.0"
   }
 }

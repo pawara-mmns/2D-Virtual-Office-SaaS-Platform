@@ -1,0 +1,15 @@
+# CLI uploads must not include either application's local environment/keys.
+**/.env*
+!**/.env.example
+!**/.env.*.example
+**/*.pem
+**/.aws/**
+**/.codex/**
+**/.agents/**
+**/.cache/**
+**/.pnpm-store/**
+**/supabase/.temp/**
+**/supabase/.branches/**
+**/dist/**
+**/coverage/**
+**/*.tsbuildinfo

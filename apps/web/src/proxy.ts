@@ -1,0 +1,16 @@
+import type { NextRequest } from "next/server";
+import { updateSession } from "@/lib/supabase/proxy";
+
+export function proxy(request: NextRequest) {
+  return updateSession(request);
+}
+
+export const config = {
+  matcher: [
+    "/login", "/register", "/forgot-password", "/reset-password",
+    "/auth/:path*", "/dashboard/:path*",
+    "/organizations/:path*", "/workspace/:path*",
+    "/invite/:path*",
+    "/api/v1/voice/:path*",
+  ],
+};
