@@ -1,5 +1,226 @@
 # Communication, stabilization and private-beta validation
 
+## Phase 5 Step 3D — Hosted security acceptance validation
+
+Date: **2026-10-23, Asia/Colombo**. Existing branch confirmed by reading
+`.git/HEAD`: `feature/p5-s03d-hosted-security-validation`. No Git operations,
+deployment, environment modification, migration, account creation, email send or
+membership mutation was performed. The stopped local Cloud authority was not
+restarted. The owner chose **manual** execution for authenticated security tests.
+
+**Step 3D merge-ready: NO. Hosted security acceptance: NO.** Available regression
+checks pass, but Vercel configuration readiness fails and the required authenticated
+tenant/revocation/replay scenarios remain NOT TESTED. This decision concerns
+Step 3D acceptance; the previous scoped voice-fix merge recommendation below
+remains historical and does not certify hosted security acceptance.
+
+### Environment and real hosted observations
+
+The following were executed against the existing hosted services, not local
+fixtures. Main probes ran around **13:12–13:13 Sri Lanka time (07:42–07:43 UTC)**;
+the readiness failure was confirmed again at **13:21:18 (07:51:18 UTC)**.
+Vercel CLI inspection identified the active alias as a READY production deployment
+of project `2-d-virtual-office-saa-s-platform`. Railway identity was
+`adventurous-joy / production / realtime`.
+
+| Real service/check | Result | Actual observation |
+| --- | --- | --- |
+| Vercel frontend | PASS | `https://2-d-virtual-office-saa-s-platform.vercel.app`: `/api/health` 200, `/login` 200 |
+| Vercel dependency readiness | **FAIL** | `/api/ready` **503**, twice. `configuration: unavailable`; `authentication`, `database`, `realtime`: ready |
+| Hosted anonymous dashboard | PASS | `/dashboard` 307 to `/login`; no authenticated cookie supplied |
+| Railway health/readiness | PASS | `https://realtime-production-6d4b.up.railway.app`: `/health` 200, `/ready` 200. Configuration, authentication, database and voice all ready |
+| Observed single-authority deployment | PASS within inspected scope | One active successful Railway deployment, one instance; local realtime entry count **0**, port-2567 listener count **0** at 13:10:50 (07:40:50 UTC) |
+| Other machines/projects using this namespace | NOT TESTED | There is no global authority registry in Cloud room inventory. Operator must keep other old/local hosts stopped; one observed Railway instance is not a proof about every machine |
+| Supabase Auth connectivity | PASS | Existing project `rofutnholbtdmxccrkbs`: health/settings 200; email confirmation still required; `/auth/v1/user` without user proof 401 |
+| Supabase database access/denials | PASS for available scope | Hosted readiness reports database ready; actual anonymous/invalid-proof data/RPC denials also passed in the 43-check regression. Authenticated cross-tenant database access was not tested |
+| LiveKit Cloud control API | PASS | Read-only `listRooms` using configured Railway credentials in memory; **627 ms** request round trip, **0** rooms in the application production namespace at that instant. No room/participant removal, token minting or SDK client admission was performed |
+| Hosted web anonymous voice admission | PASS | Valid-shaped synthetic office/session request from the trusted frontend origin: **401**, no media token |
+| Hosted web foreign/missing Origin voice admission | PASS | Both **403**, no media token |
+| Hosted Railway anonymous/invalid-proof voice admission | PASS | Both **403**, no media token |
+| Hosted Railway foreign-origin voice admission | PASS | **403**, no media token |
+| Hosted Railway forged zone/coordinates | PASS | Extra client-supplied zone/position fields rejected **400**, no media token |
+| Hosted Railway office admission | PASS | Anonymous, invalid bearer and foreign-origin `/office/join` each **403**, no seat returned; canonical map fingerprint and synthetic office ID used |
+
+These denial tests used only missing or deliberately invalid credentials. They
+do **not** prove isolation between two valid tenant identities, active participant
+revocation, or rejection of a previously valid Cloud token. No WebSocket room seat
+was consumed and no second Cloud-connected realtime authority was started.
+The 627 ms Cloud API result and 145 ms Railway readiness result are individual
+request observations, not revocation measurements or audio/performance benchmarks.
+
+### Confirmed readiness blocker and configuration review
+
+Vercel production environment **metadata** contains the required setting names:
+`APP_URL`, `NEXT_PUBLIC_REALTIME_URL`, `NEXT_PUBLIC_SUPABASE_URL`,
+`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `INVITATION_DELIVERY_MODE`,
+`INVITATION_FROM_EMAIL`, `RESEND_API_KEY`. No public environment name matching
+the inspected LiveKit/admin/Resend credential patterns was found. Names being
+present does not establish valid values or the environment snapshot of the active
+deployment. Sensitive values are not exposed by the metadata listing; encrypted
+metadata placeholders were not treated as actual values. No env file was pulled,
+and no credential values were written to logs or this report.
+
+`REALTIME_INTERNAL_URL` is absent; this is **valid** because forwarding/readiness
+can use `NEXT_PUBLIC_REALTIME_URL`. Do not add it merely to address this finding.
+Inspection of `createWebReadiness()` confirms configuration readiness requires
+valid Supabase/application/realtime origins and valid delivery configuration.
+The specific failing field/value in the active deployment is **unconfirmed**;
+there is no evidence yet of an application-code defect to fix.
+
+Owner-side configuration review, without bypassing the failing readiness gate:
+
+1. In the Vercel project's Production environment/deployment snapshot, verify
+   `APP_URL=https://2-d-virtual-office-saa-s-platform.vercel.app` and
+   `NEXT_PUBLIC_REALTIME_URL=https://realtime-production-6d4b.up.railway.app`.
+   Use exact HTTPS origins, no trailing slash/path/query; the public realtime
+   setting is HTTPS and the SDK upgrades its socket connection to WSS.
+2. Verify the deployed Supabase public URL/key belong to the existing approved
+   project. Keep admin/service-role/LiveKit/Resend secrets server-only.
+3. Production requires `INVITATION_DELIVERY_MODE=email` (or its email default),
+   a nonempty server-only `RESEND_API_KEY` and syntactically valid configured
+   `INVITATION_FROM_EMAIL`. `link` mode must continue failing closed in production.
+   Sender verification/recipient permission must be checked separately; readiness
+   does not send an email or establish Resend domain verification.
+4. Compare the active deployment snapshot to current project settings. A future
+   configuration fix/release needs separate authorization; **do not change values,
+   redeploy or disable the check as part of this validation**. After the owner
+   resolves the blocker, require `/api/ready` 200 before accepting the environment.
+
+### Authenticated security matrix and missing prerequisites
+
+No connected authenticated browser profiles were available: the browser inventory
+contained no tabs. Local diagnostics found no dedicated login or configured
+authorized user trio, and `node scripts/test-organizations.mjs --check` reported
+NOT TESTED because three verified authorized test UUIDs were missing. The existing
+ignored `supabase/.env.organization-tests.local` was not present. Existing real
+users were not selected as substitutes, and previously used voice users were
+not assumed to be disposable/revocable. The owner explicitly selected **manual**
+testing rather than making these sessions available to the agent.
+
+| Required hosted security check | Result | Missing evidence |
+| --- | --- | --- |
+| Company A users restricted to Company A | NOT TESTED | Authorized isolated identities and current authenticated requests |
+| Company B users restricted to Company B | NOT TESTED | Second isolated company/identity and reciprocal checks |
+| Authenticated realtime room/presence isolation | NOT TESTED | Valid A/B/C sessions and observed room state |
+| Authenticated chat read/send isolation | NOT TESTED | Valid-user cross-company requests and message observations |
+| Authenticated voice room isolation | NOT TESTED | Valid-user cross-company admission attempt and Cloud observations |
+| Current controlled authorized Cloud admission | NOT TESTED | No instrumented live test account session executed in Step 3D |
+| Valid authenticated nonmember denied admission | NOT TESTED | Prior anonymous denials are not this test |
+| Revoked member cannot obtain a new token | NOT TESTED | Authorized disposable revocation target and an actual committed change |
+| Active revoked participant removed | NOT TESTED | Cloud presence and client disconnect correlated with that change |
+| Permission revocation within 10 seconds | NOT TESTED | **No revocation duration was measured** |
+| Original unexpired token replay after revocation | NOT TESTED | Original proof retained in memory, unexpired at replay, Cloud result |
+| SDK-refreshed unexpired token replay after revocation | NOT TESTED | Observed real SDK refresh, in-memory proof and Cloud result |
+
+**Prior functional evidence remains PASS — user-reported hosted manual:**
+single-user voice, ≥60-second connection stability, leave/rejoin, simultaneous
+two-user voice/audio communication, multiplayer presence and no unexpected
+disconnects after stopping the conflicting local authority. Those observations
+were not rerun here and contain no tenant/revocation/replay measurements. They
+must not be promoted to Cloud security acceptance.
+
+### Automated regression results executed in Step 3D
+
+| Command/check | Result | Scope |
+| --- | --- | --- |
+| `pnpm lint` | PASS | Both apps, zero warnings |
+| `pnpm typecheck` | PASS | Both apps and generated Next route types |
+| `pnpm build` | PASS | Fresh Next frontend and TypeScript realtime production builds |
+| `pnpm test` | PASS | **124/124: 96 web + 28 realtime**. Includes tenant/lease/cleanup regressions with synthetic authorization/provider and isolated real Colyseus transport |
+| Local database/setup suite | PASS | **6/6** runners: chat, foundation/team rollback tests and guarded setup; disposable PostgreSQL, synthetic identities. Includes 14 chat, 54 team and 26 foundation assertions plus profile guards; no remote migration or real membership change |
+| Deployment configuration regressions | PASS | **2/2** existing checks; no provider upload/deployment |
+| Production-route and safe Supabase checks | PASS | **43/43**, fresh local production web routes plus actual Supabase anonymous/invalid-proof requests. These are distinct from the hosted Vercel readiness failure |
+| `node --test scripts/test-voice-browser.mjs` | PASS | **1/1**, actual Chromium/React/SDK UI with simulated media/Auth; not real Cloud/audio |
+| `node --experimental-strip-types --test scripts/test-realtime-live.mjs` | PASS | **2/2**, freshly built backend; child LiveKit configuration explicitly blank, preventing a second Cloud authority |
+| Live authorized database policy runner | NOT TESTED | Missing approved UUID trio; no attempt to choose users or bypass the guard |
+
+No confirmed runtime/code defect was discovered in these executions. No source,
+dependency, database or security-policy change was made. This existing report is
+the only maintained project file changed for Step 3D; scratch probes used fixed
+requests and in-memory credentials, not credential-bearing output or HAR files.
+
+### Exact manual acceptance procedure
+
+Smallest prerequisite: prepare/identify **three dedicated verified beta accounts**
+and two isolated test companies on this existing hosted environment. A is the
+Company A owner/admin; B is an ordinary Company A member explicitly authorized
+for removal; C belongs to Company B and has **no** Company A membership. A can
+also be the second Company A voice user, so a fourth account is unnecessary.
+Confirm the test company/office IDs and B's revocation permission locally. Do not
+use customer memberships, disable email confirmation or grant C temporary access
+to A just to test. Use normal sign-in and separate browser profiles. UUIDs for
+the existing rollback-only SQL runner can go in its ignored local config; UUIDs
+alone do not supply authenticated browser/Cloud sessions.
+
+1. **Baseline and tenant checks:** A/B join A's office; C joins B's office. Record
+   correct same-company movement/presence and unique harmless chat markers in
+   each office. Verify C receives neither A's state/messages/audio nor access to
+   A's workspace/office URL, and reciprocally verify A/B cannot enter Company B.
+   With C's genuine authenticated context, attempt A's office admission and voice
+   token request using C's own session identity: require denied admission, no
+   seat/media token and no cross-company state. Exercise read/send database
+   requests as that user through a normal RLS client; never use a service-role
+   key or impersonated database role as proof of hosted isolation. Record status
+   and disclosure booleans only, not bearer values or private payloads.
+2. **Prepare proof capture safely:** use a developer-controlled QA client with
+   the existing installed LiveKit SDK, the real hosted admission flow and B's
+   ordinary verified session. Retain the original token only in private memory;
+   observe the real SDK engine `tokenRefreshed` event without replacing SDK
+   callbacks, and retain refreshed proof only in memory. Preserve existing zone,
+   membership and token checks. The current voice browser fixture is simulated
+   and does **not** provide an authenticated Cloud replay runner. If no controlled
+   capture/replay client is available, leave replay checks NOT TESTED; do not add
+   production debug endpoints/globals, paste tokens into consoles/CLI arguments,
+   save HAR files or manufacture refresh proof. Capturing two initial admissions
+   is not capturing a Cloud-refreshed token.
+3. **Original-token cycle:** B enters the meeting zone and joins voice; A remains
+   as an authorized control. Confirm B is an active Cloud participant. Before B's
+   initial token expires (configured initial lifetime **30 seconds**), A removes
+   only B's approved isolated membership through the normal admin operation.
+   Keep B's client open, without voluntarily leaving, to observe enforcement.
+   Record actual Cloud disappearance/client disconnection and separately attempt
+   new admission as B: require rejection without a new token.
+4. **Measure, do not estimate:** use one test-controller clock for admin request
+   start `t_start`, successful revocation response `t_ack`, observed Cloud removal
+   `t_cloud` and SDK disconnect `t_client`. Where the exact database commit time
+   is unavailable, it lies between `t_start` and `t_ack`; report the observed
+   bounds instead of claiming exact commit timing. Use the conservative upper
+   bound from request start to effective loss of access when assessing **≤10 s**.
+   Record Cloud removal as well as UI/audio loss; rejection of new token requests
+   is not proof that an existing connection was removed. Dependency/polling errors
+   do not count as observed absence. If clocks differ, record their uncertainty;
+   do not sign off a 10-second result from unsynchronized timestamps.
+5. **Replay original proof:** after removal is confirmed, use the same retained
+   identity/token in a fresh SDK connection to the same Cloud URL. Require an
+   authentication/authorization rejection, not a generic ICE/network timeout.
+   At the attempt, verify token expiry in memory; report only remaining validity
+   and outcome. An already expired token proves expiration, **not revocation**;
+   repeat a new authorized cycle if needed. A successful replay is FAIL even if
+   the application refuses to mint another token; disconnect that test client
+   immediately and preserve only sanitized timestamps/reasons.
+6. **Refreshed-token cycle, separately:** with owner-authorized restoration of
+   only B's disposable membership, re-enter/join and wait for an actual SDK
+   refresh event. Confirm the refreshed token differs and is unexpired, in
+   memory. Do not assume an event occurred after an arbitrary wait. Revoke B
+   again, measure active removal and replay the refreshed proof as in steps 4–5.
+   The old 30-second initial token is likely expired by then; this second cycle
+   cannot retroactively validate original-token replay.
+7. **Record and clean up:** record PASS/FAIL/NOT TESTED per row, request status,
+   Cloud/client reason, timing bounds, token-validity-at-attempt and whether
+   replay admitted a participant. Keep credentials/proofs/private identifiers
+   out of screenshots and reports; clear in-memory proof, close test clients and
+   restore only the approved test membership state through normal admin actions.
+   Do not restart the conflicting local service. Keep **one active authority per
+   namespace**, including during replacements; current dev/test isolation does
+   not coordinate two production-mode authorities.
+
+Remaining blockers: persistent Vercel configuration readiness failure; manual
+Company A/B identity/isolation evidence; explicitly authorized disposable
+revocation target; controlled original/refreshed proof capture and replay;
+measured active Cloud revocation. **No measured revocation duration or authenticated
+hosted security pass is claimed.** Step 3D validation/reporting stops here;
+acceptance remains NO until those requirements are satisfied.
+
 ## Hosted voice disconnect investigation — 2026-10-23
 
 **Merge-ready: YES for this scoped voice fix and preventive hardening.
