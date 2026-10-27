@@ -75,37 +75,62 @@ body {
 
 .office-stage { height: clamp(380px, calc(100dvh - 250px), 900px); width: 100%; overflow: hidden; }
 .office-stage canvas { display: block; image-rendering: pixelated; }
-.office-work-area.chat-open { display: grid; grid-template-columns: minmax(0, 1fr) 340px; }
-.office-chat { display: flex; flex-direction: column; height: clamp(380px, calc(100dvh - 250px), 900px); border-left: 1px solid var(--color-line); }
-.office-chat[hidden] { display: none; }
-.office-page { height: 100dvh; min-height: 520px; padding: 12px 16px; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 10px; }
-.office-page-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-.office-page-header > div { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-.office-page-header > a { flex-shrink: 0; }
-.office-shell { height: 100%; min-height: 0; display: flex; flex-direction: column; border: 1px solid var(--border-subtle); background: var(--surface-default); }
-.office-toolbar { position: relative; z-index: 2; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; padding: 8px; border-bottom: 1px solid var(--color-line); }
+.office-work-area { position: relative; min-width: 0; }
+.office-page { height: 100dvh; min-height: 520px; min-width: 0; }
+.office-shell { container: office / inline-size; height: 100%; min-height: 0; display: flex; flex-direction: column; background: var(--surface-default); }
+.office-page-header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 24px; padding: 8px 16px; border-bottom: 1px solid var(--border-subtle); }
+.office-context { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.office-context > p { color: var(--text-secondary); font-size: 12px; line-height: 18px; }
+.office-context > h1 { font-size: 16px; font-weight: 600; line-height: 22px; }
+.office-connection { display: flex; align-items: center; gap: 8px; max-width: 32rem; font-size: 12px; line-height: 18px; color: var(--text-secondary); }
+.office-connection[data-state="denied"] { color: var(--status-error); }
+.office-connection[data-state="offline"], .office-connection[data-state="reconnecting"] { color: var(--status-warning); }
+.office-back { flex-shrink: 0; }
+.office-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border-subtle); }
 .office-toolbar > div { min-width: 0; }
-.office-shell .office-work-area { flex: 1; min-height: 200px; }
+.office-panel-controls, .office-zoom { display: flex; flex-wrap: wrap; gap: 8px; }
+.office-zoom[hidden] { display: none; }
+.office-control[aria-expanded="true"] { background: var(--surface-subtle); border-color: var(--action-primary); }
+.office-shell .office-work-area { flex: 1; min-height: 160px; }
+.office-shell[data-panel="chat"] .office-work-area { min-height: 20rem; }
 .office-shell .office-world, .office-shell .office-stage, .office-shell .office-chat { height: 100%; min-height: 0; }
-.office-shell .office-chat { overflow: hidden; }
-.office-status { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 12px; border-top: 1px solid var(--color-line); padding: 7px 12px; font-size: 12px; line-height: 1.5; color: var(--color-muted); }
+.office-status { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; border-top: 1px solid var(--border-subtle); padding: 6px 12px; font-size: 12px; line-height: 18px; color: var(--text-secondary); }
 .office-disclosure { position: relative; }
-.office-disclosure > summary { list-style: none; }
-.office-disclosure > summary::-webkit-details-marker { display: none; }
-.office-disclosure[open] > summary { background: var(--color-surface); border-color: var(--color-forest); }
-.office-disclosure-panel { position: absolute; top: calc(100% + var(--space-2)); left: 0; z-index: 10; width: 380px; max-width: calc(100vw - 48px); max-height: min(560px, calc(100dvh - 170px)); overflow-y: auto; padding: var(--space-4); border: 1px solid var(--border-subtle); border-radius: var(--radius-panel); background: var(--surface-default); box-shadow: var(--elevation-panel); }
+.office-panels { position: absolute; inset: 0; z-index: 3; pointer-events: none; }
+.office-panel, .office-chat { position: absolute; top: 0; bottom: 0; right: 0; z-index: 2; width: min(360px, 100%); min-width: 0; display: flex; flex-direction: column; overflow: hidden; border-left: 1px solid var(--border-subtle); background: var(--surface-default); box-shadow: var(--elevation-panel); pointer-events: auto; }
+.office-panel[hidden], .office-chat[hidden] { display: none; }
+.office-panel-header { display: flex; flex-shrink: 0; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 12px; border-bottom: 1px solid var(--border-subtle); }
+.office-panel-header > h2 { min-width: 0; font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.office-panel-body { flex: 1; min-height: 0; padding: var(--space-4); overflow-y: auto; overscroll-behavior: contain; scroll-padding: 8px; }
+.office-chat > form { flex-shrink: 0; }
+/* Standalone disclosures (outside the office composition) remain usable. */
+.office-disclosure > .office-panel { top: calc(100% + 8px); bottom: auto; left: 0; height: auto; max-height: min(560px, calc(100dvh - 160px)); border: 1px solid var(--border-subtle); border-radius: var(--radius-panel); }
+@container office (min-width: 1100px) {
+  .office-work-area.chat-open { display: grid; grid-template-columns: minmax(0, 1fr) 340px; }
+  .office-work-area > .office-chat { position: static; width: auto; box-shadow: none; }
+}
 .chat-own { border-left: 2px solid var(--color-forest); padding-left: 10px; background: var(--color-cream); }
+.office-voice { flex-shrink: 0; border-top: 1px solid var(--border-subtle); background: var(--surface-subtle); padding: 8px 12px; font-size: 14px; }
+.voice-context, .voice-session-controls, .voice-session-summary, .voice-session-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.voice-session-controls { margin-top: 8px; }
+.voice-session-summary { gap: 0; }
 .voice-details { max-height: 180px; overflow-y: auto; padding: var(--space-1); }
 .voice-details > summary { min-height: var(--control-size); padding-block: var(--space-3); }
-@media (max-width: 767px) {
-  .office-work-area.chat-open { display: block; }
-  .office-work-area.chat-open .office-world { display: none; }
-  .office-chat { border-left: 0; }
-  .office-page { padding: 8px; gap: 8px; }
-  .office-page-header { gap: 8px; }
+@media (max-width: 639px) {
+  .office-page-header { padding: 8px 12px; gap: 4px 12px; }
+  .office-context { flex-basis: 40%; }
+  .office-connection { order: 3; flex-basis: 100%; max-width: none; }
+  .office-back { font-size: 12px; }
+  .office-panel-controls { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; gap: 4px; }
+  .office-panel-controls .office-control { width: 100%; min-width: 0; height: 100%; padding-inline: 8px; font-size: 12px; line-height: 18px; }
+  .office-toolbar > div:last-child { width: 100%; justify-content: space-between; }
   .office-control:is(select) { min-width: 0; max-width: 100%; font-size: 1rem; }
-  .office-disclosure { position: static; }
-  .office-disclosure-panel { left: 8px; right: 8px; width: auto; max-width: none; top: calc(100% + 1px); }
+  .office-panel, .office-chat { width: 100%; border-left: 0; box-shadow: none; }
+  .office-work-area.chat-open .office-world { visibility: hidden; }
+  .office-shell:not([data-panel="none"]) .office-world { visibility: hidden; }
+  .office-shell:not([data-panel="none"]) .office-instructions { display: none; }
+  .office-shell:not([data-panel="none"]) .office-status:not(:has(.ui-notice)) { display: none; }
+  .voice-session-controls { align-items: stretch; flex-direction: column; gap: 4px; }
 }
 
 .skip-link {
