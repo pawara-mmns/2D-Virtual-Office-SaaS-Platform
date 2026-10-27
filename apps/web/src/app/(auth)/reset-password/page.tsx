@@ -16,7 +16,7 @@ export default async function ResetPasswordPage() {
   return (
     <AuthShell title="Choose a new password" description="Use a unique password for your Virtual Office account.">
       {hasLink ? <AuthForm mode="reset-password" configured={Boolean(getSupabaseConfig())} /> : (
-        <p role="alert" className="border-l-2 border-amber-700 bg-amber-50 p-3 text-sm leading-6 text-amber-950">Open the reset link in your email first. If it has expired or you’ve already used it, request a new one.</p>
+        <p role="alert" className="ui-notice ui-notice-warning">Open the reset link in your email first. If it has expired or you’ve already used it, request a new one.</p>
       )}
       <div className="mt-6 flex flex-wrap justify-between gap-4 text-sm">
         <Link href="/forgot-password" className="auth-text-link">Request a new reset link</Link>
