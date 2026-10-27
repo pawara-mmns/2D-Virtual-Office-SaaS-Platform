@@ -5,7 +5,7 @@ import { workspacePath } from "./validation";
 export function WorkspaceSwitcher({ organizations, currentId }: { organizations: UserOrganization[]; currentId: string }) {
   return (
     <details className="relative w-full sm:w-72">
-      <summary className="min-h-12 cursor-pointer rounded-md border border-line bg-white px-4 py-3 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-forest">
+      <summary className="min-h-12 cursor-pointer rounded border border-control bg-white px-4 py-3 text-sm font-medium">
         Switch workspace
       </summary>
       <nav aria-label="Switch workspace" className="absolute z-10 mt-2 max-h-72 w-full overflow-auto rounded-md border border-line bg-white py-2 shadow-sm">
