@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { mountOffice } from "../engine/lifecycle";
 import { AvatarSettings } from "@/features/avatars/avatar-settings";
 import type { AvatarAppearance, AvatarKey } from "@/features/avatars/presets";
@@ -14,7 +15,9 @@ import { isAvailability } from "../../../../../../packages/shared/src/chat.ts";
 import { VoiceBar } from "@/features/voice/voice-bar";
 import { sameVoiceState, type VoiceZoneState } from "../../../../../../packages/shared/src/voice.ts";
 
-export default function OfficeCanvas({ appearance, profileWarning, officeId, userId }: { appearance: AvatarAppearance; profileWarning?: string; officeId: string; userId?: string }) {
+export type OfficeContext = { workspaceName: string; officeName: string; workspaceHref: string };
+
+export default function OfficeCanvas({ appearance, profileWarning, officeId, userId, context }: { appearance: AvatarAppearance; profileWarning?: string; officeId: string; userId?: string; context: OfficeContext }) {
   const host = useRef<HTMLDivElement>(null);
   const controls = useRef<ReturnType<typeof mountOffice> | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -23,7 +26,11 @@ export default function OfficeCanvas({ appearance, profileWarning, officeId, use
   const [savedName, setSavedName] = useState<string | null>(null);
   const network = useRef<OfficeNetwork | null>(null);
   const [presence, setPresence] = useState<Presence>({ status: "connecting", count: 0, notice: "Connecting to your office…" });
-  const [chatOpen, setChatOpen] = useState(false);
+  const [panel, setPanel] = useState<"avatar" | "participants" | "chat" | null>(null);
+  const [panelHost, setPanelHost] = useState<HTMLDivElement | null>(null);
+  const [compact, setCompact] = useState(false);
+  const zoomControls = useRef<HTMLDivElement>(null);
+  const chatOpen = panel === "chat";
   const [chatEvents] = useState(createChatEvents);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [availabilityError, setAvailabilityError] = useState("");
@@ -33,10 +40,26 @@ export default function OfficeCanvas({ appearance, profileWarning, officeId, use
   const own = participants.find((person) => person.isSelf);
   const names = useMemo(() => new Map(participants.map((person) => [person.userId, person.displayName])), [participants]);
   const sendChat = useCallback((body: string, id: string) => network.current?.sendChat?.(body, id) ?? false, []);
-  const closeChat = useCallback(() => { setChatOpen(false); chatToggle.current?.focus(); }, []);
+  const closeChat = useCallback(() => { setPanel(null); chatToggle.current?.focus({ preventScroll: true }); }, []);
+  const avatarPanel = useCallback((open: boolean) => setPanel(open ? "avatar" : null), []);
+  const participantsPanel = useCallback((open: boolean) => setPanel(open ? "participants" : null), []);
   const avatarKey = savedKey ?? appearance.avatarKey;
   const displayName = savedName ?? appearance.displayName;
   const latestAppearance = useRef<AvatarAppearance>({ ...appearance, avatarKey });
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 639px)");
+    const update = () => setCompact(media.matches);
+    update(); media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+  useEffect(() => {
+    if (!compact || !panel) return;
+    const focused = document.activeElement;
+    if (focused === document.body || host.current?.contains(focused) || zoomControls.current?.contains(focused)) {
+      const surface = panel === "chat" ? document.getElementById("office-chat") : panelHost?.querySelector<HTMLElement>(".office-panel:not([hidden])");
+      surface?.querySelector<HTMLElement>("button")?.focus({ preventScroll: true });
+    }
+  }, [compact, panel, panelHost]);
   useEffect(() => {
     const current = { avatarKey, displayName };
     latestAppearance.current = current;
@@ -85,24 +108,32 @@ export default function OfficeCanvas({ appearance, profileWarning, officeId, use
     controls.current = controller;
     return () => { active = false; window.clearTimeout(timeout); clearTimeout(authTimer); authSubscription?.unsubscribe(); window.removeEventListener("pagehide", leave); network.current?.close(); network.current = null; controls.current = null; void controller.dispose(); };
   }, [attempt, officeId, chatEvents]);
-  return <section aria-label="Interactive office" className="office-shell">
-    <div className="office-toolbar">
-      <div className="flex flex-wrap items-center gap-2">
-        <AvatarSettings currentKey={avatarKey} displayName={displayName} onSaved={(key, name) => { setSavedKey(key); if (name) setSavedName(name); network.current?.appearanceChanged(); }} />
-        <Participants participants={participants} />
-        <button ref={chatToggle} className="office-control" aria-expanded={chatOpen} aria-controls="office-chat" onClick={() => setChatOpen((value) => !value)}>Office Chat</button>
+  return <section aria-label="Interactive office" className="office-shell" data-panel={panel ?? "none"}>
+    <header className="office-page-header">
+      <div className="office-context"><p>{context.workspaceName}</p><h1>{context.officeName}</h1></div>
+      <div className="office-connection" data-state={presence.status}>
+        <p role="status" aria-live="polite"><span className="font-medium">{presence.status === "online" ? `Connected · ${presence.count} online` : presence.status === "connecting" ? "Connecting" : presence.status === "reconnecting" ? "Reconnecting" : presence.status === "denied" ? "Access denied" : "Disconnected"}</span>{presence.notice !== "Connected." && <> · {presence.notice}</>}</p>
+        {presence.status === "offline" && <button className="office-control" onClick={() => { setStatus("loading"); setPresence({ status: "connecting", count: 0, notice: "Connecting to your office…" }); setAttempt((value) => value + 1); }}>Retry connection</button>}
+      </div>
+      <Link href={context.workspaceHref} className="auth-text-link office-back">Back to workspace</Link>
+    </header>
+    <nav id="office-controls" tabIndex={-1} aria-label="Office controls" className="office-toolbar">
+      <div className="office-panel-controls">
+        <AvatarSettings currentKey={avatarKey} displayName={displayName} panel={{ open: panel === "avatar", onOpenChange: avatarPanel, container: panelHost }} onSaved={(key, name) => { setSavedKey(key); if (name) setSavedName(name); network.current?.appearanceChanged(); }} />
+        <Participants participants={participants} panel={{ open: panel === "participants", onOpenChange: participantsPanel, container: panelHost }} />
+        <button ref={chatToggle} className="office-control" aria-expanded={chatOpen} aria-controls="office-chat" onClick={() => setPanel((value) => value === "chat" ? null : "chat")}>Office Chat</button>
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <label htmlFor="office-availability" className="sr-only">Your availability</label><select id="office-availability" className="office-control" value={own?.availability ?? "AVAILABLE"} disabled={presence.status !== "online" || !own?.connected} onChange={(event) => { setAvailabilityError(""); const value = event.target.value; if (isAvailability(value) && !network.current?.setAvailability?.(value)) setAvailabilityError("Reconnect before changing availability."); }}><option value="AVAILABLE">Available</option><option value="BUSY">Busy</option><option value="DO_NOT_DISTURB">Do not disturb</option></select>
-        <div role="group" aria-label="Office zoom" className="flex gap-1">
+        <div ref={zoomControls} role="group" aria-label="Office zoom" hidden={compact && panel !== null} className="office-zoom">
         <button className="office-control" disabled={status !== "ready"} onClick={() => controls.current?.zoomBy(-1)} aria-label="Zoom out">−</button>
         <button className="office-control" disabled={status !== "ready"} onClick={() => controls.current?.resetZoom()}>Reset zoom</button>
         <button className="office-control" disabled={status !== "ready"} onClick={() => controls.current?.zoomBy(1)} aria-label="Zoom in">+</button>
         </div>
       </div>
-    </div>
+    </nav>
     <div className={`office-work-area${chatOpen ? " chat-open" : ""}`}>
-    <div className="office-world relative bg-ink">
+    <div inert={compact && panel !== null} className="office-world relative bg-ink">
       <div ref={host} tabIndex={0} role="region" aria-label="Pixel-art office. Keyboard movement area" aria-describedby="office-instructions"
         className="office-stage outline-offset-[-4px] focus-visible:outline-4 focus-visible:outline-forest" />
       {status !== "ready" && <div className="absolute inset-0 flex items-center justify-center bg-surface p-8 text-center">
@@ -110,12 +141,11 @@ export default function OfficeCanvas({ appearance, profileWarning, officeId, use
       </div>}
     </div>
     <ChatPanel key={officeId} officeId={officeId} open={chatOpen} onClose={closeChat} events={chatEvents} userId={userId ?? own?.userId} names={names} send={sendChat} />
+    <div ref={setPanelHost} className="office-panels" />
     </div>
     {voice?.zone && <VoiceBar key={voice.sessionId} officeId={officeId} state={voice} leave={leaveVoice} />}
     <footer className="office-status">
-      <p role="status" aria-live="polite"><span className="font-medium text-ink">{presence.status === "online" ? `Connected · ${presence.count} online` : presence.status === "connecting" ? "Connecting" : presence.status === "reconnecting" ? "Reconnecting" : presence.status === "denied" ? "Access denied" : "Disconnected"}</span>{presence.notice !== "Connected." && <> · {presence.notice}</>}</p>
-      {presence.status === "offline" && <button className="office-control" onClick={() => { setStatus("loading"); setPresence({ status: "connecting", count: 0, notice: "Connecting to your office…" }); setAttempt((value) => value + 1); }}>Retry connection</button>}
-      <p id="office-instructions">Keyboard required: click or Tab into the office, then use WASD or arrows. Tab to leave.</p>
+      <p id="office-instructions" className="office-instructions">Keyboard required: click or Tab into the office, then use WASD or arrows. Tab to leave.</p>
       {availabilityError && <p role="alert" className="ui-notice ui-notice-error">{availabilityError}</p>}
       {profileWarning && <p role="alert" className="ui-notice ui-notice-warning">{profileWarning}</p>}
     </footer>
