@@ -57,7 +57,7 @@ export function connectOffice(options: {
       if (!response.ok) {
         denied = response.status === 401 || response.status === 403;
         clearInterval(refresh);
-        const notice = denied ? "Office access denied. Sign in and check your active membership." : response.status === 429 ? "Too many connection attempts. Wait a minute and retry." : "Unable to enter. Close other office tabs, check the server, wait ten seconds and retry.";
+        const notice = denied ? "Office access denied. Sign in and check your active membership." : response.status === 429 ? "Too many connection attempts. Wait a minute and retry." : "Unable to enter. Close other office tabs, wait ten seconds and retry. If it continues, contact your workspace administrator.";
         presence(denied ? "denied" : "offline", notice); return;
       }
       const reservation: SeatReservation = await response.json();
@@ -106,7 +106,7 @@ export function connectOffice(options: {
       room.onLeave((code) => { if (closed) return; denied ||= code === 4000; online = false; state = undefined; disconnected(); clearInterval(refresh); if (denied && room) room.reconnection.enabled = false; presence(denied ? "denied" : "offline", denied ? "Office access ended. Return to the workspace and check your membership." : "Disconnected. Verify your session and membership, then retry."); });
       room.onError((code) => { if (closed) return; denied ||= code === 401 || code === 403; online = false; disconnected(); if (denied) { clearInterval(refresh); if (room) room.reconnection.enabled = false; } presence(denied ? "denied" : "offline", denied ? "Office access denied. Return to the workspace and check your membership." : "Office connection failed. Check access and retry."); });
       presence("online", "Connected.");
-    } catch { if (!closed) presence("offline", "Could not connect. Check your session and the realtime server, then retry."); }
+    } catch { if (!closed) presence("offline", "Could not connect to the office. Check your network connection and retry."); }
   };
   const close = () => {
     if (closed) return;

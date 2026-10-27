@@ -57,6 +57,16 @@ test("office communication composition: viewport, profile/settings, names, draft
     assert.equal(await evaluate("document.querySelectorAll('.office-disclosure[open]').length"),0);
     const desktop=await layout();assert.ok(desktop.canvasHeight>desktop.height*.65);assert.ok(desktop.scrollHeight<=desktop.height);assert.ok(desktop.scrollWidth<=desktop.width);await snapshot("communication-office-desktop.png");
     await button("Avatar settings");await until(()=>evaluate("!!document.querySelector('.office-disclosure[open] input')"));assert.equal(await evaluate("document.querySelectorAll('input[name=avatarKey]').length"),6);
+    const foundation=await evaluate(`(()=>{
+      const control=document.querySelector('.office-control'),input=document.getElementById('office-display-name');
+      const style=getComputedStyle(input),color=value=>value.match(/[\\d.]+/g).slice(0,3).map(Number);
+      const luminance=value=>color(value).map(n=>{n/=255;return n<=.04045?n/12.92:((n+.055)/1.055)**2.4}).reduce((sum,n,i)=>sum+n*[.2126,.7152,.0722][i],0);
+      const a=luminance(style.borderTopColor),b=luminance(style.backgroundColor);
+      return{controlHeight:control.getBoundingClientRect().height,inputHeight:input.getBoundingClientRect().height,inputFont:parseFloat(style.fontSize),borderContrast:(Math.max(a,b)+.05)/(Math.min(a,b)+.05)};
+    })()`);
+    assert.ok(foundation.controlHeight>=44 && foundation.inputHeight>=48,"Controls meet the foundation touch-height budgets");
+    assert.ok(foundation.borderContrast>=3,"Necessary input boundaries have at least 3:1 contrast");
+    assert.ok(foundation.inputFont>=16,"Editable text avoids a small mobile input font");
     await evaluate("document.getElementById('office-display-name').focus();document.getElementById('office-display-name').select()");await command("Input.insertText",{text:"Alex Lee"});await evaluate("document.querySelector('input[value=plum]').click()");await button("Save appearance");await until(()=>evaluate("communicationFixture.saves===1 && communicationFixture.changes===1"));
     assert.equal(await evaluate("communicationFixture.mounts"),1,"Saving appearance must not reload the engine/transport");
     await evaluate("document.querySelector('[aria-label=\"Close Avatar settings\"]').click()");assert.equal(await evaluate("document.activeElement.textContent"),"Avatar settings");
@@ -71,10 +81,15 @@ test("office communication composition: viewport, profile/settings, names, draft
     assert.equal(await evaluate("document.documentElement.scrollWidth<=320 && document.querySelector('.office-disclosure[open] .office-disclosure-panel').scrollWidth<=document.querySelector('.office-disclosure[open] .office-disclosure-panel').clientWidth"),true,"Small mobile settings have no horizontal overflow");
     await command("Input.dispatchKeyEvent",{type:"keyDown",key:"Tab",code:"Tab"});assert.equal(await evaluate("document.activeElement.getAttribute('aria-label')"),"Close Avatar settings","Keyboard focus enters the panel through its close control");
     await command("Input.dispatchKeyEvent",{type:"keyDown",key:"Escape",code:"Escape"});
+    await button("Office Chat");
+    assert.ok(await evaluate("parseFloat(getComputedStyle(document.getElementById('office-chat-draft')).fontSize)>=16"));
+    await evaluate("document.documentElement.style.fontSize='200%'");await delay(120);
+    assert.equal(await evaluate("document.documentElement.scrollWidth<=innerWidth && document.getElementById('office-chat-draft').getBoundingClientRect().width<=innerWidth"),true,"Chat controls reflow at 320px with 200% root text size");
+    await evaluate("document.documentElement.style.fontSize=''");await button("Close chat");
     await evaluate("communicationFixture.remount()");await until(()=>evaluate("communicationFixture.mounts===2"));await button("Avatar settings");assert.equal(await evaluate("document.getElementById('office-display-name').value"),"Alex Lee");assert.equal(await evaluate("document.querySelector('input[name=avatarKey]:checked').value"),"plum","Saved preset persists when remounted from the profile");
     await evaluate("communicationFixture.options.onPresence({status:'denied',count:0,notice:'Membership ended.'})");assert.equal(await evaluate("[...document.querySelectorAll('button')].some(b=>b.textContent==='Retry connection')"),false);assert.equal(await evaluate("document.querySelector('.office-status').textContent.includes('Access denied')"),true);
     await evaluate("communicationFixture.unmount()");await until(()=>evaluate("document.querySelectorAll('canvas').length===0 && communicationFixture.authUnsubscribed"));assert.equal(await evaluate("communicationFixture.closes"),2);assert.deepEqual(tools.errors,[]);
-    console.info(JSON.stringify({scope:"Actual office composition and Phaser; synthetic profile/history/network, no authenticated service",desktop,tablet,mobile,equivalentVoiceSnapshotCommits:voiceCommits,settingsPersistence:true,engineMounts:2,engineCloses:2,runtimeErrors:tools.errors.length}));
+    console.info(JSON.stringify({scope:"Actual office composition and Phaser; synthetic profile/history/network, no authenticated service",desktop,tablet,mobile,foundation,textResize320:true,equivalentVoiceSnapshotCommits:voiceCommits,settingsPersistence:true,engineMounts:2,engineCloses:2,runtimeErrors:tools.errors.length}));
   }catch(error){
     if(tools)try{console.info(JSON.stringify({fixtureFailure:true,runtimeErrors:tools.errors,state:await tools.evaluate("({mounts:window.communicationFixture?.mounts,body:document.body.innerText.slice(0,2000)})")}));writeFileSync(resolve(cache,"communication-failure.png"),Buffer.from((await tools.command("Page.captureScreenshot",{format:"png"})).data,"base64"));}catch{}
     throw error;

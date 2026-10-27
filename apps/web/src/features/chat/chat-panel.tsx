@@ -138,12 +138,12 @@ export const ChatPanel = memo(function ChatPanel({ officeId, open, onClose, even
       <ol className="space-y-2">{messages.map((message) => <MessageRow key={message.id} message={message} name={avatarDisplayName(names?.get(message.senderId) ?? message.senderName)} own={message.senderId === userId} />)}</ol>
     </div>
     {hasNew && <button className="border-t border-line bg-surface px-4 py-2 text-sm font-medium text-forest" onClick={() => void load()}>Show latest messages</button>}
-    {historyError && <div className="border-t border-line px-4 py-2"><p role="alert" className="text-xs leading-5 text-red-800">{historyError}</p><button className="auth-text-link mt-1" disabled={loading} onClick={() => void load()}>Retry history</button></div>}
+    {historyError && <div className="border-t border-line px-4 py-2"><p role="alert" className="ui-notice ui-notice-error">{historyError}</p><button className="auth-text-link mt-1" disabled={loading} onClick={() => void load()}>Retry history</button></div>}
     <form onSubmit={(event) => { event.preventDefault(); submit(); }} className="border-t border-line p-4">
       <label htmlFor="office-chat-draft" className="text-xs font-medium">Message your office</label>
-      <textarea id="office-chat-draft" value={draft} maxLength={4000} rows={2} aria-describedby="office-chat-help" className="auth-input mt-2 max-h-28 resize-y text-sm" onChange={(event) => { draftRef.current = event.target.value; setDraft(event.target.value); }} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); submit(); } }} />
+      <textarea id="office-chat-draft" value={draft} maxLength={4000} rows={2} aria-describedby="office-chat-help" className="auth-input mt-2 max-h-28 resize-y" onChange={(event) => { draftRef.current = event.target.value; setDraft(event.target.value); }} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); submit(); } }} />
       <p id="office-chat-help" className="mt-1 text-xs leading-5 text-muted">{[...draft].length}/2,000 characters. Shift+Enter for a new line.</p>
-      {sendError && <p role="alert" className="mt-2 text-xs leading-5 text-red-800">{sendError}</p>}
+      {sendError && <p role="alert" className="ui-notice ui-notice-error mt-2">{sendError}</p>}
       <button className="auth-button mt-3 w-full" disabled={!online || !userId || !normalizeBody(draft) || sending}>{sending ? "Sending…" : "Send message"}</button>
     </form>
   </aside>;

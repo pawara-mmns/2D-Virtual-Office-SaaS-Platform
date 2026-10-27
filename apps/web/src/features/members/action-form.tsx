@@ -11,14 +11,14 @@ export function TeamActionForm({ action, label, children, destructive = false }:
   // Never submit a previous one-time secret back as Server Action state.
   const [state, formAction, pending] = useActionState((_previous: TeamFormState, form: FormData) => action({ status: "idle" }, form), { status: "idle" });
   return (
-    <form action={formAction} className="space-y-4">
-      <fieldset disabled={pending} className="space-y-4">
+    <form action={formAction} className="space-y-4" aria-busy={pending}>
+      <fieldset disabled={pending} className="min-w-0 space-y-4">
         {children}
         <button type="submit" className={destructive ? "team-danger-button" : "auth-button"} aria-disabled={pending}>
           {pending ? "Working…" : label}
         </button>
       </fieldset>
-      {!pending && state.message && <p role={state.status === "error" ? "alert" : "status"} className={`max-w-xl text-sm leading-6 ${state.status === "error" ? "text-red-800" : "text-forest"}`}>{state.message}</p>}
+      {!pending && state.message && <p role={state.status === "error" ? "alert" : "status"} className={`ui-notice max-w-xl ${state.status === "error" ? "ui-notice-error" : "ui-notice-success"}`}>{state.message}</p>}
       {!pending && state.status === "success" && state.invitationLink && <InvitationLinkResult key={state.invitationLink.expiresAt} link={state.invitationLink} />}
     </form>
   );

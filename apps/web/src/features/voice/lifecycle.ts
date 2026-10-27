@@ -13,8 +13,8 @@ export function voiceError(error: unknown, stage: VoiceStage = "microphone"): st
   if (name === "NotFoundError" || name === "DevicesNotFoundError") return "No microphone was found. Connect a microphone and join again.";
   if (name === "NotReadableError" || name === "TrackStartError") return "The microphone is unavailable or in use. Check your device and other applications.";
   const details = error && typeof error === "object" ? error as { name?: unknown; reason?: unknown; status?: unknown } : {};
-  if (details.name === "ConnectionError" && (details.reason === 0 || details.status === 401 || details.status === 403)) return "LiveKit rejected voice authorization. Leave voice and join again; if it persists, ask an administrator to check the LiveKit project and token configuration.";
-  if (stage === "signaling") return "LiveKit signaling could not connect. Check the voice service URL, WebSocket connectivity and network restrictions, then join again.";
+  if (details.name === "ConnectionError" && (details.reason === 0 || details.status === 401 || details.status === 403)) return "The voice service rejected voice authorization. Leave voice and join again; if it persists, ask your workspace administrator to check your access.";
+  if (stage === "signaling") return "Voice signaling could not connect. Check your network connection, then join again.";
   if (stage === "media") return "Voice signaling connected, but WebRTC media could not establish. Check VPN/firewall and WebRTC network access, then join again.";
   if (stage === "publication") return "The microphone track could not publish. Check microphone permissions and voice-room access, then join again.";
   return "Voice connection failed. Check the microphone and network, then join again.";
@@ -37,7 +37,7 @@ export function startVoice(media: VoiceMedia, ready: () => void, failed: (messag
     const denied = detail.name === "ConnectionError" && (detail.reason === 0 || detail.status === 401 || detail.status === 403);
     console.warn("Voice connection failed.",{ stage,category: timedOut ? "timeout" : denied ? "authorization" : stage === "microphone" ? "device" : "connection" });
     void stop();
-    const timeouts = { signaling:"LiveKit signaling timed out before the voice connection was authorized. Check WebSocket connectivity and try again.",media:"Voice signaling connected, but WebRTC media establishment timed out. Check VPN/firewall and WebRTC network access.",publication:"Microphone publication timed out. Check the microphone and voice-room access, then join again." };
+    const timeouts = { signaling:"Voice signaling timed out before the voice connection was authorized. Check your network connection and try again.",media:"Voice signaling connected, but WebRTC media establishment timed out. Check VPN/firewall and WebRTC network access.",publication:"Microphone publication timed out. Check the microphone and voice-room access, then join again." };
     failed(timedOut && stage in timeouts ? timeouts[stage as keyof typeof timeouts] : voiceError(error,stage));
   };
   const advance = (next: VoiceStage) => {

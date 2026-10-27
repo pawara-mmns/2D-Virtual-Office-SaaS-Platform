@@ -30,7 +30,7 @@ export default async function DashboardPage() {
         <Link href="/organizations/new" className="auth-button shrink-0">Create workspace</Link>
       </div>
       {errorMessage ? (
-        <p role="alert" className="mt-10 border-l-2 border-amber-700 bg-amber-50 p-4 text-sm leading-7 text-amber-950">{errorMessage}</p>
+        <p role="alert" className="ui-notice ui-notice-error mt-10">{errorMessage}</p>
       ) : organizations.length ? (
         <ul aria-label="Your workspaces" className="mt-10 divide-y divide-line border-y border-line">
           {organizations.map((organization) => (
@@ -45,7 +45,7 @@ export default async function DashboardPage() {
       ) : (
         <section aria-labelledby="workspace-heading" className="mt-10 border border-line bg-white px-6 py-12 sm:px-10">
           <h2 id="workspace-heading" className="text-lg font-semibold">No workspace yet</h2>
-          <p className="mt-3 max-w-lg text-sm leading-7 text-muted">Create your first workspace to get started. You’ll become its owner and receive one default office.</p>
+          <p className="mt-3 max-w-lg text-sm leading-7 text-muted">Create a workspace for your team, or open your invitation link to join an existing workspace. Creating a workspace makes you its owner and includes one main office.</p>
           <Link href="/organizations/new" className="auth-text-link mt-5 inline-block">Create your first workspace</Link>
         </section>
       )}

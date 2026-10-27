@@ -35,7 +35,7 @@ export default async function MembersPage({ params, searchParams }: { params: Pr
     result = { deliveryMode, members: members.members, activeCount: members.activeCount, reservedCount: members.reservedCount,
       membersNext: members.hasNext, invitations: invites.invitations, invitesNext: invites.hasNext };
   } catch (error) {
-    return <WorkspaceShell email={user.email}><Link href={`/workspace/${org}`} className="auth-text-link">Back to workspace</Link><h1 className="mt-7 text-3xl font-semibold">Team unavailable</h1><p role="alert" className="mt-4 max-w-xl text-sm leading-7">{teamErrorMessage(error)}</p></WorkspaceShell>;
+    return <WorkspaceShell email={user.email}><Link href={`/workspace/${org}`} className="auth-text-link">Back to workspace</Link><h1 className="mt-7 text-3xl font-semibold">Team unavailable</h1><p role="alert" className="ui-notice ui-notice-error mt-4 max-w-xl">{teamErrorMessage(error)}</p></WorkspaceShell>;
   }
   return <WorkspaceShell email={user.email}>
     <Link href={`/workspace/${org}`} className="auth-text-link">Back to workspace</Link>
