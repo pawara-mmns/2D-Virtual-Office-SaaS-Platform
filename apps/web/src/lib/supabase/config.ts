@@ -1,5 +1,5 @@
 export const authSetupMessage =
-  "Authentication is not configured. Add the Supabase URL and publishable key to apps/web/.env.local, then restart the web application.";
+  "Sign-in is unavailable. Please try again later or contact your workspace administrator.";
 
 export function getSupabaseConfig() {
   // Direct references allow Next.js to inline these public values in the browser.

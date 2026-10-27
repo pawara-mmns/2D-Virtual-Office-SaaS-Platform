@@ -5,6 +5,8 @@
 **Repository:** existing `feature/p6-s00-ux-audit-design-spec` branch, confirmed by reading `.git/HEAD`; no Git operations.  
 **Product:** private virtual offices for software teams of 6–10 people, with multiple isolated companies.
 
+**Implementation update, 27 October 2026:** the subsequent Step 1A brief approved D01–D05 as the planning baseline for a bounded foundation pass. Sections 1–14 retain the original Step 0 observations and decisions at audit completion. Section 15 records the implementation and its actual validation; the broader V2 proposals remain future work.
+
 ## 1. Executive Summary
 
 Keep the working Next.js, Phaser, Colyseus, Supabase, LiveKit and Resend architecture. Keep the original office artwork. The strongest V2 opportunity is a shorter, clearer everyday workflow: enter the office, find a teammate, understand their availability, and communicate without fighting the surrounding interface.
@@ -909,5 +911,90 @@ These are product decisions for the next implementation brief, not requests to r
 | D09 | Release evidence and ownership | Product owner accepts the narrow Step 1 brief; engineering/security owner separately clears hosted security gates; named pilot participants/devices provide actual measurements | Before release; always distinct from design approval |
 
 **Final readiness decision:** Step 0's source-backed audit/specification is available for review, with a real connected-browser evidence set and explicit unverified states. A **bounded Phase 6 Step 1** can be prepared from sections 6/7/11 once D01–D05 are agreed. It is **not started or automatically approved** by completing this document. Broader V2/security/deployment readiness is not established. Stop here; no Step 1 code is included.
+
+## 15. Phase 6 Step 1A — Design Foundation & UI Consistency
+
+**Completed: 27 October 2026. Branch:** `feature/p6-s01a-ui-foundation`, confirmed by reading `.git/HEAD`. No Git commands, deployment or production configuration changes. This section supersedes the historical Step 0 implementation status only for the bounded work below.
+
+### Implementation and modified files
+
+Preserved the forest/cream identity, original artwork, routes and panel structure. No dependencies, APIs, migrations, RLS, realtime protocol or media permissions were added or changed. Changes in service/action/network files below are display strings only; authentication, authorization, redirects, timing and recovery branches remain intact.
+
+Paths in this table are relative to `apps/web/src/` unless otherwise stated.
+
+| Files modified | Change |
+| --- | --- |
+| [app/globals.css](../apps/web/src/app/globals.css) | Semantic foundation, compatible Tailwind aliases, control contrast/sizes, focus, notice variants, panel elevation and bounded wrapping fixes |
+| [features/auth/auth-shell.tsx](../apps/web/src/features/auth/auth-shell.tsx), [auth-form.tsx](../apps/web/src/features/auth/auth-form.tsx) | Skip link, larger home-link target, consistent field errors/notices and readable disabled fieldsets |
+| [app/(auth)/login/page.tsx](../apps/web/src/app/(auth)/login/page.tsx), [register/page.tsx](../apps/web/src/app/(auth)/register/page.tsx), [reset-password/page.tsx](../apps/web/src/app/(auth)/reset-password/page.tsx) | Clear verification/next-step copy and information/warning presentation; existing recovery-proof gating retained |
+| [features/auth/actions.ts](../apps/web/src/features/auth/actions.ts), [lib/supabase/config.ts](../apps/web/src/lib/supabase/config.ts) | Employee-facing unavailable/setup copy without configuration instructions; email-confirmation failure still fails closed |
+| [features/organizations/organization-form.tsx](../apps/web/src/features/organizations/organization-form.tsx), [workspace-shell.tsx](../apps/web/src/features/organizations/workspace-shell.tsx), [workspace-switcher.tsx](../apps/web/src/features/organizations/workspace-switcher.tsx), [service.ts](../apps/web/src/features/organizations/service.ts) | Correct existing office/invitation capabilities; consistent errors, navigation target and switcher border; remove migration instructions from user feedback |
+| [app/dashboard/page.tsx](../apps/web/src/app/dashboard/page.tsx), [app/workspace/[organizationId]/page.tsx](../apps/web/src/app/workspace/[organizationId]/page.tsx), [members/page.tsx](../apps/web/src/app/workspace/[organizationId]/members/page.tsx), [app/error.tsx](../apps/web/src/app/error.tsx) | Consistent error notices; explain join-by-invitation in the empty workspace state; remove unrelated password-reset advice from the root error |
+| [features/members/action-form.tsx](../apps/web/src/features/members/action-form.tsx), [features/invitations/errors.ts](../apps/web/src/features/invitations/errors.ts) | Shared success/error treatment, pending `aria-busy`, narrow fieldset sizing and safe team-setup guidance; delivery failures retained |
+| [features/avatars/avatar-settings.tsx](../apps/web/src/features/avatars/avatar-settings.tsx) | Avatar choices have 44 px minimum label height and stronger boundaries; shared save-result notices |
+| [features/chat/chat-panel.tsx](../apps/web/src/features/chat/chat-panel.tsx), [actions.ts](../apps/web/src/features/chat/actions.ts) | 16 px composer, consistent error presentation and actionable history recovery without database-setup instructions; drafts/retry/idempotency unchanged |
+| [features/office/components/office-canvas.tsx](../apps/web/src/features/office/components/office-canvas.tsx), [network/connection.ts](../apps/web/src/features/office/network/connection.ts) | Plain-language connection/setup notices and differentiated profile/availability notices; no effect, key, transport or input changes |
+| [features/voice/voice-bar.tsx](../apps/web/src/features/voice/voice-bar.tsx), [voice-session.tsx](../apps/web/src/features/voice/voice-session.tsx), [lifecycle.ts](../apps/web/src/features/voice/lifecycle.ts), [token-service.ts](../apps/web/src/features/voice/token-service.ts) | Consistent alerts, wrapping cancel row and employee-facing service/admission guidance. Lifecycle code, Room ownership, leases, SDK reasons and grants unchanged |
+| [scripts/test-communication-browser.mjs](../scripts/test-communication-browser.mjs) | Extend the existing isolated suite with rendered border-contrast, control-size, input-font and 320 px text-resize assertions |
+| This specification and six images in [assets/v2-ui-foundation](assets/v2-ui-foundation/) | Implementation record and inspected visual evidence; no new standalone documentation |
+
+### Tokens and accessibility
+
+`globals.css` now owns semantic `--page-background`, `--surface-default`, `--surface-subtle`, `--text-primary`, `--text-secondary`, `--action-primary`, `--action-hover`, `--border-subtle`, `--border-control`, `--status-error`/surface, `--status-warning`/surface, focus width/color/offset, spacing, control/panel radii, control sizes and panel elevation. The existing `cream/surface/ink/muted/forest/line` Tailwind names remain compatible aliases; existing `surface` still means the subtle background. No second hardcoded brand palette was introduced.
+
+- Necessary control borders use `#718076`, replacing the faint decorative boundary and one-off office override. The browser measured **4.157:1** against white.
+- Office controls have **44 px** minimum height/width; primary form controls **48 px** minimum height. Form radii are **4 px**, panels **6 px**. Avatar option labels and voice-details summaries receive larger targets.
+- Inputs and the chat composer use **16 px** text. Native labels, invalid associations, pending labels, fieldset disabling and existing focus-return behavior remain. Disabled controls retain native semantics and do not change to a hover background.
+- Focus uses the existing forest color with a declared **3 px** outline and **3 px** offset, including textareas. The office movement region keeps its existing inward focus treatment. Connected-browser zoom can round rasterized outline dimensions; this is not a certification of every focus state.
+- `ui-notice` supplies information styling; success/warning/error modifiers share spacing and readable semantic colors. Existing role/status announcements and distinct network, denied-access, revoked-session and microphone feedback remain; errors are not recategorized as permission revocation.
+
+### Responsive and visual evidence
+
+| Scope / actual check | Result |
+| --- | --- |
+| Local production login, registration, forgot-password and missing-proof reset at **1440, 820, 390 and 320 CSS px** | **PASS:** connected-browser DOM measurements found no horizontal page overflow and all measured form controls/recovery links fit. No credentials entered or form submitted |
+| 390 px registration; 820 px missing-reset-link guidance; 320 px verification/sign-in guidance | **PASS, visually inspected:** screenshots saved below; clear wrapping, borders and targets. These are local frontend pages, not hosted deployment verification |
+| Actual office/Phaser composition at desktop, 820 px tablet, 390 and 320 px mobile | **PASS, isolated browser fixture:** settings, chat, keyboard focus/return, drafts, viewport bounds and cleanup. Desktop fixture viewport reported 1422×804; exact 1440 px form layout was separately DOM-checked |
+| Text resizing | **PASS, limited synthetic check:** at 320 px and 200% root font size, chat document/composer retained horizontal fit. This does not verify native browser 200/400% zoom, every action's vertical access or screen-reader equivalence |
+| Connected-browser desktop screenshot | **BLOCKED:** capture repeatedly timed out despite verified URL/DOM and settled viewport. No desktop public screenshot is claimed; isolated headless desktop screenshots succeeded |
+| Authenticated owner/admin/member workflows, real mobile keyboard/AT, native high zoom and actual audio/Cloud revocation | **NOT TESTED in Step 1A.** Component/route tests are not authenticated hosted acceptance |
+
+The connected browser had an existing 90% zoom setting. Temporary viewport dimensions were compensated and **`innerWidth` verified** for each requested CSS width; no permanent browser zoom setting was changed. Its temporary viewport override and the audit tab were removed afterward. A local frontend only was used. No realtime process using the hosted namespace was started; transport tests used isolated synthetic services.
+
+| Current evidence | Comparison / limitation |
+| --- | --- |
+| [Narrow login](assets/v2-ui-foundation/01-login-narrow.jpg) | Compared with Step 0 V21/V24; new verification guidance, stronger borders and larger link targets; different viewport, not a pixel-diff benchmark |
+| [Mobile registration](assets/v2-ui-foundation/02-register-mobile.jpg) | Compared with Step 0 V23; actual updated frontend copy/borders, no registration submission |
+| [Tablet recovery guidance](assets/v2-ui-foundation/03-reset-guidance-tablet.jpg) | Compared with Step 0 V26; shared warning treatment; no recovery token or password update |
+| [Office desktop fixture](assets/v2-ui-foundation/04-office-desktop-fixture.png) | Compare control styling with Step 0 V08; actual components/art, synthetic users/network; not a live two-user session |
+| [Chat mobile fixture](assets/v2-ui-foundation/05-chat-mobile-fixture.png), [avatar mobile fixture](assets/v2-ui-foundation/06-avatar-mobile-fixture.png) | Compare styling with V14/V16; synthetic messages/profile actions, inspected focused composer/settings panel |
+
+![Updated local registration, mobile](assets/v2-ui-foundation/02-register-mobile.jpg)
+
+![Updated chat and focus treatment; synthetic browser fixture](assets/v2-ui-foundation/05-chat-mobile-fixture.png)
+
+### Automated validation
+
+| Command / coverage | Actual result |
+| --- | --- |
+| `pnpm.cmd lint` | **PASS**, web and realtime, zero warnings |
+| `pnpm.cmd typecheck` | **PASS**, web route generation/TypeScript and realtime TypeScript |
+| `pnpm.cmd --filter @virtual-office/web build` | **PASS**, final frontend production build |
+| `pnpm.cmd test` | **PASS**, **96 application + 28 realtime = 124**. The 96 application tests also passed after the final copy changes. Service/store/Auth/Cloud dependencies are synthetic where the suites specify |
+| From `apps/web`: `node --test tests/auth-routes.test.mjs tests/voice-routes.test.mjs` | **PASS, 13/13** against the final production build: public forms, redirects, confirmation/recovery/invitation proof handling, protected routes, voice origin/admission denials and bundle boundaries |
+| `node --test --test-concurrency=1 scripts/test-communication-browser.mjs scripts/test-chat-browser.mjs scripts/test-office-browser.mjs scripts/test-voice-browser.mjs` | **PASS, 4/4 suites**, no skips. Actual React/Phaser and SDK UI with isolated history/profile/network/media fixtures; no real microphone or LiveKit Cloud connection |
+
+The initial parallel browser run had three Windows profile-file-lock/cleanup errors (`EBUSY`/`EPERM`), not successful passes. Sequential execution resolved them without product/test-harness weakening. `pnpm.cmd` was used because PowerShell blocks the `.ps1` shim; package-manager checks required access to pnpm's external lock. No execution-policy setting was changed.
+
+Lifecycle observations: saving appearance and opening/closing panels retained the same engine/transport mount; the explicit remount test ended with two mounts and two closes; 1,000 equivalent voice snapshots produced one React commit; the voice suite confirmed equivalent parent renders did not reconnect the Room, plus explicit leave/zone cleanup and listener removal. These are laboratory regressions, not new hosted audio/security measurements.
+
+### Remaining Step 1B work and readiness
+
+- Restructure office panels/toolbar only in Step 1B: tablet chat still reserves 340 px and leaves 446 px of canvas at 820 px; mobile chat still retains the zoom controls. These known composition choices were intentionally preserved.
+- Everyday office-entry hierarchy, compact workspace context and panel/voice placement remain for the separately bounded composition brief. Fit/Find and touch navigation remain later navigation work; no click-to-move, DM or screen-sharing button was added.
+- Member tables retain their existing contained horizontal scroll; a narrow-screen member-card redesign, complete 400% zoom/AT review and real-device keyboard checks are not claimed here.
+- Authenticated hosted UI, bidirectional audio, tenant isolation and original/refreshed token replay/active Cloud revocation were not revalidated. The outstanding security acceptance gate in the existing communication report remains unchanged.
+
+**Merge-ready: YES for the bounded Step 1A foundation**, based on the passing checks above and stated coverage limits. This is not private-beta deployment or hosted-security approval. Step 1B was not started.
 
 
