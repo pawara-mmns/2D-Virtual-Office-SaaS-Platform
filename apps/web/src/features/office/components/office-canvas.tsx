@@ -77,7 +77,7 @@ export default function OfficeCanvas({ appearance, profileWarning, officeId, use
               if (event === "SIGNED_OUT") { leave(); if (active) setPresence({ status: "denied", count: 0, notice: "Your session ended. Return to the workspace and sign in again." }); }
               else if (event === "TOKEN_REFRESHED") authTimer = setTimeout(() => connected.appearanceChanged(), 0);
             }).data.subscription;
-          } catch { setPresence({ status: "offline", count: 0, notice: "Multiplayer unavailable. Configure NEXT_PUBLIC_REALTIME_URL and start the realtime server, then retry." }); }
+          } catch { setPresence({ status: "offline", count: 0, notice: "The office connection is unavailable. Retry, or contact your workspace administrator if it continues." }); }
         },
         onError: fail,
       }, latestAppearance.current, true);
@@ -116,8 +116,8 @@ export default function OfficeCanvas({ appearance, profileWarning, officeId, use
       <p role="status" aria-live="polite"><span className="font-medium text-ink">{presence.status === "online" ? `Connected · ${presence.count} online` : presence.status === "connecting" ? "Connecting" : presence.status === "reconnecting" ? "Reconnecting" : presence.status === "denied" ? "Access denied" : "Disconnected"}</span>{presence.notice !== "Connected." && <> · {presence.notice}</>}</p>
       {presence.status === "offline" && <button className="office-control" onClick={() => { setStatus("loading"); setPresence({ status: "connecting", count: 0, notice: "Connecting to your office…" }); setAttempt((value) => value + 1); }}>Retry connection</button>}
       <p id="office-instructions">Keyboard required: click or Tab into the office, then use WASD or arrows. Tab to leave.</p>
-      {availabilityError && <p role="alert" className="text-red-800">{availabilityError}</p>}
-      {profileWarning && <p role="alert">{profileWarning}</p>}
+      {availabilityError && <p role="alert" className="ui-notice ui-notice-error">{availabilityError}</p>}
+      {profileWarning && <p role="alert" className="ui-notice ui-notice-warning">{profileWarning}</p>}
     </footer>
   </section>;
 }
