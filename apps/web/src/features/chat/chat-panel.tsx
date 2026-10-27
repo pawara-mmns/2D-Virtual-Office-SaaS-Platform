@@ -27,6 +27,7 @@ export const ChatPanel = memo(function ChatPanel({ officeId, open, onClose, even
   const [sendError, setSendError] = useState("");
   const [hasNew, setHasNew] = useState(false);
   const list = useRef<HTMLDivElement>(null);
+  const readingTop = useRef(0);
   const draftRef = useRef(draft), nearBottom = useRef(true), historical = useRef(false);
   const pending = useRef<Pending | null>(null), timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const revision = useRef(0), duringLoad = useRef<ChatMessage[] | null>(null);
@@ -112,13 +113,15 @@ export const ChatPanel = memo(function ChatPanel({ officeId, open, onClose, even
   }, [open, load]);
   useEffect(() => () => { revision.current++; duringLoad.current = null; onlineRef.current = false; clearTimeout(timer.current); }, []);
   useLayoutEffect(() => {
-    if (!list.current) return;
+    if (!list.current || !open) return;
     if (anchor.current) {
       const node = [...list.current.querySelectorAll<HTMLElement>("[data-message-id]")].find((node) => node.dataset.messageId === anchor.current!.id);
       if (node) list.current.scrollTop += node.getBoundingClientRect().top - anchor.current.top;
       anchor.current = null;
     } else if (nearBottom.current) list.current.scrollTop = list.current.scrollHeight;
-  }, [messages]);
+    else list.current.scrollTop = readingTop.current;
+    readingTop.current = list.current.scrollTop;
+  }, [messages, open]);
   const submit = () => {
     const body = normalizeBody(draftRef.current);
     if (!body || !online || !userId || sending) return;
@@ -129,9 +132,9 @@ export const ChatPanel = memo(function ChatPanel({ officeId, open, onClose, even
     timer.current = setTimeout(() => { setSending(false); setSendError("Delivery could not be confirmed. Retry this draft to check without duplicating it."); }, 12_000);
   };
   return <aside id="office-chat" aria-label="Office Chat" hidden={!open} className="office-chat border-line bg-white" onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); onClose(); } }}>
-    <header className="flex items-center justify-between gap-3 border-b border-line px-4 py-3"><h2 className="text-sm font-semibold">Office Chat</h2><button className="office-control" onClick={onClose}>Close chat</button></header>
+    <header className="office-panel-header"><h2 className="text-sm font-semibold">Office Chat</h2><button className="office-control" onClick={onClose}>Close chat</button></header>
     {!online && <p role="status" className="border-b border-line bg-surface px-4 py-2 text-xs leading-5 text-muted">Chat disconnected. Reconnect to send; your draft is kept.</p>}
-    <div ref={list} tabIndex={0} aria-label="Chat messages" aria-busy={loading} className="min-h-0 flex-1 overflow-y-auto px-4 py-3 focus-visible:outline-2 focus-visible:outline-forest" onScroll={() => { const node = list.current!; nearBottom.current = node.scrollHeight-node.scrollTop-node.clientHeight < 70; }}>
+    <div ref={list} tabIndex={0} aria-label="Chat messages" aria-busy={loading} className="min-h-0 flex-1 overflow-y-auto px-4 py-3 focus-visible:outline-2 focus-visible:outline-forest" onScroll={() => { if (!opened.current) return; const node = list.current!; readingTop.current = node.scrollTop; nearBottom.current = node.scrollHeight-node.scrollTop-node.clientHeight < 70; }}>
       {cursor && <button className="auth-text-link mb-4" disabled={loading} onClick={() => void load(cursor)}>Load older messages</button>}
       {loading && <p role="status" className="mb-3 text-xs text-muted">Loading messages…</p>}
       {!messages.length && !loading && !historyError && <p className="py-8 text-sm leading-6 text-muted">{online ? "No messages yet. Start a conversation with your team." : "Reconnect to retrieve recent messages."}</p>}

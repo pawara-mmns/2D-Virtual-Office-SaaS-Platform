@@ -24,12 +24,9 @@ export default async function OfficePage({ params }: { params: Promise<{ organiz
   let profileWarning: string | undefined;
   try { appearance = await loadAvatarProfile(await createClient<Database>(), user.id); }
   catch { profileWarning = "Your saved avatar could not be loaded. A default is shown; try saving your preference again shortly."; }
-  return <div className="office-page">
-    <a className="skip-link" href="#office-main">Skip to office</a>
-    <header className="office-page-header">
-      <div className="min-w-0"><p className="truncate text-xs font-medium text-muted">{access.organization.name}</p><h1 className="truncate text-lg font-semibold tracking-tight">{access.office.name}</h1></div>
-      <Link href={`/workspace/${id}`} className="auth-text-link">Back to workspace</Link>
-    </header>
-    <main id="office-main" className="min-h-0 min-w-0"><OfficeExperience key={`${user.id}/${access.office.id}`} appearance={appearance} profileWarning={profileWarning} officeId={access.office.id} userId={user.id} /></main>
-  </div>;
+  return <main id="office-main" className="office-page">
+    <a className="skip-link" href="#office-controls">Skip to office controls</a>
+    <OfficeExperience key={`${user.id}/${access.office.id}`} appearance={appearance} profileWarning={profileWarning} officeId={access.office.id} userId={user.id}
+      context={{ workspaceName: access.organization.name, officeName: access.office.name, workspaceHref: `/workspace/${id}` }} />
+  </main>;
 }

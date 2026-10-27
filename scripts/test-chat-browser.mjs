@@ -130,7 +130,7 @@ test("actual Chromium chat component: history, plain text, retries, drafts, scro
     const openPanelFrames = await measureFrames();
     const desktop = await command("Page.captureScreenshot", { format: "png" }); writeFileSync(resolve(cache, "chat-preview-desktop.png"), Buffer.from(desktop.data, "base64"));
     await command("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 1, mobile: true }); await delay(150);
-    assert.equal(await evaluate("getComputedStyle(document.querySelector('.office-world')).display"), "none");
+    assert.equal(await evaluate("getComputedStyle(document.querySelector('.office-world')).visibility"), "hidden");
     assert.equal(await evaluate("document.documentElement.scrollWidth<=390 && document.getElementById('office-chat').getBoundingClientRect().width<=390"), true, "Dedicated mobile chat has no horizontal overflow");
     await input("Draft while panel is closed"); await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent==='Close chat').click()");
     assert.equal(await evaluate("document.activeElement.id"), "toggle-chat"); await evaluate("document.getElementById('toggle-chat').click()"); await delay(100);
@@ -140,7 +140,7 @@ test("actual Chromium chat component: history, plain text, retries, drafts, scro
     await until(() => evaluate("document.querySelectorAll('#office-chat li').length===0 && document.getElementById('office-chat-draft').value===''") );
     assert.equal(await evaluate("document.querySelector('#office-chat').textContent.includes('A draft kept across reconnect')"), false, "Switching offices clears the previous tenant's chat window and draft");
     await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent==='Close chat').click()");
-    await until(() => evaluate("getComputedStyle(document.querySelector('.office-world')).display!=='none'"));
+    await until(() => evaluate("getComputedStyle(document.querySelector('.office-world')).visibility!=='hidden'"));
     await evaluate("document.getElementById('world').focus()"); await delay(120);
     const beforeMove = await evaluate("chatFixture.game.game.scene.getScene('Office').player.y");
     await command("Input.dispatchKeyEvent", { type: "keyDown", code: "KeyW", key: "w" }); await delay(220); await command("Input.dispatchKeyEvent", { type: "keyUp", code: "KeyW", key: "w" });

@@ -31,14 +31,18 @@ export function Controls({ leave, error }: { leave(): void; error(message: strin
   const onDeviceError = useCallback((failure: Error) => error(voiceError(failure)),[error]);
   const people = useParticipants({ updateOnlyOn:[RoomEvent.TrackMuted,RoomEvent.TrackUnmuted,RoomEvent.TrackPublished,RoomEvent.TrackUnpublished,RoomEvent.ParticipantMetadataChanged] });
   return <>
-    <div className="mt-3 flex flex-wrap items-center gap-2">
+    <div className="voice-session-controls">
+      <div className="voice-session-summary">
       <span role="status" className="mr-2 text-xs">{connection === "connected" ? "Voice connected" : connection === "reconnecting" || connection === "signalReconnecting" ? "Voice reconnecting…" : "Voice connecting…"}</span>
       <span className="text-xs text-muted">{isMicrophoneEnabled ? "Mic on" : "Mic muted"}</span>
+      </div>
+      <div className="voice-session-actions">
       {/* This SDK version replaces the button's disabled prop with its own
           pending state. A native fieldset also enforces connection readiness. */}
       <fieldset disabled={connection !== "connected"} className="m-0 min-w-0 border-0 p-0"><legend className="sr-only">Microphone control</legend><TrackToggle source={Track.Source.Microphone} showIcon={false} className="office-control" onDeviceError={onDeviceError}>{isMicrophoneEnabled ? "Mute microphone" : "Unmute microphone"}</TrackToggle></fieldset>
       <button className="office-control" onClick={leave}>Leave Voice</button>
       <StartAudio className="office-control" label="Enable audio playback" />
+      </div>
     </div>
     <details className="voice-details mt-2"><summary className="cursor-pointer text-xs font-medium">Voice participants ({people.length}) and audio devices</summary>
       <ul className="my-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{people.map((person) => <VoicePerson key={person.identity} person={person} reconnecting={connection !== "connected"} />)}</ul>
