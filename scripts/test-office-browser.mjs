@@ -104,7 +104,8 @@ test("real Chromium validates Phaser rendering, input, collisions, camera, resiz
     const snapshot = () => evaluate(`(()=>{const s=office.game.scene.getScene('Office'),p=s.player,c=s.cameras.main;return {x:p.x,y:p.y,left:p.body.left,top:p.body.top,zoom:c.zoom,scrollX:c.scrollX,scrollY:c.scrollY,viewLeft:c.worldView.left,viewTop:c.worldView.top,right:c.worldView.right,bottom:c.worldView.bottom,canvases:document.querySelectorAll('canvas').length,walking:p.anims.isPlaying,width:office.game.scale.width,height:office.game.scale.height}})()`);
     const press = async (code, key, milliseconds) => { await command("Input.dispatchKeyEvent", { type: "keyDown", code, key }); await delay(milliseconds); await command("Input.dispatchKeyEvent", { type: "keyUp", code, key }); await delay(80); };
     await evaluate("document.getElementById('world').focus()"); const initial = await snapshot();
-    await command("Input.dispatchKeyEvent", { type: "keyDown", code: "KeyW", key: "w" }); await delay(250);
+    await command("Input.dispatchKeyEvent", { type: "keyDown", code: "KeyW", key: "w" });
+    await waitFor(async () => { const state = await snapshot(); return state.walking && state.y < initial.y - 10; }, "unobstructed walking animation and displacement");
     assert.equal((await snapshot()).walking, true, "Unobstructed motion plays the walk animation");
     await command("Input.dispatchKeyEvent", { type: "keyUp", code: "KeyW", key: "w" }); await delay(80);
     assert.ok((await snapshot()).y < initial.y - 10, "WASD moves the player");
@@ -171,7 +172,7 @@ test("real Chromium validates Phaser rendering, input, collisions, camera, resiz
     await waitFor(() => evaluate("window.ready===true && office.game.scene.getScene('Office').remotes.size===1"), "network avatar rendering");
     assert.equal(await evaluate("office.game.scene.getScene('Office').player.body.enable"), false, "Multiplayer never delegates authoritative movement to local physics");
     await evaluate("window.remoteSprite=office.game.scene.getScene('Office').remotes.get('remote').sprite;networkState.players.get('remote').x=680;networkState.players.get('remote').isMoving=true;networkState.players.get('remote').direction='right'");
-    await delay(180);
+    await waitFor(() => evaluate("window.remoteSprite.x>675"), "remote authoritative sample interpolation");
     assert.equal(await evaluate("office.game.scene.getScene('Office').remotes.get('remote').sprite===window.remoteSprite"), true, "Network updates reuse the same sprite");
     assert.ok(await evaluate("window.remoteSprite.x>675"), "Remote authoritative samples interpolate smoothly");
     assert.equal(await evaluate("window.remoteSprite.anims.currentAnim.key"), "avatar-slate-right-walk");

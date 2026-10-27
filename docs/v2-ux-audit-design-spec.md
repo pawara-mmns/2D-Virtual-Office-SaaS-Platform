@@ -1,11 +1,13 @@
 # Virtual Office V2 — UX audit and design specification
 
 **Phase 6 · Step 0 · 27 October 2026 · Asia/Colombo**  
-**Status:** audit and planning deliverable; proposals require product review. No redesign is implemented.  
-**Repository:** existing `feature/p6-s00-ux-audit-design-spec` branch, confirmed by reading `.git/HEAD`; no Git operations.  
+**Status:** Step 0 audit baseline, with completed bounded Step 1A and Step 1B implementation records in sections 15–16. Broader V2 features remain proposals.  
+**Repository:** audit began on `feature/p6-s00-ux-audit-design-spec`; current verified branch is `feature/p6-s01b-office-layout-panels`. Branch identity was read from `.git/HEAD`; no Git operations were performed by the agent.  
 **Product:** private virtual offices for software teams of 6–10 people, with multiple isolated companies.
 
 **Implementation update, 27 October 2026:** the subsequent Step 1A brief approved D01–D05 as the planning baseline for a bounded foundation pass. Sections 1–14 retain the original Step 0 observations and decisions at audit completion. Section 15 records the implementation and its actual validation; the broader V2 proposals remain future work.
+
+**Step 1B update:** section 16 records the office composition implementation on `feature/p6-s01b-office-layout-panels`. Earlier sections remain historical evidence; Step 2 features are still proposals.
 
 ## 1. Executive Summary
 
@@ -996,5 +998,92 @@ Lifecycle observations: saving appearance and opening/closing panels retained th
 - Authenticated hosted UI, bidirectional audio, tenant isolation and original/refreshed token replay/active Cloud revocation were not revalidated. The outstanding security acceptance gate in the existing communication report remains unchanged.
 
 **Merge-ready: YES for the bounded Step 1A foundation**, based on the passing checks above and stated coverage limits. This is not private-beta deployment or hosted-security approval. Step 1B was not started.
+
+## 16. Phase 6 Step 1B — Professional Office Layout & Responsive Panels
+
+**27 October 2026 · branch `feature/p6-s01b-office-layout-panels`**, confirmed by reading `.git/HEAD` after the user switched it manually. No Git operations, deployment, database/configuration changes, new dependencies, backend APIs or protocol/grant changes were performed.
+
+### Implementation and layout decisions
+
+- One compact header presents the authenticated workspace name, office title, realtime connection state and existing Back to workspace destination. Availability remains a separate user control. The server still resolves fresh user/membership/office access before passing display context; route/session keys remain tenant-specific.
+- The original canvas fills the office work area without outer decorative margins. At an **actual office-container width of at least 1100 px**, chat can split into a **340 px** column, leaving at least 760 px for the canvas. Below that threshold, a **360 px maximum drawer** overlays the full-size canvas instead of shrinking it. There is no permanent sidebar.
+- Below **640 px**, the active chat, participant or avatar panel becomes the full-width work surface. The retained map is visually hidden and `inert`; zoom controls receive native `hidden`. Closing restores the map and relevant trigger focus. Header, panel selectors, availability and voice remain accessible.
+- Avatar/participant panels use stable portals into the work area. These are **nonmodal named regions**, not dialogs: toolbar/navigation/voice remain available, no focus trap or `aria-modal` is claimed. A single panel state coordinates chat/settings/participants. Close/Escape restore the trigger; outside clicks dismiss settings/participants without stealing the clicked target's focus.
+- Chat stays mounted. Draft, history and reading position survive panel switches; hidden-list scroll events cannot overwrite the saved reading position. Panel/viewport changes do not change Phaser or VoiceSession keys, engine effect dependencies, chat subscriptions or Room ownership.
+- Voice occupies a compact contextual band below the work area. Status and microphone/leave actions wrap in deliberate groups. The composer cannot shrink under that band; a 20 rem minimum chat work area allows normal page scrolling on unusually short/zoomed views rather than clipping essential controls. Existing participant/device disclosure and all connection/error categories remain.
+
+**Verified defect fixed:** an immediate Join click in the development Strict Mode fixture began authorization before effect setup; initial cleanup aborted it (`AbortError`, one request, zero captures), leaving an Authorizing state. Join now stays disabled until the surviving setup's next animation frame; the handler also checks mounted state. Discarded setup frames are cancelled. No capture occurs automatically and no authorization/lease/permission was relaxed. This is development-fixture evidence, not a claimed explanation of a hosted Cloud failure.
+
+### Modified files
+
+| Files | Responsibility |
+| --- | --- |
+| [Office route](../apps/web/src/app/workspace/[organizationId]/office/page.tsx), [OfficeExperience](../apps/web/src/features/office/components/office-experience.tsx), [OfficeCanvas](../apps/web/src/features/office/components/office-canvas.tsx) | Trusted display context, compact header, one panel selection, responsive hidden/inert behavior and resize-focus recovery; existing security and engine ownership retained |
+| [globals.css](../apps/web/src/app/globals.css) | Step 1A token reuse, container-based split/drawer rules, mobile views and compact voice/composer layout |
+| [OfficeDisclosure](../apps/web/src/components/office-disclosure.tsx), [AvatarSettings](../apps/web/src/features/avatars/avatar-settings.tsx), [Participants](../apps/web/src/features/chat/participants.tsx) | Controlled nonmodal regions, stable portal location, explicit close/focus behavior and shared panel presentation |
+| [ChatPanel](../apps/web/src/features/chat/chat-panel.tsx) | Shared panel header and explicit reading-position preservation |
+| [VoiceBar](../apps/web/src/features/voice/voice-bar.tsx), [VoiceSession](../apps/web/src/features/voice/voice-session.tsx) | Presentation and initial Join readiness; Room creation/cleanup, grants and server authorization unchanged |
+| [Communication browser suite](../scripts/test-communication-browser.mjs) | Panel switching, all five widths, hidden focus, resize focus, draft/reading position, connection feedback, actual Phaser ownership and SDK-simulated voice ownership |
+| [Chat browser suite](../scripts/test-chat-browser.mjs), [voice browser suite](../scripts/test-voice-browser.mjs), [office browser suite](../scripts/test-office-browser.mjs) | Updated visibility/readiness contracts; replace two timing-sensitive renderer sleeps with bounded state waits, retaining animation, displacement, interpolation and sprite-identity assertions |
+| This specification and [eight screenshots](assets/v2-office-layout/) | Implementation/validation record and current isolated-browser evidence; no extra documentation file |
+
+### Actual responsive and lifecycle results
+
+| Width / scenario | Result and observation |
+| --- | --- |
+| 1440×900, no panel | **PASS:** 1440×747 canvas, no horizontal/page-height overflow in this fixture |
+| 1440 px, chat | **PASS:** 340 px chat beside an 1100 px canvas; panel switching preserves the original engine/transport |
+| 1024×900 boundary | **PASS:** drawer; underlying canvas remains 1024 px wide |
+| 820×1180 tablet | **PASS:** drawer; underlying canvas remains 820 px wide, versus the historical 446 px split in Step 0/1A |
+| 390×844 mobile | **PASS:** single active panel, map inert, zoom hidden, composer visible and no horizontal overflow |
+| 320×740 narrow | **PASS:** settings/participants fit; hidden controls cannot take focus; active chat + voice fit. Composer bottom and voice top both measured **567 px**, voice bottom **740 px** |
+| Chat + voice at all five widths | **PASS, synthetic media:** composer ends at/before the voice band; no horizontal overflow; same Room, one authorization, one capture and one connect throughout switches/resizes |
+| Draft/history/reading position | **PASS:** typed draft and saved list position survive chat → participants → avatar → chat without a history refetch |
+| Focus and keyboard | **PASS:** Close/Escape return to the correct trigger; Tab enters the editor; resizing with canvas focus moves focus to the active participant panel rather than a hidden editor; hidden map/zoom/editor focus attempts fail |
+| State and cleanup | **PASS:** temporary connection state disables availability without rewriting Available; denial shows Access denied. Voice reconnect disables microphone controls; zone exit ends synthetic tracks and removes the application's disconnect listener |
+| Ownership | **PASS:** no panel/resize-induced game or media reconnect. The deliberate engine-remount regression ended with two mounts/two closes; 1,000 equivalent voice snapshots produced one React commit |
+| Contrast and targets | **PASS, sampled:** existing 4.157:1 input border/white ratio, 44 px office controls, 48 px form controls and 16 px editable text retained |
+| Text resizing / native zoom | **PASS, limited:** 320 px chat with 200% root-font resizing retained horizontal fit. **NOT TESTED:** complete native browser zoom, screen reader, physical touch keyboard, safe areas and every expanded-device/error case |
+
+### Screenshots and evidence limits
+
+All eight after-images are actual Chromium captures of the current React/Phaser components. They use synthetic authorized identities, history, transport and SDK/media endpoints. The two-participant voice fixture uses one local SDK Room plus a simulated remote participant and synthetic audio tracks. It does **not** contact LiveKit Cloud, record a microphone, prove real audio or establish authenticated tenant isolation.
+
+Before comparisons use the explicitly dated Step 1A evidence already captured in this document. Different fixture data/viewport dimensions prevent treating these as exact pixel-diff comparisons. No new authenticated hosted screenshot or live-user pilot is claimed; nothing was deployed.
+
+| Before reference | Current after-image |
+| --- | --- |
+| Step 1A [desktop office](assets/v2-ui-foundation/04-office-desktop-fixture.png) | [1440 px compact header/canvas](assets/v2-office-layout/01-office-desktop.png), [desktop chat split](assets/v2-office-layout/02-chat-desktop.png) |
+| Step 0 [tablet split](assets/v2-ux-audit/13-office-chat-tablet.jpg) | [1024 px drawer](assets/v2-office-layout/03-chat-1024.png), [820 px drawer](assets/v2-office-layout/04-chat-tablet.png) |
+| Step 1A [mobile settings](assets/v2-ui-foundation/06-avatar-mobile-fixture.png) | [Focused avatar surface](assets/v2-office-layout/05-avatar-mobile.png) |
+| Step 1A [mobile chat](assets/v2-ui-foundation/05-chat-mobile-fixture.png) | [390 px chat + voice](assets/v2-office-layout/06-chat-voice-mobile.png), [320 px chat + voice](assets/v2-office-layout/07-chat-voice-narrow.png), [320 px participants + voice](assets/v2-office-layout/08-participants-narrow.png) |
+
+![Current wide office; isolated browser fixture](assets/v2-office-layout/01-office-desktop.png)
+
+![Mobile chat and persistent voice; synthetic media](assets/v2-office-layout/06-chat-voice-mobile.png)
+
+### Regression validation
+
+| Command / scope | Actual result |
+| --- | --- |
+| `pnpm.cmd lint` | **PASS**, web/realtime, zero warnings |
+| `pnpm.cmd typecheck` | **PASS**, web route generation/TypeScript and realtime TypeScript |
+| `pnpm.cmd --filter @virtual-office/web build` | **PASS**, final frontend production build |
+| `pnpm.cmd test` | **PASS, 124:** 96 application + 28 realtime; isolated dependencies where indicated by each suite |
+| From `apps/web`: `node --test tests/auth-routes.test.mjs tests/voice-routes.test.mjs` | **PASS, 13/13** against the final build; protected routing, auth proof/cookies, API origin/admission denials and deferred bundle boundaries |
+| `node --test --test-concurrency=1 scripts/test-communication-browser.mjs scripts/test-chat-browser.mjs scripts/test-office-browser.mjs scripts/test-voice-browser.mjs` | **PASS, final combined run 4/4, no skips:** chat, communication composition, Phaser engine and voice |
+| Authenticated hosted users, actual audio, Cloud replay/revocation, production tenant changes | **NOT TESTED / not performed**; previous acceptance gates remain unchanged |
+
+Intermediate failures were investigated, not counted as passes: standalone bundling lacked Next's router runtime (isolated anchor boundary added); the early Strict Mode join exposed the readiness defect; narrow composer padding clipped beneath the voice band (layout corrected); fixed-sleep renderer samples were timing-sensitive (state waits now retain the original assertions). The voice fixture now waits for an enabled Join button after a remount. No engine interpolation algorithm or correctness threshold was changed, and no failed security check was bypassed.
+
+The existing engine suites use software WebGL and short frame samples; their logged FPS is laboratory data, not a product performance guarantee or a real 6–10-user benchmark. No local realtime authority was started against the hosted LiveKit namespace. Real-transport tests use their isolated synthetic authority/provider.
+
+### Remaining Step 2 work and readiness
+
+- Fit/overview, honest zoom limits, Return to self, Find teammate, accessible named destinations and pointer movement remain Step 2 work. No such controls, DMs, screen sharing or new map assets were added here.
+- Mobile spatial navigation still requires a keyboard. Native high zoom/AT, actual mobile keyboard/media devices and expanded/error-state usability need manual verification. Short/zoomed windows may require ordinary page scrolling; controls are not deliberately clipped to force a viewport fit.
+- Before release, use an authorized test frontend/environment and verified isolated users to recheck workspace navigation, chat, appearance, availability and voice Join/Leave through these layouts. This requires a separately authorized deployment or an already permitted local test origin; do not start another authority sharing the hosted namespace. Real audio and Cloud original/refreshed replay/revocation remain separate security acceptance work.
+
+**Merge-ready: YES for the bounded Step 1B office composition.** All final checks above passed. This does not clear the separate hosted security/deployment gate or claim native device/AT/audio verification. No Step 2 work, production deployment or Git operations were started.
 
 
