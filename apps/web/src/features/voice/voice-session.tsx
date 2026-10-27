@@ -103,7 +103,7 @@ export default function VoiceSession({ admission,leave,failed }: { admission: Vo
   },[room,url,token,mount]);
   return <RoomContext.Provider value={room}>
     <RoomAudioRenderer />
-    {connected ? <Controls leave={leave} error={setNotice} /> : <div className="mt-3 flex items-center gap-3"><p role="status" className="text-xs">{stage === "microphone" ? "Waiting for microphone permission…" : stage === "signaling" ? "Connecting LiveKit signaling…" : stage === "media" ? "Establishing WebRTC media…" : "Publishing microphone audio…"}</p><button className="office-control" onClick={leave}>Cancel voice</button></div>}
-    {notice && <p role="alert" className="mt-2 text-xs text-red-800">{notice}</p>}
+    {connected ? <Controls leave={leave} error={setNotice} /> : <div className="mt-3 flex flex-wrap items-center gap-3"><p role="status" className="text-xs">{stage === "microphone" ? "Waiting for microphone permission…" : stage === "signaling" ? "Connecting to the voice service…" : stage === "media" ? "Establishing the audio connection…" : "Starting your microphone…"}</p><button className="office-control" onClick={leave}>Cancel voice</button></div>}
+    {notice && <p role="alert" className="ui-notice ui-notice-error mt-2">{notice}</p>}
   </RoomContext.Provider>;
 }
