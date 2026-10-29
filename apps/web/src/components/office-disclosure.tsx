@@ -8,13 +8,14 @@ export type OfficePanelControl = {
   open: boolean;
   onOpenChange(open: boolean): void;
   container: HTMLElement | null;
+  returnFocus?(): void;
 };
 
 // Nonmodal throughout: office navigation and voice stay available. The office
 // owns panel selection; a stable portal keeps the editor inside the work area.
-export function OfficeDisclosure({ label, children, onOpen, panel, icon, material = "regular" }: {
+export function OfficeDisclosure({ label, children, onOpen, panel, icon, badge, material = "regular" }: {
   label: string; children: ReactNode; onOpen?(): void; panel?: OfficePanelControl;
-  icon?: ReactNode; material?: "regular" | "elevated";
+  icon?: ReactNode; badge?: number; material?: "regular" | "elevated";
 }) {
   const [localOpen, setLocalOpen] = useState(false);
   const open = panel?.open ?? localOpen;
@@ -38,14 +39,14 @@ export function OfficeDisclosure({ label, children, onOpen, panel, icon, materia
     document.addEventListener("pointerdown", dismiss);
     return () => document.removeEventListener("pointerdown", dismiss);
   }, [open, change]);
-  const close = () => { change(false); trigger.current?.focus({ preventScroll: true }); };
+  const close = () => { change(false); if (panel?.returnFocus) panel.returnFocus(); else trigger.current?.focus({ preventScroll: true }); };
   const contents = <section ref={content} id={id} hidden={!open} inert={!open} aria-label={label} className="office-panel office-disclosure-panel" data-glass-surface="" data-glass-variant={material}
     onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(); } }}>
     <header className="office-panel-header"><h2>{label}</h2><button type="button" className="office-control office-panel-close" aria-label={`Close ${label}`} onClick={close}><HudIcon name="close" /><span>Close</span></button></header>
     <div ref={body} className="office-panel-body" onScroll={() => { if (open && body.current) readingTop.current = body.current.scrollTop; }}>{children}</div>
   </section>;
   return <div className="office-disclosure" data-open={open}>
-    <button ref={trigger} type="button" className="office-control" aria-expanded={open} aria-controls={id}
+    <button ref={trigger} type="button" className="office-control" aria-label={label} title={label} data-count={badge} aria-expanded={open} aria-controls={id}
       onKeyDown={(event) => { if (event.key === "Escape" && open) { event.preventDefault(); close(); } }}
       onClick={() => { if (!open) onOpen?.(); change(!open); }}>{icon}<span className="hud-control-label">{label}</span></button>
     {panel ? panel.container && createPortal(contents, panel.container) : contents}
