@@ -1,8 +1,8 @@
 # Virtual Office V2 — UX audit and design specification
 
 **Phase 6 · Step 0 · 27 October 2026 · Asia/Colombo**  
-**Status:** Step 0 audit baseline, with completed bounded Step 1A, Step 1B and Step 2A implementation records in sections 15–17. Broader V2 features remain proposals.  
-**Repository:** audit began on `feature/p6-s00-ux-audit-design-spec`; current verified branch is `feature/p6-s02a-office-navigation-find`. Branch identity was read from `.git/HEAD`; no Git operations were performed by the agent.  
+**Status:** Step 0 audit baseline, with completed bounded Step 1A, Step 1B, Step 2A and Step 2C implementation records in sections 15-18. Broader V2 features remain proposals.
+**Repository:** audit began on `feature/p6-s00-ux-audit-design-spec`; current verified branch is `feature/p6-s02c-ingame-hud`. Branch identity was read from `.git/HEAD`; no Git operations were performed by the agent.
 **Product:** private virtual offices for software teams of 6–10 people, with multiple isolated companies.
 
 **Implementation update, 27 October 2026:** the subsequent Step 1A brief approved D01–D05 as the planning baseline for a bounded foundation pass. Sections 1–14 retain the original Step 0 observations and decisions at audit completion. Section 15 records the implementation and its actual validation; the broader V2 proposals remain future work.
@@ -10,6 +10,8 @@
 **Step 1B update:** section 16 records the office composition implementation on `feature/p6-s01b-office-layout-panels`. Earlier sections remain historical evidence.
 
 **Step 2A update:** section 17 records office overview, teammate finding and camera orientation. Pointer/destination movement remains Step 2B work; the historical roadmap is not a claim that it is implemented.
+
+**Step 2C update, 29 October 2026:** section 18 records the immersive React HUD, retained feature lifecycles, browser evidence and remaining Step 2D work. Historical layout proposals and earlier validation results remain dated evidence.
 
 ## 1. Executive Summary
 
@@ -1193,5 +1195,102 @@ Performance scope: the final office suite used Chrome 156 / SwiftShader software
 - The only intentional transitional scaling exception is the stationary fractional overview. Labels may be too small there; readable text controls and normal zoom/Find remain available. Coarse marker hints are not fresh server location or zone-admission guarantees.
 
 No Step 2B work, production deployment, database modification or Git operation was performed.
+
+## 18. Step 2C implementation — immersive in-game HUD
+
+**29 October 2026 · Asia/Colombo · Branch: `feature/p6-s02c-ingame-hud` · Merge-ready: YES for this bounded Step 2C change.** No branch was created or changed; no commit, push, merge or deployment was performed. This record supersedes the earlier external-toolbar and wide-desktop chat-split presentation, while preserving their feature behavior and accessibility foundations.
+
+### Architecture and modified files
+
+The full-viewport Phaser host and React HUD are siblings under the existing office lifecycle owner. `OfficeHud` is presentation only: named slots receive controls, panels, map navigation, notices and voice. CSS positions these slots without reparenting components or maintaining separate desktop/mobile trees. Empty HUD space passes pointer events through to the renderer; interactive surfaces accept ordinary DOM events. Existing semantic V2 colors, control sizes, typography and restrained panel shadows are reused.
+
+| File | Change / reuse |
+| --- | --- |
+| [office-hud.tsx](../apps/web/src/features/office/components/office-hud.tsx) — new | Stateless HUD composition; workspace/office identity and connection at top left, Settings and Exit at top right, office controls, contextual panels and bottom voice slot |
+| [office-canvas.tsx](../apps/web/src/features/office/components/office-canvas.tsx) | Retains the renderer/network/chat/participant owners and camera adapter; adds Settings to the existing single panel selection; supplies stable feature components to HUD slots |
+| [globals.css](../apps/web/src/app/globals.css) | Full-viewport renderer within the office shell, compact floating controls, bounded overlay panels, safe-area padding, mobile focused surfaces and scrollable voice/device details; standalone chat sizing and mobile hiding remain supported |
+| [office-disclosure.tsx](../apps/web/src/components/office-disclosure.tsx) | Reused portal-based nonmodal panel with explicit retained reading position; existing Close/Escape/focus and outside-pointer dismissal remain |
+| [voice-bar.tsx](../apps/web/src/features/voice/voice-bar.tsx) | Existing admission/cancellation owner; adds explicit connecting/disconnected status and fixed authorization-denial feedback without changing the request or permission boundary |
+| [voice-session.tsx](../apps/web/src/features/voice/voice-session.tsx) | Retains the same Room, media lifecycle, TrackToggle, participant/device controls and audio renderer; explicitly labels disconnected state |
+| [test-communication-browser.mjs](../scripts/test-communication-browser.mjs) | Extends the actual React/Phaser/SDK composition fixture with HUD pointer hit testing, Settings keyboard operation, full renderer dimensions, publication/listener counts, disabled voice and rejected-admission checks |
+| This specification and `docs/assets/v2-office-hud/` | Implementation record and eight reviewed synthetic browser screenshots |
+
+`ChatPanel`, `Participants`, `AvatarSettings`, the camera/navigation engine, Colyseus connection, chat event bus and voice lifecycle helpers are reused. They are not replaced with Phaser UI or duplicate state. The mounted ChatPanel retains its existing draft, bounded history, subscription and scroll anchor while hidden. Avatar preview/save behavior remains unchanged; disclosure scroll position is now restored explicitly. There is one portal container throughout panel switching and viewport changes.
+
+### HUD, panels and voice behavior
+
+- Desktop/tablet: Participants, Office Chat and Avatar settings occupy a small left rail. One requested panel overlays the right side, at most 360 px wide. Opening chat no longer shrinks/resizes the canvas. Settings exposes the existing availability selector and movement/voice guidance. Exit uses the existing workspace link. No placeholder fullscreen action is presented.
+- Camera controls stay at bottom left above the voice dock, with Fit Office, real zoom limits, named area selection, orientation text and Return to my avatar. Find/Return retain map focus and existing camera-only behavior. HUD operations do not move avatars or grant meeting-zone eligibility.
+- Mobile below 640 px: controls become a three-action row; the active panel fills the remaining central surface. The map remains mounted but is hidden and inert; map controls are hidden from keyboard focus. Identity, Settings, Exit and voice remain accessible. Closing the panel restores its trigger, while Find intentionally returns focus to the map. Safe-area insets and dynamic viewport height are respected in CSS.
+- All panels are labelled **nonmodal** sections/aside surfaces. Other HUD and voice actions remain available, so no `aria-modal` or focus trap is claimed. Chat opens at its composer; disclosures open at Close. Close/Escape restore the invoking control. Outside pointer dismissal allows the pointer's destination to receive focus. Hidden panels cannot receive focus. Existing native buttons, select/input labels and live feedback remain.
+- Outside the voice zone, the dock explains that voice is unavailable there and names Meeting Room. Offline and denied office states show disconnected/access-ended guidance. In the zone, the existing VoiceBar shows configured/unavailable, available, authorizing/connecting, connected, muted, reconnecting and disconnected states. Devices/participants stay in the existing expandable details surface. Its bounded overflow does not cover the composer.
+- Join Voice remains an explicit user action. Token rejection performs no microphone capture. Settings, panel switching, zoom, area views and viewport resize never request admission. Office access denial displays authorization-ended guidance; a 401/403 admission failure displays authorization denied. An SDK participant removal remains the existing generic removal explanation: it is **not** falsely presented as proof of membership revocation. No new server revocation signal is invented.
+
+### Responsive, accessibility and lifecycle validation
+
+The final isolated HUD browser run passed with **zero runtime errors**. It renders real React components, the actual Phaser renderer/artwork and LiveKit SDK simulation. Profile/history/identity/network/token/media boundaries are synthetic; no hosted account or real microphone audio was used.
+
+| CSS viewport | Renderer dimensions | Connected-voice chat list height | Result |
+| --- | --- | --- | --- |
+| 1440 × 900 | 1440 × 900 | 347 px | PASS: compact rail, right overlay and full-size canvas |
+| 1024 × 900 | 1024 × 900 | 347 px | PASS: full canvas behind panel |
+| 820 × 1180 | 820 × 1180 | 627 px | PASS: tablet overlay, no compressed renderer |
+| 390 × 844 | 390 × 844 | 245 px | PASS: focused panel; composer above voice |
+| 320 × 740 | 320 × 740 | 117 px | PASS: narrow reflow, all essential actions visible |
+
+All five widths had no horizontal page overflow. The composer ended at least 7 px above voice at the measured widths. Real pointer events verified unobscured 44 px Settings/Chat/Participants targets during an active simulated media session. The sampled form input was 48 px tall with 16 px editable text and 4.157:1 border/background contrast. Keyboard Tab/Escape, close focus restoration, hidden/inert focus exclusion, Find/Return, native control disabling and 320 px chat at 200% root text size passed. These checks are not a full WCAG audit, native 400% browser-zoom test or screen-reader certification. Physical safe areas, virtual keyboards, device rotation and real mobile audio remain unverified.
+
+During HUD/panel/viewport/camera changes the fixture retained the **same active LiveKit Room**, **one authorization**, **one synthetic microphone capture**, **one application publication call** and **one application disconnect listener**. Reconnecting disabled the microphone toggle. Leaving stopped synthetic tracks without automatic recapture; unconfigured voice disabled Join; rejected admission caused no further capture. Existing voice UI regressions also covered mute/unmute, device observer stability and subscription cleanup. A deliberate remount and workspace replacement ended at **three engine/transport mounts and three closes**, no remaining canvas and an unsubscribed auth listener. The old workspace's chat draft and selected teammate did not enter the new office. Equivalent voice snapshots caused one React commit; navigation produced zero nonzero movement inputs and no per-frame position stream into React.
+
+The existing real-transport realtime tests passed for tenant isolation, canonical movement, reconnection and revocation using synthetic authorization/provider boundaries. No realtime service sharing the hosted LiveKit namespace was started. Database migrations, backend protocols, grants, voice admission rules and meeting-zone geometry were not changed.
+
+### Commands and actual results
+
+Commands ran from the repository root unless stated otherwise. The workspace-local `.cache/corepack/pnpm.cmd` shim resolves the existing project-compatible pnpm 10.34.7. The global `pnpm.cmd` failed on its user-store lock; recursively invoking it from a root script also selected an incompatible global version. No package metadata, global setting or dependency was changed to work around this. Direct recursive commands and installed Node entry points were used instead.
+
+| Check | Actual result |
+| --- | --- |
+| `.\.cache\corepack\pnpm.cmd -r lint` | PASS: web and realtime, zero warnings |
+| `.\.cache\corepack\pnpm.cmd -r typecheck` | PASS: Next route generation and both TypeScript projects |
+| From `apps/web`: `node node_modules/next/dist/bin/next build` | PASS: frontend production build |
+| From `apps/web`: `node --experimental-strip-types --test "src/**/*.test.ts"` | PASS: 98 application tests, zero skips |
+| From `apps/realtime`: `node --import tsx --test "src/**/*.test.ts"` | PASS: 28 realtime tests, zero skips |
+| From `apps/web`: `node --test tests/auth-routes.test.mjs tests/voice-routes.test.mjs` | PASS: 13 production-route checks |
+| `node --test scripts/test-chat-browser.mjs` (in the sequential chat/HUD rerun) | PASS: standalone history, retry, drafts, scroll, mobile and input-focus coverage |
+| `node --test scripts/test-communication-browser.mjs` (final isolated run) | PASS: all HUD assertions; 66.87 s test / 70.51 s process, original 90 s timeout retained |
+| `node --test scripts/test-office-browser.mjs` (in the sequential four-suite run) | PASS: real renderer/input/collisions/camera/resize/destruction |
+| `node --test scripts/test-voice-browser.mjs` (in the sequential four-suite run) | PASS: explicit consent, cancellation, denial, mute/device controls and cleanup |
+
+Failures are recorded, not counted as passes: sandboxed Chromium twice timed out before `Runtime.enable`; browser fixtures ran successfully outside that sandbox. The first four-suite run passed HUD/engine/voice but found the standalone chat mobile-visibility regression, corrected by retaining the generic chat rule and scoping viewport sizing to the office shell. The subsequent chat/HUD batch passed chat and completed HUD assertions, but HUD exceeded its existing 90 s deadline. The final standalone HUD run above passed without increasing that timeout or removing assertions. The last code cleanup only formatted imports/JSX; checks were retained against the final source.
+
+Performance observations remain limited: the engine browser run used Chrome 156 and SwiftShader software WebGL, with 1.2-second samples of 24.5 FPS and 23.9 FPS with ten synthetic avatars. These are short software-rendering samples under local load, not hardware-GPU, sustained hosted multiplayer or audio measurements. No production performance improvement or hosted audio validation is claimed.
+
+### Reviewed browser screenshots
+
+These eight PNGs were captured by the isolated local Chromium composition fixture and visually inspected. They contain synthetic identities/messages and simulated voice, not hosted customer data or proof of Cloud/media service operation. The original office artwork is unchanged.
+
+| Capture | Evidence |
+| --- | --- |
+| Desktop HUD, 1440 × 900 | [01](assets/v2-office-hud/01-desktop.png) |
+| Desktop chat overlay, full renderer width | [02](assets/v2-office-hud/02-chat-desktop.png) |
+| Tablet chat overlay, 820 × 1180 | [03](assets/v2-office-hud/03-chat-tablet.png) |
+| Mobile office overview, 390 × 844 | [04](assets/v2-office-hud/04-overview-mobile.png) |
+| Mobile avatar editor and Close focus | [05](assets/v2-office-hud/05-avatar-mobile.png) |
+| Mobile chat and connected simulated voice | [06](assets/v2-office-hud/06-voice-mobile.png) |
+| Narrow chat/voice, 320 × 740 | [07](assets/v2-office-hud/07-voice-narrow.png) |
+| Denied admission and retained chat draft | [08](assets/v2-office-hud/08-voice-denied.png) |
+
+![Desktop in-game HUD](assets/v2-office-hud/01-desktop.png)
+
+![Mobile chat with the retained simulated voice session](assets/v2-office-hud/06-voice-mobile.png)
+
+### Remaining work and merge decision
+
+- **Step 2C merge-ready: YES**, for the scoped HUD/panel change and recorded local checks. This is not release/deployment approval or hosted security/audio acceptance.
+- **Step 2D:** implement and validate browser fullscreen entry/exit, capability/denial handling, Escape/focus restoration, safe-area/viewport resize and retained renderer/voice ownership. No fullscreen API or fullscreen state is implemented here.
+- **Proximity voice:** remains unimplemented. It needs a separate security/realtime architecture change covering eligibility, explicit consent, authorization/token lifetimes, tenant isolation and cleanup. HUD presentation does not authorize it.
+- Hosted two-user audio, genuine network interruption, Cloud revocation/token replay, physical mobile hardware and native assistive-technology checks remain separate acceptance work. The existing keyboard-required movement and camera-only area navigation are preserved; this step does not add pointer/path movement.
+
+Work stops after Step 2C. No migrations, backend protocol/grant changes, screen sharing, new dependencies, deployment or production configuration updates were made.
 
 

@@ -30,7 +30,7 @@ test("office communication composition: responsive panels, focus, drafts, engine
       import React,{useState,useEffect,Profiler,StrictMode}from'react';import{createRoot}from'react-dom/client';
       import OfficeCanvas from ${JSON.stringify(resolve(web,"src/features/office/components/office-canvas.tsx").replaceAll("\\","/"))};
       const id=n=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
-      const f=window.communicationFixture={id,commits:0,mounts:0,closes:0,history:0,saves:0,changes:0,nonzeroInputs:0,navigationEvents:0,voiceConnects:0,voiceDisconnects:0,captures:0,authorizations:0,tracks:[],profile:{avatarKey:'fern',displayName:'Taylor'},people:[{sessionId:'self',userId:id(1),displayName:'Taylor',avatarKey:'fern',connected:true,availability:'AVAILABLE',isSelf:true},{sessionId:'other',userId:id(2),displayName:'Morgan',avatarKey:'slate',connected:true,availability:'BUSY'}]};
+      const f=window.communicationFixture={id,commits:0,mounts:0,closes:0,history:0,saves:0,changes:0,nonzeroInputs:0,navigationEvents:0,voiceConnects:0,voiceDisconnects:0,captures:0,authorizations:0,publications:0,tracks:[],profile:{avatarKey:'fern',displayName:'Taylor'},people:[{sessionId:'self',userId:id(1),displayName:'Taylor',avatarKey:'fern',connected:true,availability:'AVAILABLE',isSelf:true},{sessionId:'other',userId:id(2),displayName:'Morgan',avatarKey:'slate',connected:true,availability:'BUSY'}]};
       navigator.mediaDevices.getUserMedia=async()=>{f.captures++;f.audio??=new AudioContext();const stream=f.audio.createMediaStreamDestination().stream;f.tracks.push(...stream.getTracks());return stream;};
       const nativeFetch=window.fetch.bind(window);window.fetch=async(url,options)=>{if(url!=='/api/v1/voice/token')return nativeFetch(url,options);f.authorizations++;f.voiceSignal=options.signal;return new Response(JSON.stringify({url:'wss://voice-fixture.livekit.cloud',token:'synthetic-no-network-proof'}),{headers:{'Content-Type':'application/json'}})};
       f.snapshot={officeId:id(3),mapVersion:'fixture',players:new Map(f.people.map((p,i)=>[p.sessionId,{...p,x:560+i*30,y:735,direction:'down',isMoving:false}]))};
@@ -48,7 +48,7 @@ test("office communication composition: responsive panels, focus, drafts, engine
       plugin.onResolve({filter:/^\.\/actions$/},args=>args.importer.endsWith("avatar-settings.tsx")?{path:"profile",namespace:"fixture"}:args.importer.endsWith("chat-panel.tsx")?{path:"history",namespace:"fixture"}:undefined);
       plugin.onLoad({filter:/.*/,namespace:"fixture"},args=>({resolveDir:web,loader:"js",contents:args.path==="engine"?`import{createOfficeGame as create}from'./src/features/office/engine/create-game.ts';export function createOfficeGame(...args){const f=window.communicationFixture,callbacks=args[1];args[1]={...callbacks,onNavigation(state){f.navigation=state;f.navigationEvents++;callbacks.onNavigation?.(state)}};f.engine=create(...args);return f.engine;}`:args.path==="link"?`import React from'react';export default function Link({href,children,...props}){return React.createElement('a',{...props,href},children)}`:args.path==="voice-sdk"?`
         import{Room as NativeRoom,Track}from'livekit-client';export*from'livekit-client';
-        export class Room extends NativeRoom{constructor(...args){super(...args);const f=window.communicationFixture;this.connect=async()=>{f.voiceConnects++;f.room=this;await this.simulateParticipants({publish:{audio:true,video:false,useRealTracks:false},participants:{count:2,video:false,audio:false}});this.localParticipant.name='Alex Lee';};this.localParticipant.publishTrack=async()=>this.localParticipant.getTrackPublication(Track.Source.Microphone);const disconnect=this.disconnect.bind(this);this.disconnect=async(...args)=>{f.voiceDisconnects++;return disconnect(...args);};}}
+        export class Room extends NativeRoom{constructor(...args){super(...args);const f=window.communicationFixture;this.connect=async()=>{f.voiceConnects++;f.room=this;await this.simulateParticipants({publish:{audio:true,video:false,useRealTracks:false},participants:{count:2,video:false,audio:false}});this.localParticipant.name='Alex Lee';};this.localParticipant.publishTrack=async()=>{f.publications++;return this.localParticipant.getTrackPublication(Track.Source.Microphone)};const disconnect=this.disconnect.bind(this);this.disconnect=async(...args)=>{f.voiceDisconnects++;return disconnect(...args);};}}
       `:args.path==="auth"?`export const createClient=()=>({auth:{getSession:async()=>({data:{session:null}}),onAuthStateChange:()=>({data:{subscription:{unsubscribe(){window.communicationFixture.authUnsubscribed=true}}}})}});`:
         args.path==="profile"?`export async function saveAvatarAction(_,form){const f=window.communicationFixture;f.saves++;await new Promise(r=>setTimeout(r,10));f.profile={avatarKey:form.get('avatarKey'),displayName:form.get('displayName')};return{status:'success',message:'Appearance saved. Your office profile is updated.',...f.profile}}`:
         args.path==="history"?`export async function loadOfficeChat(){const f=window.communicationFixture;f.history++;return{ok:true,page:{olderCursor:null,messages:[1,2].map(n=>({id:String(n),channelId:f.id(3),senderId:f.id(n),senderName:'Member',body:n===1?'Own message':'Hello team',clientMessageId:f.id(n+10),createdAt:'2026-10-22T08:30:00Z'}))}}}`:
@@ -73,6 +73,19 @@ test("office communication composition: responsive panels, focus, drafts, engine
     await command("Emulation.setDeviceMetricsOverride",{width:1440,height:900,deviceScaleFactor:1,mobile:false});await delay(120);
     assert.equal(await evaluate("document.querySelectorAll('.office-disclosure[data-open=true]').length"),0);
     const desktop=await layout();assert.ok(desktop.canvasHeight>desktop.height*.65);assert.ok(desktop.scrollHeight<=desktop.height);assert.ok(desktop.scrollWidth<=desktop.width);await snapshot("communication-office-desktop.png");
+    assert.equal(desktop.canvasHeight,900,"Renderer owns the full viewport height");
+    assert.equal(await evaluate("document.querySelector('.office-work-area').contains(document.querySelector('.office-hud'))"),false,"HUD and renderer have independent DOM ownership");
+    const tap=async text=>{
+      const point=await evaluate(`(()=>{const n=[...document.querySelectorAll('button')].find(n=>n.textContent===${JSON.stringify(text)}&&n.getClientRects().length&&!n.closest('[hidden],[inert]'));if(!n)throw new Error('HUD target missing');const r=n.getBoundingClientRect(),x=r.left+r.width/2,y=r.top+r.height/2;return{x,y,hit:n.contains(document.elementFromPoint(x,y)),height:r.height}})()`);
+      assert.ok(point.hit && point.height>=44,'HUD control has an unobscured 44px target: '+text);
+      await command("Input.dispatchMouseEvent",{type:"mousePressed",x:point.x,y:point.y,button:"left",clickCount:1});
+      await command("Input.dispatchMouseEvent",{type:"mouseReleased",x:point.x,y:point.y,button:"left",clickCount:1});
+    };
+    await tap("Settings");await until(()=>evaluate("document.activeElement.getAttribute('aria-label')==='Close Settings'"));
+    await command("Input.dispatchKeyEvent",{type:"keyDown",key:"Tab",code:"Tab"});
+    assert.equal(await evaluate("document.activeElement.id"),"office-availability");
+    await command("Input.dispatchKeyEvent",{type:"keyDown",key:"Escape",code:"Escape"});
+    assert.equal(await evaluate("document.activeElement.textContent"),"Settings");
     await button("Avatar settings");await until(()=>evaluate("!!document.querySelector('.office-disclosure-panel:not([hidden]) input')"));assert.equal(await evaluate("document.querySelectorAll('input[name=avatarKey]').length"),6);
     const foundation=await evaluate(`(()=>{
       const control=document.querySelector('.office-control'),input=document.getElementById('office-display-name');
@@ -122,7 +135,7 @@ test("office communication composition: responsive panels, focus, drafts, engine
     await button("Office Chat");await until(()=>evaluate("document.querySelectorAll('#office-chat li').length===2"));assert.equal(await evaluate("document.querySelector('#office-chat .chat-own').textContent.includes('Alex Lee (you)')"),true);assert.equal(await evaluate("document.querySelector('#office-chat ol').textContent.includes('Morgan')"),true,"Roster profiles replace legacy generic snapshots without queries");
     await evaluate("document.getElementById('office-chat-draft').focus()");await command("Input.insertText",{text:"Unsent draft"});const history=await evaluate("communicationFixture.history");await command("Input.dispatchKeyEvent",{type:"keyDown",key:"Escape",code:"Escape"});await button("Office Chat");assert.equal(await evaluate("document.getElementById('office-chat-draft').value"),"Unsent draft");assert.equal(await evaluate("communicationFixture.history"),history,"Toggling must not reload history");
     await snapshot("communication-chat-desktop.png");
-    assert.equal(await evaluate("document.querySelector('.office-stage').getBoundingClientRect().width"),1100,"Wide desktop leaves 1100px for the canvas beside 340px chat");
+    assert.equal(await evaluate("document.querySelector('.office-stage').getBoundingClientRect().width"),1440,"HUD panels retain the full renderer width");
     await evaluate("(()=>{const f=communicationFixture;for(let n=3;n<45;n++)f.options.onChat({type:'message',message:{id:String(n),channelId:f.id(3),senderId:f.id(2),senderName:'Morgan',body:'Synthetic history row '+n+' — '+('context '.repeat(12)),clientMessageId:f.id(n+100),createdAt:'2026-10-22T08:30:00Z'}})})()");
     await until(()=>evaluate("document.querySelectorAll('#office-chat li').length===44"));
     await evaluate("document.querySelector('[aria-label=\"Chat messages\"]').scrollTop=120");await delay(80);
@@ -161,17 +174,20 @@ test("office communication composition: responsive panels, focus, drafts, engine
     await evaluate("communicationFixture.options.onVoice({sessionId:'self',zone:'Meeting Room',configured:true,participants:2})");
     await until(()=>evaluate("!![...document.querySelectorAll('button')].find(b=>b.textContent==='Join Voice'&&!b.matches(':disabled'))"));
     await button("Join Voice");await until(()=>evaluate("document.body.textContent.includes('Voice connected')"));
+    assert.equal(await evaluate("document.querySelector('.voice-context').textContent.includes('Voice connecting')"),false,"Connected HUD never retains the connecting label");
     assert.equal(await evaluate("communicationFixture.room.remoteParticipants.size"),1,"The SDK fixture contains a second voice participant, not a second local media session");
     await evaluate("communicationFixture.initialRoom=communicationFixture.room;undefined");
     const voiceLayouts=[];
     for(const [width,height] of [[1440,900],[1024,900],[820,1180],[390,844],[320,740]]){
       await command("Emulation.setDeviceMetricsOverride",{width,height,deviceScaleFactor:1,mobile:width<640});await delay(100);
-      await button("Participants (2)");if(width===320){await delay(80);await snapshot("communication-people-320.png");}await button("Avatar settings");await button("Office Chat");await delay(80);
+      await tap("Settings");await until(()=>evaluate("document.activeElement.getAttribute('aria-label')==='Close Settings'"));
+      await tap("Office Chat");await until(()=>evaluate("document.activeElement.id==='office-chat-draft'"));
+      await tap("Participants (2)");if(width===320){await delay(80);await snapshot("communication-people-320.png");}await button("Avatar settings");await button("Office Chat");await delay(80);
       const observed=await evaluate("(()=>{const voice=document.querySelector('.office-voice').getBoundingClientRect(),composer=document.querySelector('#office-chat form').getBoundingClientRect(),chat=document.querySelector('#office-chat').getBoundingClientRect(),area=document.querySelector('.office-work-area').getBoundingClientRect(),list=document.querySelector('[aria-label=\"Chat messages\"]').getBoundingClientRect();return{width:innerWidth,scrollWidth:document.documentElement.scrollWidth,voiceBottom:voice.bottom,voiceTop:voice.top,composerBottom:composer.bottom,composerHeight:composer.height,chatBottom:chat.bottom,chatHeight:chat.height,areaHeight:area.height,listHeight:list.height,height:innerHeight}})()");
       assert.ok(observed.scrollWidth<=width,"Voice/panels have no horizontal overflow");
       assert.ok(observed.composerBottom<=observed.voiceTop+1,"Voice does not cover the active composer: "+JSON.stringify(observed));
       assert.ok(observed.voiceBottom<=height+1,"Voice controls remain in the viewport");
-      assert.equal(await evaluate("communicationFixture.room===communicationFixture.initialRoom && communicationFixture.voiceConnects===1 && communicationFixture.captures===1 && communicationFixture.authorizations===1"),true,"Panel and viewport changes retain the original media session");
+      assert.equal(await evaluate("communicationFixture.room===communicationFixture.initialRoom && communicationFixture.voiceConnects===1 && communicationFixture.captures===1 && communicationFixture.publications===1 && communicationFixture.authorizations===1"),true,"Panel and viewport changes retain the original media session");
       assert.equal(await evaluate("communicationFixture.mounts"),1);
       assert.equal(await evaluate("document.getElementById('office-chat-draft').value"),"Unsent draft");
       if(width===1440||width===390){
@@ -181,11 +197,22 @@ test("office communication composition: responsive panels, focus, drafts, engine
       }
       voiceLayouts.push(observed);await snapshot(`communication-voice-${width}.png`);
     }
+    assert.equal(await evaluate("communicationFixture.room.listeners('disconnected').filter(fn=>fn.name==='onDisconnect').length"),1,"One application disconnect subscription survives HUD switching");
     await evaluate("communicationFixture.room.state='reconnecting';communicationFixture.room.emit('connectionStateChanged','reconnecting')");
     await until(()=>evaluate("document.body.textContent.includes('Voice reconnecting')"));
     assert.equal(await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent==='Mute microphone').matches(':disabled')"),true);
     await button("Participants (2)");await button("Office Chat");assert.equal(await evaluate("communicationFixture.voiceConnects"),1);
-    await evaluate("communicationFixture.room.state='connected';communicationFixture.room.emit('connectionStateChanged','connected');communicationFixture.options.onVoice(null)");
+    await evaluate("communicationFixture.room.state='connected';communicationFixture.room.emit('connectionStateChanged','connected')");
+    await button("Leave Voice");await until(()=>evaluate("document.body.textContent.includes('Voice disconnected') && communicationFixture.tracks.every(track=>track.readyState==='ended')"));
+    assert.equal(await evaluate("communicationFixture.captures"),1,"Leaving voice never automatically captures again");
+    await snapshot("hud-voice-disconnected.png");
+    await evaluate("window.fetch=async()=>new Response(JSON.stringify({error:'Denied'}),{status:403});communicationFixture.options.onVoice({sessionId:'self',zone:'Meeting Room',configured:false,participants:0})");
+    await until(()=>evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent==='Join Voice').disabled"));
+    await evaluate("communicationFixture.options.onVoice({sessionId:'self',zone:'Meeting Room',configured:true,participants:0})");
+    await button("Join Voice");await until(()=>evaluate("document.body.textContent.includes('Voice authorization denied')"));
+    assert.equal(await evaluate("communicationFixture.captures"),1,"Rejected admission never captures media");
+    await snapshot("hud-voice-denied.png");
+    await evaluate("communicationFixture.options.onVoice(null)");
     await until(()=>evaluate("communicationFixture.room.state==='disconnected' && communicationFixture.tracks.every(track=>track.readyState==='ended')"));
     assert.equal(await evaluate("communicationFixture.room.listeners('disconnected').some(fn=>fn.name==='onDisconnect')"),false,"Zone exit removes the application's disconnect listener");
     await button("Close chat");
@@ -216,6 +243,7 @@ test("office communication composition: responsive panels, focus, drafts, engine
     assert.equal(await evaluate("communicationFixture.engine.navigate({type:'teammate',sessionId:'other'})"),false);
     await button("Office Chat");assert.equal(await evaluate("document.getElementById('office-chat-draft').value"),"","Workspace replacement never carries another office's draft");
     await evaluate("communicationFixture.options.onPresence({status:'denied',count:0,notice:'Membership ended.'})");assert.equal(await evaluate("[...document.querySelectorAll('button')].some(b=>b.textContent==='Retry connection')"),false);assert.equal(await evaluate("document.querySelector('.office-connection').textContent.includes('Access denied')"),true);
+    assert.match(await evaluate("document.querySelector('[aria-label=\"Office voice\"]').textContent"),/Voice authorization ended/);
     await evaluate("communicationFixture.unmount()");await until(()=>evaluate("document.querySelectorAll('canvas').length===0 && communicationFixture.authUnsubscribed"));assert.equal(await evaluate("communicationFixture.closes"),3);assert.deepEqual(tools.errors,[]);
     await evaluate("communicationFixture.audio?.close()");
     console.info(JSON.stringify({scope:"Actual office composition, Phaser and SDK-simulated voice; synthetic profile/history/network/media, no authenticated service or Cloud/audio verification",desktop,boundary,tablet,mobile,foundation,textResize320:true,readingPositionPreserved:true,voiceLayouts,cameraLayouts,cameraOnlyMovement:true,workspaceReplacement:true,oneMediaSession:true,equivalentVoiceSnapshotCommits:voiceCommits,settingsPersistence:true,engineMounts:3,engineCloses:3,runtimeErrors:tools.errors.length}));
