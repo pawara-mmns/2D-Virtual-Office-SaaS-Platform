@@ -58,6 +58,7 @@ export default async function WorkspacePage({ params }: { params: Promise<{ orga
         <h2 id="office-heading" className="mt-3 text-xl font-semibold">{office?.name ?? "Office unavailable"}</h2>
         <p className="mt-3 max-w-lg text-sm leading-7 text-muted">{office ? "Explore your pixel-art office, with spaces for focused work, meetings and a quiet break." : "The default office could not be found. Ask your administrator to check workspace setup."}</p>
         {office && <Link href={`/workspace/${organization.id}/office`} className="auth-button mt-5">Enter office</Link>}
+        {office && membership.role === "OWNER" && <p className="mt-5"><Link href={`/workspace/${organization.id}/environment`} className="auth-text-link">Customize office environment</Link></p>}
       </section>
     </WorkspaceShell>
   );

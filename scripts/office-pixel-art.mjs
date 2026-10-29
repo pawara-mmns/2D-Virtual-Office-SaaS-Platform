@@ -28,5 +28,5 @@ export function picture(width, height) {
     for (let y = 0; y < height; y++) pixels.copy(scanlines, y * (width * 4 + 1) + 1, y * width * 4, (y + 1) * width * 4);
     writeFileSync(output + file, Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk("IHDR", header), chunk("IDAT", deflateSync(scanlines, { level: 9 })), chunk("IEND", Buffer.alloc(0))]));
   }
-  return { rect, ellipse, line, png };
+  return { rect, ellipse, line, png, pixels };
 }

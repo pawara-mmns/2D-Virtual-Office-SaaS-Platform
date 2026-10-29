@@ -1,4 +1,5 @@
 "use client";
+import type { EnvironmentConfig } from "../../../../../../packages/shared/src/environment/catalog.ts";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { OfficeDisclosure } from "@/components/office-disclosure";
@@ -22,7 +23,8 @@ import type { CameraCommand, NavigationState } from "../engine/camera.ts";
 
 export type { OfficeContext } from "./office-hud";
 
-export default function OfficeCanvas({ appearance, profileWarning, officeId, userId, context }: { appearance: AvatarAppearance; profileWarning?: string; officeId: string; userId?: string; context: OfficeContext }) {
+export default function OfficeCanvas({ appearance, profileWarning, officeId, userId, context, environment }: { environment?: EnvironmentConfig; appearance: AvatarAppearance; profileWarning?: string; officeId: string; userId?: string; context: OfficeContext }) {
+  const environmentKey = JSON.stringify(environment ?? null);
   const host = useRef<HTMLDivElement>(null);
   const controls = useRef<ReturnType<typeof mountOffice> | null>(null);
   const [navigation, setNavigation] = useState<NavigationState | null>(null);
@@ -86,6 +88,7 @@ export default function OfficeCanvas({ appearance, profileWarning, officeId, use
   }, [avatarKey, displayName]);
   useEffect(() => {
     if (!host.current) return;
+    const environment = JSON.parse(environmentKey) as EnvironmentConfig | null;
     const element = host.current;
     let active = true;
     let authSubscription: { unsubscribe(): void } | undefined;
@@ -124,11 +127,11 @@ export default function OfficeCanvas({ appearance, profileWarning, officeId, use
           } catch { setPresence({ status: "offline", count: 0, notice: "The office connection is unavailable. Retry, or contact your workspace administrator if it continues." }); }
         },
         onError: fail,
-      }, latestAppearance.current, true, officeId);
+      }, latestAppearance.current, true, officeId, environment ?? undefined);
     }, fail);
     controls.current = controller;
     return () => { active = false; focusOffice.current = false; window.clearTimeout(timeout); clearTimeout(authTimer); authSubscription?.unsubscribe(); window.removeEventListener("pagehide", leave); network.current?.close(); network.current = null; controls.current = null; void controller.dispose(); };
-  }, [attempt, officeId, chatEvents]);
+  }, [attempt, officeId, chatEvents, environmentKey]);
   return <section aria-label="Interactive office" className="office-shell" data-panel={panel ?? "none"}>
     <div className={`office-work-area${chatOpen ? " chat-open" : ""}`}>
     <div inert={compact && panel !== null} className="office-world relative bg-ink">

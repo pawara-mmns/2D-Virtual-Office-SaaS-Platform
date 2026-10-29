@@ -1,3 +1,4 @@
+import type { EnvironmentConfig } from "../../../../../../packages/shared/src/environment/catalog.ts";
 // Imported dynamically inside the client effect. Never import this module from a Server Component.
 import Phaser from "phaser";
 import { OfficeScene, type OfficeCallbacks } from "../scenes/office-scene.ts";
@@ -8,11 +9,11 @@ import type { OfficeNetwork } from "../../../../../../packages/shared/src/protoc
 import type { CameraCommand } from "./camera.ts";
 import { softwareRenderer } from "./renderer-effects.ts";
 
-export function createOfficeGame(host: HTMLElement, callbacks: OfficeCallbacks, appearance: AvatarAppearance = { avatarKey: defaultAvatar, displayName: "You" }, multiplayer = false, officeId?: string) {
+export function createOfficeGame(host: HTMLElement, callbacks: OfficeCallbacks, appearance: AvatarAppearance = { avatarKey: defaultAvatar, displayName: "You" }, multiplayer = false, officeId?: string, environment?: EnvironmentConfig) {
   const input = attachMovementInput(host, () => document.activeElement === host, window);
   const focus = () => host.focus({ preventScroll: true });
   host.addEventListener("pointerdown", focus);
-  const scene = new OfficeScene(input.pressed, callbacks, appearance, multiplayer, officeId);
+  const scene = new OfficeScene(input.pressed, callbacks, appearance, multiplayer, officeId, environment);
   const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
   const updateMotion = () => scene.setReducedMotion(motion.matches);
   updateMotion();

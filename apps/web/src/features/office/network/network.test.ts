@@ -112,3 +112,17 @@ test("late state patches cannot restore presence after a drop or final leave", a
     assert.equal(states.at(-1)?.status,"offline");assert.deepEqual(roster.at(-1),[]);assert.equal(network.snapshot(),undefined);
   } finally {network.close();consume.mock.restore();globalThis.fetch=original;}
 });
+
+test("changed environment admission requests a reload and never retries stale geometry", async()=>{
+  const original=globalThis.fetch,states:Presence[]=[];let requests=0;
+  globalThis.fetch=async()=>{requests++;return new Response(JSON.stringify({code:'MAP_CHANGED'}),{status:409});};
+  const network=connectOffice({url:'http://localhost:2567',officeId:'office-fixture',mapVersion:'old',getToken:async()=> 'synthetic-proof',onPresence:state=>states.push(state)});
+  try{await new Promise(r=>setTimeout(r,20));assert.equal(states.at(-1)?.reload,true);assert.equal(states.at(-1)?.status,'offline');assert.equal(requests,1);assert.equal(network.snapshot(),undefined);assert.equal(network.setAvailability?.('BUSY'),false);}finally{network.close();globalThis.fetch=original;}
+});
+test("environment retirement clears media/presence and stale reconnect callbacks cannot revive the old map",async()=>{
+  const original=globalThis.fetch,events=new Map<string,(code?:number)=>void>(),states:Presence[]=[],voice:(VoiceZoneState|null)[]=[];let changed!: (s:OfficeSnapshot)=>void,receive!: (v:VoiceZoneState)=>void;
+  const fake={sessionId:'fixture',connection:{transport:{isOpen:true,send(){},sendUnreliable(){},connect(){},close(){}},events:{}},reconnection:{enabled:true},onStateChange(callback:(s:OfficeSnapshot)=>void){changed=callback;},onMessage(type:string,callback:(v:VoiceZoneState)=>void){if(type==='voice.state')receive=callback;},onDrop(callback:()=>void){events.set('drop',callback);},onReconnect(callback:()=>void){events.set('reconnect',callback);},onLeave(callback:(code:number)=>void){events.set('leave',callback as (code?:number)=>void);},onError(){},send(){},async leave(){},removeAllListeners(){}};
+  const consume=mock.method(Client.prototype,'consumeSeatReservation',async()=>fake as unknown as Awaited<ReturnType<Client['consumeSeatReservation']>>);globalThis.fetch=async()=>new Response('{}');
+  const network=connectOffice({url:'http://localhost:2567',officeId:'office',mapVersion:'old',getToken:async()=> 'synthetic-proof',onPresence:s=>states.push(s),onVoice:v=>voice.push(v)});
+  try{await new Promise(r=>setImmediate(r));const snapshot:OfficeSnapshot={officeId:'office',mapVersion:'old',players:new Map()};changed(snapshot);receive({sessionId:'fixture',zone:'Meeting Room',configured:true,participants:1});events.get('leave')!(4052);const before=states.length;events.get('reconnect')!();changed(snapshot);assert.equal(states.length,before);assert.equal(states.at(-1)?.reload,true);assert.equal(voice.at(-1),null);assert.equal(fake.reconnection.enabled,false);assert.equal(network.snapshot(),undefined);}finally{network.close();consume.mock.restore();globalThis.fetch=original;}
+});

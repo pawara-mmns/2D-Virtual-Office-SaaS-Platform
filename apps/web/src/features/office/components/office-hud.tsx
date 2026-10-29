@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import { useEffect, useId, useRef, useState, type ReactNode, type RefObject } from "react";
 import Link from "next/link";
 import { HudGlass } from "./hud-glass";
@@ -55,7 +55,7 @@ export function OfficeHud({ context, presence, displayName, avatarKey, profileTo
     <div className="office-hud-bottom">
       <GlassSurface className="office-connection" variant="regular" data-state={presence.status}>
         <p role="status" title={presence.notice}><span className="office-connection-dot" aria-hidden="true" />{connection}</p>
-        {presence.status === "offline" && <button className="office-control" onClick={retry}>Retry connection</button>}
+        {presence.status === "offline" && <button className="office-control" onClick={presence.reload ? () => window.location.reload() : retry}>{presence.reload ? "Reload office" : "Retry connection"}</button>}
         {presence.status !== "online" && presence.status !== "connecting" && <span className="office-connection-detail">{presence.notice}</span>}
       </GlassSurface>
       {notices}

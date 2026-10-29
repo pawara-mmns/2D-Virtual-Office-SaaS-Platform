@@ -35,7 +35,7 @@ function serve(request, response) {
     const pathname = new URL(request.url, "http://localhost").pathname;
     if (pathname === "/") { response.setHeader("Content-Type", "text/html"); response.end(html); return; }
     if (pathname === "/phaser.js") { response.setHeader("Content-Type", "text/javascript"); response.end(readFileSync(resolve(web, "node_modules/phaser/dist/phaser.esm.js"))); return; }
-    if (["/packages/shared/src/avatars.ts", "/packages/shared/src/map.ts", "/packages/shared/src/protocol.ts", "/packages/shared/src/socket-transport.ts"].includes(pathname)) {
+    if (["/packages/shared/src/avatars.ts", "/packages/shared/src/map.ts", "/packages/shared/src/protocol.ts", "/packages/shared/src/socket-transport.ts", "/packages/shared/src/environment/catalog.ts", "/packages/shared/src/environment/compose.ts", "/packages/shared/src/environment/visuals.ts"].includes(pathname)) {
       const source = ts.transpileModule(readFileSync(resolve(root, pathname.slice(1)), "utf8"), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } });
       response.setHeader("Content-Type", "text/javascript"); response.end(source.outputText); return;
     }
