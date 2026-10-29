@@ -27,6 +27,7 @@ export const ChatPanel = memo(function ChatPanel({ officeId, open, onClose, even
   const [sendError, setSendError] = useState("");
   const [hasNew, setHasNew] = useState(false);
   const list = useRef<HTMLDivElement>(null);
+  const readingTop = useRef(0);
   const draftRef = useRef(draft), nearBottom = useRef(true), historical = useRef(false);
   const pending = useRef<Pending | null>(null), timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const revision = useRef(0), duringLoad = useRef<ChatMessage[] | null>(null);
@@ -112,13 +113,15 @@ export const ChatPanel = memo(function ChatPanel({ officeId, open, onClose, even
   }, [open, load]);
   useEffect(() => () => { revision.current++; duringLoad.current = null; onlineRef.current = false; clearTimeout(timer.current); }, []);
   useLayoutEffect(() => {
-    if (!list.current) return;
+    if (!list.current || !open) return;
     if (anchor.current) {
       const node = [...list.current.querySelectorAll<HTMLElement>("[data-message-id]")].find((node) => node.dataset.messageId === anchor.current!.id);
       if (node) list.current.scrollTop += node.getBoundingClientRect().top - anchor.current.top;
       anchor.current = null;
     } else if (nearBottom.current) list.current.scrollTop = list.current.scrollHeight;
-  }, [messages]);
+    else list.current.scrollTop = readingTop.current;
+    readingTop.current = list.current.scrollTop;
+  }, [messages, open]);
   const submit = () => {
     const body = normalizeBody(draftRef.current);
     if (!body || !online || !userId || sending) return;
@@ -129,21 +132,21 @@ export const ChatPanel = memo(function ChatPanel({ officeId, open, onClose, even
     timer.current = setTimeout(() => { setSending(false); setSendError("Delivery could not be confirmed. Retry this draft to check without duplicating it."); }, 12_000);
   };
   return <aside id="office-chat" aria-label="Office Chat" hidden={!open} className="office-chat border-line bg-white" onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); onClose(); } }}>
-    <header className="flex items-center justify-between gap-3 border-b border-line px-4 py-3"><h2 className="text-sm font-semibold">Office Chat</h2><button className="office-control" onClick={onClose}>Close chat</button></header>
+    <header className="office-panel-header"><h2 className="text-sm font-semibold">Office Chat</h2><button className="office-control" onClick={onClose}>Close chat</button></header>
     {!online && <p role="status" className="border-b border-line bg-surface px-4 py-2 text-xs leading-5 text-muted">Chat disconnected. Reconnect to send; your draft is kept.</p>}
-    <div ref={list} tabIndex={0} aria-label="Chat messages" aria-busy={loading} className="min-h-0 flex-1 overflow-y-auto px-4 py-3 focus-visible:outline-2 focus-visible:outline-forest" onScroll={() => { const node = list.current!; nearBottom.current = node.scrollHeight-node.scrollTop-node.clientHeight < 70; }}>
+    <div ref={list} tabIndex={0} aria-label="Chat messages" aria-busy={loading} className="min-h-0 flex-1 overflow-y-auto px-4 py-3 focus-visible:outline-2 focus-visible:outline-forest" onScroll={() => { if (!opened.current) return; const node = list.current!; readingTop.current = node.scrollTop; nearBottom.current = node.scrollHeight-node.scrollTop-node.clientHeight < 70; }}>
       {cursor && <button className="auth-text-link mb-4" disabled={loading} onClick={() => void load(cursor)}>Load older messages</button>}
       {loading && <p role="status" className="mb-3 text-xs text-muted">Loading messages…</p>}
       {!messages.length && !loading && !historyError && <p className="py-8 text-sm leading-6 text-muted">{online ? "No messages yet. Start a conversation with your team." : "Reconnect to retrieve recent messages."}</p>}
       <ol className="space-y-2">{messages.map((message) => <MessageRow key={message.id} message={message} name={avatarDisplayName(names?.get(message.senderId) ?? message.senderName)} own={message.senderId === userId} />)}</ol>
     </div>
     {hasNew && <button className="border-t border-line bg-surface px-4 py-2 text-sm font-medium text-forest" onClick={() => void load()}>Show latest messages</button>}
-    {historyError && <div className="border-t border-line px-4 py-2"><p role="alert" className="text-xs leading-5 text-red-800">{historyError}</p><button className="auth-text-link mt-1" disabled={loading} onClick={() => void load()}>Retry history</button></div>}
+    {historyError && <div className="border-t border-line px-4 py-2"><p role="alert" className="ui-notice ui-notice-error">{historyError}</p><button className="auth-text-link mt-1" disabled={loading} onClick={() => void load()}>Retry history</button></div>}
     <form onSubmit={(event) => { event.preventDefault(); submit(); }} className="border-t border-line p-4">
       <label htmlFor="office-chat-draft" className="text-xs font-medium">Message your office</label>
-      <textarea id="office-chat-draft" value={draft} maxLength={4000} rows={2} aria-describedby="office-chat-help" className="auth-input mt-2 max-h-28 resize-y text-sm" onChange={(event) => { draftRef.current = event.target.value; setDraft(event.target.value); }} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); submit(); } }} />
+      <textarea id="office-chat-draft" value={draft} maxLength={4000} rows={2} aria-describedby="office-chat-help" className="auth-input mt-2 max-h-28 resize-y" onChange={(event) => { draftRef.current = event.target.value; setDraft(event.target.value); }} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); submit(); } }} />
       <p id="office-chat-help" className="mt-1 text-xs leading-5 text-muted">{[...draft].length}/2,000 characters. Shift+Enter for a new line.</p>
-      {sendError && <p role="alert" className="mt-2 text-xs leading-5 text-red-800">{sendError}</p>}
+      {sendError && <p role="alert" className="ui-notice ui-notice-error mt-2">{sendError}</p>}
       <button className="auth-button mt-3 w-full" disabled={!online || !userId || !normalizeBody(draft) || sending}>{sending ? "Sending…" : "Send message"}</button>
     </form>
   </aside>;

@@ -10,7 +10,7 @@ export class OrganizationError extends Error {
 
   constructor(kind: OrganizationError["kind"]) {
     const messages = {
-      setup: "Workspace setup is not available yet. The organization migration needs to be applied by the project administrator.",
+      setup: "Workspace setup is unavailable. Ask your workspace administrator for help.",
       unavailable: "The workspace service is unavailable. Please try again shortly.",
       input: "Check your workspace name and refresh the form before trying again.",
       forbidden: "You don’t have permission to perform this workspace action.",

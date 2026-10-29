@@ -16,7 +16,7 @@ export async function issueVoiceToken(input: unknown, dependencies: {
     const response = await dependencies.forward(session.token,input);
     if (response.status !== 200) {
       const status = [403,409,429,503].includes(response.status) ? response.status : 503;
-      const errors: Record<number,string> = { 403: "Voice access denied. Enter the meeting room and check your active membership.",409: "Leave your existing voice session before joining again.",429: "Wait a moment before joining voice again.",503: "Voice is unavailable. Ask an administrator to check LiveKit configuration and connectivity." };
+      const errors: Record<number,string> = { 403: "Voice access denied. Enter the meeting room and check your active membership.",409: "Leave your existing voice session before joining again.",429: "Wait a moment before joining voice again.",503: "Voice is unavailable. Try again later or contact your workspace administrator." };
       return { status, data: { error: errors[status] } };
     }
     const data = response.data as { token?: unknown; url?: unknown } | null;

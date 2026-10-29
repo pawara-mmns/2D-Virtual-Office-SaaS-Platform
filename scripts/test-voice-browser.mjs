@@ -69,7 +69,7 @@ test("actual voice UI: no auto capture, explicit join, cancellation, real SDK de
     writeFileSync(resolve(cache,"voice-preview-mobile.png"),Buffer.from((await tools.command("Page.captureScreenshot",{format:"png"})).data,"base64"));
     await evaluate("voiceFixture.mode='pending';document.querySelector('button').click()");await until(()=>evaluate("document.body.textContent.includes('Authorizing voice')"));
     const captures=await evaluate("voiceFixture.captures");await evaluate("voiceFixture.setState(s=>({...s,zone:null}))");await until(()=>evaluate("!document.querySelector('[aria-label=\"Meeting room voice\"]')"));assert.equal(await evaluate("voiceFixture.captures"),captures);
-    await evaluate("voiceFixture.mode='connected';voiceFixture.setState(s=>({...s,zone:'Meeting Room'}))");await until(()=>evaluate("!!document.querySelector('button')"));
+    await evaluate("voiceFixture.mode='connected';voiceFixture.setState(s=>({...s,zone:'Meeting Room'}))");await until(()=>evaluate("!!document.querySelector('button') && !document.querySelector('button').disabled"));
     const capturesBefore=await evaluate("voiceFixture.captures"),connectsBefore=await evaluate("voiceFixture.connects");
     await evaluate("document.querySelector('button').click()");await until(()=>evaluate("document.body.textContent.includes('Voice connected')"));
     assert.equal(await evaluate("voiceFixture.captures"),capturesBefore+1,"Strict Mode replay must not request capture twice");assert.equal(await evaluate("voiceFixture.connects"),connectsBefore+1);

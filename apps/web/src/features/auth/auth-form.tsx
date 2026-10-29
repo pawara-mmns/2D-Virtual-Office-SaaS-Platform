@@ -44,7 +44,7 @@ export function AuthForm({ mode, configured }: { mode: AuthMode; configured: boo
           className="auth-input"
         />
         {hint && <p id="password-hint" className="mt-2 text-xs leading-5 text-muted">Use 12–128 characters. A long, unique passphrase works well.</p>}
-        {error && <p id={`${name}-error`} className="mt-2 text-sm text-red-800">{error}</p>}
+        {error && <p id={`${name}-error`} className="mt-2 text-sm text-danger">{error}</p>}
       </div>
     );
   }
@@ -53,12 +53,12 @@ export function AuthForm({ mode, configured }: { mode: AuthMode; configured: boo
     <form action={action} className="space-y-5" aria-busy={pending}>
       <div aria-live="polite" aria-atomic="true">
         {state.message && (
-          <p role={state.status === "error" ? "alert" : "status"} className={`border-l-2 px-3 py-2 text-sm leading-6 ${state.status === "error" ? "border-red-700 bg-red-50 text-red-900" : "border-forest bg-surface text-ink"}`}>
+          <p role={state.status === "error" ? "alert" : "status"} className={`ui-notice ${state.status === "error" ? "ui-notice-error" : "ui-notice-success"}`}>
             {state.message}
           </p>
         )}
       </div>
-      <fieldset disabled={pending || !configured || completed} className="space-y-5 disabled:opacity-70">
+      <fieldset disabled={pending || !configured || completed} className="min-w-0 space-y-5">
         {mode !== "reset-password" && field("email", "Email address", "email", "email")}
         {mode !== "forgot-password" && field("password", newPassword ? "New password" : "Password", "password", newPassword ? "new-password" : "current-password")}
         {newPassword && field("confirmPassword", "Confirm password", "password", "new-password")}

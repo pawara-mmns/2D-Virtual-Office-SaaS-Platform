@@ -3,7 +3,8 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { blocked, mapMarkers, tileLayer, validateOfficeMap } from "./maps/map-data.ts";
 import { attachMovementInput, movement } from "./input/movement.ts";
-import { officeZoom } from "./engine/camera.ts";
+import { findOfficeTeammate, fitOfficeZoom, officeZoom, zoomLevels } from "./engine/camera.ts";
+import type { OfficeSnapshot, PlayerSnapshot } from "../../../../../packages/shared/src/protocol.ts";
 import { createOfficeLifecycle, type OfficeController } from "./engine/lifecycle.ts";
 import { resolveOfficeAccess, type OfficeAccessSource } from "./access.ts";
 
@@ -67,11 +68,35 @@ test("keyboard input is focus-scoped, never captures Tab, clears on blur and rem
   global.dispatchEvent(new Event("blur")); assert.equal(input.pressed.size, 0);
   input.destroy(); target.dispatchEvent(keyEvent("KeyD")); assert.equal(input.pressed.size, 0);
 });
-test("integer zoom always covers the viewport without exposing space outside the map", () => {
+test("overview fits both map axes with letterboxing and real, discrete zoom limits", () => {
   for (const [w, h] of [[360, 500], [1200, 700], [2000, 1400], [4800, 2200]]) for (const requested of [-1, 1, 2, 10]) {
+    const fit = fitOfficeZoom(w!, h!, 1152, 832), levels = zoomLevels(w!, h!, 1152, 832);
+    assert.ok(1152 * fit <= w! && 832 * fit <= h!);
+    assert.ok(Number.isInteger(fit * 32), "Tile boundaries remain at whole rendered pixels");
     const zoom = officeZoom(requested, w!, h!, 1152, 832);
-    assert.ok(Number.isInteger(zoom) && w! / zoom <= 1152 && h! / zoom <= 832);
+    assert.ok(levels.includes(zoom));
+    assert.equal(levels[0], fit); assert.equal(officeZoom(-100, w!, h!, 1152, 832), fit);
+    assert.equal(officeZoom(100, w!, h!, 1152, 832), levels.at(-1));
   }
+  assert.equal(fitOfficeZoom(1440, 747, 1152, 832), .875);
+  assert.throws(() => fitOfficeZoom(0, 747, 1152, 832));
+  assert.ok(Number.isFinite(officeZoom(NaN, 390, 600, 1152, 832)));
+});
+test("Find resolves only a connected, positioned teammate in the bound authorized office snapshot", () => {
+  const player = (sessionId: string, x = 592): PlayerSnapshot => ({ sessionId, userId: sessionId, displayName: "Member", avatarKey: "fern", x, y: 600, direction: "down", isMoving: false, connected: true });
+  const own = player("self"), peer = player("peer");
+  const snapshot: OfficeSnapshot = { officeId: "bound-office", mapVersion: "fixture", players: new Map([["self", own], ["peer", peer]]) };
+  assert.equal(findOfficeTeammate(snapshot, "bound-office", "self", "peer", 1152, 832), peer);
+  for (const [office, self, target] of [["another-office", "self", "peer"], ["bound-office", "self", "self"], ["bound-office", "missing", "peer"], ["bound-office", "self", "foreign-session"]]) {
+    assert.equal(findOfficeTeammate(snapshot, office, self, target!, 1152, 832), undefined);
+  }
+  for (const point of [{ x: NaN }, { x: Infinity }, { x: -1 }, { x: 1153 }, { y: 833 }, { connected: false }]) {
+    snapshot.players.set("peer", { ...peer, ...point });
+    assert.equal(findOfficeTeammate(snapshot, "bound-office", "self", "peer", 1152, 832), undefined);
+  }
+  snapshot.players.set("peer", peer); snapshot.players.set("self", { ...own, connected: false });
+  assert.equal(findOfficeTeammate(snapshot, "bound-office", "self", "peer", 1152, 832), undefined);
+  assert.equal(findOfficeTeammate(undefined, "bound-office", "self", "peer", 1152, 832), undefined);
 });
 const org = "250d1968-67d7-4d3c-8846-92f26747d76d", other = "7df17a9c-1c4c-472f-88d5-8d2db93e96a5";
 function source(): OfficeAccessSource { return { organization: async () => ({ id: org, name: "Office", status: "ACTIVE" }), membership: async () => ({ organization_id: org, status: "ACTIVE", role: "MEMBER" }), office: async () => ({ id: other, organization_id: org, name: "Main office" }) }; }
@@ -108,4 +133,14 @@ test("route remount waits for deferred Phaser destruction and import failures st
   const second = mount(async () => () => { creates++; return { destroy: async () => {}, zoomBy() {}, resetZoom() {} }; }, () => assert.fail());
   await tick(); assert.equal(creates, 1); release(); await closing; await tick(); assert.equal(creates, 2); await second.dispose();
   const failed = mount(async () => { throw new Error("Chunk failed"); }, () => { errors++; }); await tick(); assert.equal(errors, 1); await failed.dispose();
+});
+test("camera commands use the existing lifecycle owner and cannot reach a disposed or replacement office", async () => {
+  const mount = createOfficeLifecycle(), calls: string[] = [];
+  const office = mount(async () => () => ({ destroy: async () => {}, zoomBy() {}, resetZoom() {}, navigate(command) { calls.push(command.type); return true; } }), () => assert.fail());
+  assert.equal(office.navigate({ type: "overview" }), false);
+  await tick(); assert.equal(office.navigate({ type: "area", id: "RECEPTION" }), true);
+  await office.dispose(); assert.equal(office.navigate({ type: "teammate", sessionId: "old-session" }), false);
+  const next = mount(async () => () => ({ destroy: async () => {}, zoomBy() {}, resetZoom() {}, navigate(command) { calls.push(`next:${command.type}`); return true; } }), () => assert.fail());
+  await tick(); assert.equal(next.navigate({ type: "self" }), true);
+  assert.deepEqual(calls, ["area", "next:self"]); await next.dispose();
 });

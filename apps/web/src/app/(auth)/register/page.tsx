@@ -10,7 +10,7 @@ export const metadata: Metadata = { title: "Create account | Virtual Office" };
 export default async function RegisterPage() {
   await redirectAuthenticatedUser();
   return (
-    <AuthShell title="Create your account" description="Start with your email and a secure password. You’ll need to verify your email before signing in.">
+    <AuthShell title="Create your account" description="Use your work email and a unique password. Verify your email, then sign in to create a workspace or accept your invitation.">
       <AuthForm mode="register" configured={Boolean(getSupabaseConfig())} />
       <p className="mt-6 text-sm text-muted">Already have an account? <Link href="/login" className="auth-text-link">Sign in</Link></p>
     </AuthShell>

@@ -58,7 +58,7 @@ async function submit(mode: AuthMode, form: FormData): Promise<AuthState> {
       if (data.session) {
         await supabase.auth.signOut({ scope: "local" });
         await clearLocalSession();
-        return errorState("Email confirmation must be enabled in the Supabase project before registration can be used.");
+        return errorState("Registration is unavailable because email verification could not be required. Contact your workspace administrator.");
       }
       return { status: "success", message: verificationMessage };
     }

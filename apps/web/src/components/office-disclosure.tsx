@@ -1,21 +1,46 @@
 "use client";
 
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 
-// A non-modal panel: native summary keyboard behavior, no focus trap, and an
-// explicit route back to its trigger with Escape. Only one panel stays open.
-export function OfficeDisclosure({ label, children, onOpen }: { label: string; children: ReactNode; onOpen?(): void }) {
-  const details = useRef<HTMLDetailsElement>(null);
+export type OfficePanelControl = {
+  open: boolean;
+  onOpenChange(open: boolean): void;
+  container: HTMLElement | null;
+};
+
+// Nonmodal throughout: office navigation and voice stay available. The office
+// owns panel selection; a stable portal keeps the editor inside the work area.
+export function OfficeDisclosure({ label, children, onOpen, panel }: {
+  label: string; children: ReactNode; onOpen?(): void; panel?: OfficePanelControl;
+}) {
+  const [localOpen, setLocalOpen] = useState(false);
+  const open = panel?.open ?? localOpen;
+  const change = panel?.onOpenChange ?? setLocalOpen;
+  const trigger = useRef<HTMLButtonElement>(null);
+  const content = useRef<HTMLElement>(null);
+  const id = useId();
   useEffect(() => {
+    if (open) content.current?.querySelector<HTMLElement>("button")?.focus({ preventScroll: true });
+  }, [open]);
+  useEffect(() => {
+    if (!open) return;
     const dismiss = (event: PointerEvent) => {
-      if (details.current?.open && event.target instanceof Node && !details.current.contains(event.target)) details.current.open = false;
+      if (event.target instanceof Node && !content.current?.contains(event.target) && !trigger.current?.contains(event.target)) change(false);
     };
     document.addEventListener("pointerdown", dismiss);
     return () => document.removeEventListener("pointerdown", dismiss);
-  }, []);
-  return <details ref={details} name="office-panels" className="office-disclosure" onToggle={(event) => { if (event.currentTarget.open) { event.currentTarget.querySelector(".office-disclosure-panel")?.scrollTo({ top: 0 }); onOpen?.(); } }}
-    onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); if (details.current) { details.current.open = false; details.current.querySelector("summary")?.focus(); } } }}>
-    <summary className="office-control cursor-pointer">{label}</summary>
-    <div className="office-disclosure-panel"><button type="button" className="office-control float-right mb-2 ml-2" aria-label={`Close ${label}`} onClick={() => { if (details.current) { details.current.open = false; details.current.querySelector("summary")?.focus(); } }}>Close</button>{children}</div>
-  </details>;
+  }, [open, change]);
+  const close = () => { change(false); trigger.current?.focus({ preventScroll: true }); };
+  const contents = <section ref={content} id={id} hidden={!open} aria-label={label} className="office-panel office-disclosure-panel"
+    onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(); } }}>
+    <header className="office-panel-header"><h2>{label}</h2><button type="button" className="office-control" aria-label={`Close ${label}`} onClick={close}>Close</button></header>
+    <div className="office-panel-body">{children}</div>
+  </section>;
+  return <div className="office-disclosure" data-open={open}>
+    <button ref={trigger} type="button" className="office-control" aria-expanded={open} aria-controls={id}
+      onKeyDown={(event) => { if (event.key === "Escape" && open) { event.preventDefault(); close(); } }}
+      onClick={() => { if (!open) onOpen?.(); change(!open); }}>{label}</button>
+    {panel ? panel.container && createPortal(contents, panel.container) : contents}
+  </div>;
 }

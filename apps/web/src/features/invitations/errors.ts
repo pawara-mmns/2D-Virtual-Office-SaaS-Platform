@@ -3,9 +3,9 @@ export class TeamError extends Error {
 }
 export function teamDataError(code: string): never {
   const messages: Record<string, string> = {
-    PGRST202: "Team setup is not available yet. An administrator must apply the reviewed invitation migration.",
-    PGRST205: "Team setup is not available yet. An administrator must apply the reviewed invitation migration.",
-    "42P01": "Team setup is not available yet. An administrator must apply the reviewed invitation migration.",
+    PGRST202: "Team invitations are unavailable. Ask your workspace administrator for help.",
+    PGRST205: "Team invitations are unavailable. Ask your workspace administrator for help.",
+    "42P01": "Team invitations are unavailable. Ask your workspace administrator for help.",
     "42501": "You do not have permission for this team action, or the confirmation did not match.",
     "22023": "Check the invitation fields and try again.",
     P0401: "This person is already an active member.",

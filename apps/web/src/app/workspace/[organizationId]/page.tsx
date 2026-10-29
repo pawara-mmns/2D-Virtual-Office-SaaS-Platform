@@ -28,7 +28,7 @@ export default async function WorkspacePage({ params }: { params: Promise<{ orga
     return (
       <WorkspaceShell email={user.email}>
         <h1 className="text-2xl font-semibold tracking-tight">Workspace unavailable</h1>
-        <p role="alert" className="mt-4 max-w-lg text-sm leading-7 text-muted">{error instanceof OrganizationError ? error.message : "We couldn’t load this workspace. Please try again shortly."}</p>
+        <p role="alert" className="ui-notice ui-notice-error mt-4 max-w-lg">{error instanceof OrganizationError ? error.message : "We couldn’t load this workspace. Please try again shortly."}</p>
         <Link href="/dashboard" className="auth-text-link mt-6 inline-block">Back to workspaces</Link>
       </WorkspaceShell>
     );
