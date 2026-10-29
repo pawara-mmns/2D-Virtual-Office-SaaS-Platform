@@ -1,4 +1,5 @@
 "use client";
+import { HudIcon } from "@/components/hud-icon";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Room, RoomEvent, Track, createLocalAudioTrack, supportsAudioOutputSelection, setLogLevel, LogLevel, type LocalAudioTrack, type Participant } from "livekit-client";
 import { RoomContext, RoomAudioRenderer, StartAudio, TrackToggle, useConnectionState, useParticipants, useMediaDeviceSelect, useIsSpeaking, useParticipantInfo, useLocalParticipant } from "@livekit/components-react";
@@ -32,19 +33,19 @@ export function Controls({ leave, error }: { leave(): void; error(message: strin
   const people = useParticipants({ updateOnlyOn:[RoomEvent.TrackMuted,RoomEvent.TrackUnmuted,RoomEvent.TrackPublished,RoomEvent.TrackUnpublished,RoomEvent.ParticipantMetadataChanged] });
   return <>
     <div className="voice-session-controls">
-      <div className="voice-session-summary">
-      <span role="status" className="mr-2 text-xs">{connection === "connected" ? "Voice connected" : connection === "disconnected" ? "Voice disconnected" : connection === "reconnecting" || connection === "signalReconnecting" ? "Voice reconnecting…" : "Voice connecting…"}</span>
+      <div className="voice-session-summary" title={connection === "connected" ? "Voice connected" : connection === "disconnected" ? "Voice disconnected" : "Voice connecting or reconnecting"}>
+      <span role="status" data-connection={connection} className="mr-2 text-xs">{connection === "connected" ? "Voice connected" : connection === "disconnected" ? "Voice disconnected" : connection === "reconnecting" || connection === "signalReconnecting" ? "Voice reconnecting…" : "Voice connecting…"}</span>
       <span className="text-xs text-muted">{isMicrophoneEnabled ? "Mic on" : "Mic muted"}</span>
       </div>
       <div className="voice-session-actions">
       {/* This SDK version replaces the button's disabled prop with its own
           pending state. A native fieldset also enforces connection readiness. */}
-      <fieldset disabled={connection !== "connected"} className="m-0 min-w-0 border-0 p-0"><legend className="sr-only">Microphone control</legend><TrackToggle source={Track.Source.Microphone} showIcon={false} className="office-control" onDeviceError={onDeviceError}>{isMicrophoneEnabled ? "Mute microphone" : "Unmute microphone"}</TrackToggle></fieldset>
-      <button className="office-control" onClick={leave}>Leave Voice</button>
+      <fieldset disabled={connection !== "connected"} className="m-0 min-w-0 border-0 p-0"><legend className="sr-only">Microphone control</legend><TrackToggle source={Track.Source.Microphone} showIcon={false} className="office-control" title={isMicrophoneEnabled ? "Mute microphone" : "Unmute microphone"} aria-label={isMicrophoneEnabled ? "Mute microphone" : "Unmute microphone"} onDeviceError={onDeviceError}><HudIcon name={isMicrophoneEnabled ? "microphone" : "muted"} /><span className="sr-only">{isMicrophoneEnabled ? "Mute microphone" : "Unmute microphone"}</span></TrackToggle></fieldset>
+      <button className="office-control" aria-label="Leave Voice" title="Leave Voice" onClick={leave}><HudIcon name="exit" /><span className="sr-only">Leave Voice</span></button>
       <StartAudio className="office-control" label="Enable audio playback" />
       </div>
     </div>
-    <details className="voice-details mt-2"><summary className="cursor-pointer text-xs font-medium">Voice participants ({people.length}) and audio devices</summary>
+    <details className="voice-details mt-2" onKeyDown={event => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus(); } }}><summary className="cursor-pointer text-xs font-medium" aria-label="Voice participants and audio devices" title="Voice participants and audio devices"><HudIcon name="audio" /><span className="sr-only">Voice participants ({people.length}) and audio devices</span></summary>
       <ul className="my-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{people.map((person) => <VoicePerson key={person.identity} person={person} reconnecting={connection !== "connected"} />)}</ul>
       <div className="flex flex-wrap gap-3"><Devices kind="audioinput" error={error} />{supportsAudioOutputSelection() ? <Devices kind="audiooutput" error={error} /> : <p className="text-xs text-muted">Output device selection is managed by this browser or operating system.</p>}</div>
     </details>
