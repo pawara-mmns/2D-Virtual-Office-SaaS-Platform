@@ -1,13 +1,13 @@
 import Phaser from "phaser";
 import { mapMarkers, TILE_SIZE, validateOfficeMap } from "../maps/map-data.ts";
-import { findOfficeTeammate, fitOfficeZoom, isMapPosition, officeZoom, zoomLevels, type CameraCommand, type NavigationState, type OfficeArea } from "../engine/camera.ts";
+import { clampOfficeZoom, findOfficeTeammate, fitOfficeZoom, isMapPosition, nextOfficeZoom, zoomLevels, type CameraCommand, type NavigationState, type OfficeArea } from "../engine/camera.ts";
 import { avatarDisplayName } from "../../avatars/presets.ts";
 import { PlayerAvatar } from "../engine/player-avatar.ts";
 import type { AvatarAppearance } from "../../avatars/presets.ts";
 import { mapVersion, type OfficeNetwork } from "../../../../../../packages/shared/src/protocol.ts";
 import { movement } from "../input/movement.ts";
 
-export type OfficeCallbacks = { onReady(mapVersion?: string): void; onError(): void; onNavigation?(state: NavigationState): void };
+export type OfficeCallbacks = { onReady(mapVersion?: string): void; onError(): void; onNavigation?(state: NavigationState): void; onReducedEffects?(reduced: boolean): void };
 export class OfficeScene extends Phaser.Scene {
   player!: Phaser.Physics.Arcade.Sprite;
   avatar!: PlayerAvatar;
@@ -23,6 +23,8 @@ export class OfficeScene extends Phaser.Scene {
   private fitMode = false;
   private followZoom = 2;
   private reducedMotion = false;
+  private wheelZoomTarget: number | null = null;
+  private wheelDirection = 0;
   private highlight?: Phaser.GameObjects.Graphics;
   private navigationKey = "";
   private notice = "";
@@ -65,12 +67,13 @@ export class OfficeScene extends Phaser.Scene {
       this.highlight = this.add.graphics().setDepth(2).lineStyle(3, 0xf8f9f5).strokeRect(-20, -24, 40, 48).lineStyle(1, 0x245743).strokeRect(-20, -24, 40, 48).setVisible(false);
       this.resetZoom();
       this.scale.on(Phaser.Scale.Events.RESIZE, this.resize, this);
-      this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => { this.scale.off(Phaser.Scale.Events.RESIZE, this.resize, this); camera.stopFollow(); this.teammate = null; this.areaId = null; this.network?.close(); this.remotes.clear(); });
+      this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => { this.wheelZoomTarget = null; this.scale.off(Phaser.Scale.Events.RESIZE, this.resize, this); camera.stopFollow(); this.teammate = null; this.areaId = null; this.network?.close(); this.remotes.clear(); });
       this.events.once(Phaser.Scenes.Events.DESTROY, () => { this.network?.close(); this.remotes.clear(); });
       this.callbacks.onReady(mapVersion(data));
     } catch { this.failed = true; this.callbacks.onError(); }
   }
   private resize() {
+    this.wheelZoomTarget = null;
     this.setZoom(this.fitMode ? fitOfficeZoom(this.scale.width, this.scale.height, this.mapWidth, this.mapHeight) : this.cameras.main.zoom);
     if (this.mode === "overview") this.cameras.main.centerOn(this.mapWidth / 2, this.mapHeight / 2);
     this.publishNavigation();
@@ -78,7 +81,7 @@ export class OfficeScene extends Phaser.Scene {
   private setZoom(value: number) {
     if (!this.mapWidth) return;
     const camera = this.cameras.main;
-    camera.setZoom(officeZoom(value, this.scale.width, this.scale.height, this.mapWidth, this.mapHeight));
+    camera.setZoom(clampOfficeZoom(value, this.scale.width, this.scale.height, this.mapWidth, this.mapHeight));
     // Pad only an axis smaller than the viewport: centered letterboxing without
     // changing physics bounds or pretending that out-of-map space is walkable.
     const x = Math.max(0, (camera.width / camera.zoom - this.mapWidth) / 2);
@@ -88,14 +91,38 @@ export class OfficeScene extends Phaser.Scene {
   zoomBy(step: number) {
     if (!this.mapWidth || !Number.isFinite(step) || !step) return;
     const levels = zoomLevels(this.scale.width, this.scale.height, this.mapWidth, this.mapHeight);
-    const index = levels.indexOf(this.cameras.main.zoom);
+    const zoom = nextOfficeZoom(this.wheelZoomTarget ?? this.cameras.main.zoom, step, levels);
+    this.wheelZoomTarget = null;
     this.fitMode = false;
-    this.setZoom(levels[Math.max(0, Math.min(levels.length - 1, index + Math.trunc(step)))]!);
+    this.setZoom(zoom);
     this.followZoom = Math.max(1, this.cameras.main.zoom);
     this.publishNavigation();
   }
+  zoomWheel(pixels: number): boolean {
+    if (!this.player || !this.mapWidth || this.failed || !Number.isFinite(pixels) || !pixels) return false;
+    const direction = Math.sign(pixels);
+    const current = this.wheelDirection === direction ? this.wheelZoomTarget ?? this.cameras.main.zoom : this.cameras.main.zoom;
+    const requested = current * Math.exp(-Math.max(-160, Math.min(160, pixels)) * .0018);
+    const target = clampOfficeZoom(requested, this.scale.width, this.scale.height, this.mapWidth, this.mapHeight);
+    if (Math.abs(target - current) < 1e-8) return true;
+    this.fitMode = false;
+    this.wheelDirection = direction;
+    this.wheelZoomTarget = target;
+    this.followZoom = Math.max(1, target);
+    if (this.reducedMotion) this.advanceWheelZoom(0);
+    this.publishNavigation();
+    return true;
+  }
+  private advanceWheelZoom(delta: number) {
+    if (this.wheelZoomTarget === null) return;
+    const target = this.wheelZoomTarget, current = this.cameras.main.zoom;
+    const next = this.reducedMotion ? target : current + (target - current) * (1 - Math.exp(-Math.min(64, Math.max(0, delta)) / 65));
+    if (Math.abs(target - next) < .0001) { this.setZoom(target); this.wheelZoomTarget = null; }
+    else this.setZoom(next);
+    if (this.mode === "overview") this.cameras.main.centerOn(this.mapWidth / 2, this.mapHeight / 2);
+  }
   resetZoom() { this.followZoom = 2; this.followSelf(true); }
-  setReducedMotion(value: boolean) { this.reducedMotion = value; this.cameras?.main?.setLerp(value ? 1 : .18); }
+  setReducedMotion(value: boolean) { this.reducedMotion = value; this.cameras?.main?.setLerp(value ? 1 : .18); if (value && this.mapWidth) this.advanceWheelZoom(0); }
   private follow(target: { x: number; y: number }, immediate = false) {
     const camera = this.cameras.main, { scrollX, scrollY } = camera;
     const snap = immediate || this.reducedMotion;
@@ -111,11 +138,13 @@ export class OfficeScene extends Phaser.Scene {
   }
   private followSelf(immediate = false, notice = "") {
     if (!this.player) return;
+    this.wheelZoomTarget = null;
     this.mode = "self"; this.areaId = null; this.teammate = null; this.fitMode = false; this.notice = notice;
     this.highlight?.setVisible(false); this.setZoom(this.followZoom); this.follow(this.player, immediate); this.publishNavigation();
   }
   navigate(command: CameraCommand): boolean {
     if (!this.player || !this.mapWidth || this.failed) return false;
+    this.wheelZoomTarget = null;
     this.notice = "";
     if (command.type === "self") {
       if (!this.selfAvailable()) { this.notice = "Your avatar position is unavailable. Reconnect to return to it."; this.publishNavigation(); return false; }
@@ -149,14 +178,17 @@ export class OfficeScene extends Phaser.Scene {
     const area = this.areas.find((area) => area.id === this.areaId);
     const hint = this.notice || (this.mode === "teammate" && person ? `${avatarDisplayName(person.displayName)} · ${this.location(person.x, person.y)}. Camera only.` : area ? area.description : this.mode === "overview" ? `${this.fitMode ? "Office overview" : "Office center"}. Camera only; your avatar has not moved.` : this.selfAvailable() ? "Following your avatar." : "Your avatar position is not available yet.");
     const levels = zoomLevels(this.scale.width, this.scale.height, this.mapWidth, this.mapHeight), zoom = this.cameras.main.zoom;
-    const state: NavigationState = { mode: this.mode, areaId: this.areaId, fit: this.fitMode, zoom, canZoomIn: zoom < levels.at(-1)!, canZoomOut: zoom > levels[0]!, canReturn: this.mode !== "self" && this.selfAvailable(), findable, hint, areas: this.areas.map(({ id, name, description }) => ({ id, name, description })) };
-    const key = JSON.stringify(state);
+    const requestedZoom = this.wheelZoomTarget ?? zoom;
+    const state: NavigationState = { mode: this.mode, areaId: this.areaId, fit: this.fitMode, zoom, canZoomIn: requestedZoom < levels.at(-1)!, canZoomOut: requestedZoom > levels[0]!, canReturn: this.mode !== "self" && this.selfAvailable(), findable, hint, areas: this.areas.map(({ id, name, description }) => ({ id, name, description })) };
+    // Publish gesture boundaries and eligibility changes, not interpolation frames.
+    const key = JSON.stringify({ ...state, zoom: this.wheelZoomTarget === null ? zoom : "wheel" });
     if (key !== this.navigationKey) { this.navigationKey = key; this.callbacks.onNavigation?.(state); }
   }
   setAppearance(appearance: AvatarAppearance) { this.appearance = appearance; if (!this.multiplayer) this.avatar?.setAppearance(appearance); }
   setNetwork(network: OfficeNetwork) { this.network = network; }
   update(_time: number, delta: number) {
     if (!this.player || this.failed) return;
+    this.advanceWheelZoom(delta);
     if (this.multiplayer) {
       const current = this.network?.snapshot(), sessionId = this.network?.sessionId();
       const snapshot = !this.officeId || current?.officeId === this.officeId ? current : undefined;
