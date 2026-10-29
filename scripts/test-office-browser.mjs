@@ -105,8 +105,11 @@ test("real Chromium validates Phaser rendering, input, collisions, camera, resiz
     const press = async (code, key, milliseconds) => { await command("Input.dispatchKeyEvent", { type: "keyDown", code, key }); await delay(milliseconds); await command("Input.dispatchKeyEvent", { type: "keyUp", code, key }); await delay(80); };
     await evaluate("document.getElementById('world').focus()"); const initial = await snapshot();
     await command("Input.dispatchKeyEvent", { type: "keyDown", code: "KeyW", key: "w" });
-    await waitFor(async () => { const state = await snapshot(); return state.walking && state.y < initial.y - 10; }, "unobstructed walking animation and displacement");
-    assert.equal((await snapshot()).walking, true, "Unobstructed motion plays the walk animation");
+    let walkingFrame;
+    await waitFor(async () => { walkingFrame = await snapshot(); return walkingFrame.walking && walkingFrame.y < initial.y - 10; }, "unobstructed walking animation and displacement");
+    // Assert the moving sample, rather than a later frame that may already
+    // have reached the counter on a busy/software-rendered test machine.
+    assert.equal(walkingFrame.walking, true, "Unobstructed motion plays the walk animation");
     await command("Input.dispatchKeyEvent", { type: "keyUp", code: "KeyW", key: "w" }); await delay(80);
     assert.ok((await snapshot()).y < initial.y - 10, "WASD moves the player");
     assert.equal((await snapshot()).walking, false, "Release enters idle");
