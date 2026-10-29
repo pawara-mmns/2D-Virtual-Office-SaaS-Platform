@@ -25,7 +25,7 @@ const html = `<!doctype html><html lang="en"><meta charset="utf-8"><title>Office
 import {createOfficeGame} from '/modules/office/engine/create-game.ts';
 import {mountOffice} from '/modules/office/engine/lifecycle.ts';
 window.startOffice=()=>{window.ready=false;window.failure=false;window.slot=mountOffice(async()=>()=>{
-  window.office=createOfficeGame(document.getElementById('world'),{onReady(){window.ready=true},onError(){window.failure=true}});return window.office;
+  window.office=createOfficeGame(document.getElementById('world'),{onReady(){window.ready=true},onError(){window.failure=true},onNavigation(state){window.navigation=state;window.navigationEvents=(window.navigationEvents||0)+1}});return window.office;
 },()=>{window.failure=true})};
 window.remount=async()=>{await window.slot.dispose();window.startOffice()};
 window.startOffice();
@@ -151,6 +151,21 @@ test("real Chromium validates Phaser rendering, input, collisions, camera, resiz
     assert.ok(resized.viewLeft >= 0 && resized.viewTop >= 0 && resized.right <= 1152 && resized.bottom <= 832, `Camera stays inside map after resize: ${JSON.stringify(resized)}`);
     assert.equal(await evaluate("(()=>{const s=office.game.scene.getScene('Office'),l=s.avatar.label.getBounds(),v=s.cameras.main.worldView;return l.left>=v.left&&l.right<=v.right&&l.top>=v.top&&l.bottom<=v.bottom})()"), true, "Long names remain readable inside the resized camera");
     await evaluate("document.getElementById('world').style.width='1152px';document.getElementById('world').style.height='832px';office.zoomBy(-10)"); await delay(250);
+    const cameraPosition = await snapshot();
+    assert.equal(await evaluate("office.navigate({type:'overview'})"),true);await delay(100);
+    assert.equal(await evaluate("navigation.fit && !navigation.canZoomOut"),true,"Overview is the actual lower zoom limit");
+    assert.ok(await evaluate("(()=>{const v=office.game.scene.getScene('Office').cameras.main.worldView;return v.left<=.1&&v.top<=.1&&v.right>=1151.9&&v.bottom>=831.9})()"),"All real map boundaries fit inside the overview");
+    await evaluate("document.getElementById('world').style.width='360px';document.getElementById('world').style.height='420px'");await delay(180);
+    assert.ok(await evaluate("navigation.fit && office.game.scene.getScene('Office').cameras.main.zoom<=360/1152"),"Overview refits on resize");
+    assert.equal(await evaluate("office.navigate({type:'area',id:'MEETING ROOM'})"),true);assert.equal(await evaluate("navigation.areaId"),"MEETING ROOM");
+    assert.equal(await evaluate("office.navigate({type:'area',id:'another-company-area'})"),false);
+    assert.equal((await snapshot()).x,cameraPosition.x);assert.equal((await snapshot()).y,cameraPosition.y,"Camera commands never teleport the local body");
+    await command("Emulation.setEmulatedMedia",{features:[{name:"prefers-reduced-motion",value:"reduce"}]});await delay(80);
+    await evaluate("office.navigate({type:'self'})");assert.equal(await evaluate("office.game.scene.getScene('Office').cameras.main.lerp.x"),1,"Reduced motion removes camera glide");
+    await evaluate("office.navigate({type:'area',id:'RECEPTION'});document.getElementById('world').focus()");
+    await press("ArrowDown","ArrowDown",80);assert.equal(await evaluate("navigation.mode"),"self","Manual movement predictably returns camera ownership to self");
+    await evaluate("document.getElementById('world').style.width='1152px';document.getElementById('world').style.height='832px'");await delay(150);
+    await command("Emulation.setEmulatedMedia",{features:[]});
     const image = await command("Page.captureScreenshot", { format: "png" }); writeFileSync(resolve(cache, "office-preview-desktop.png"), Buffer.from(image.data, "base64"));
     console.log("Rendering, movement, collisions, focus, zoom and resize checks passed; measuring frame rate.");
     const performance = await evaluate(`(async()=>{const g=office.game;let frames=0;const count=()=>frames++;g.events.on('poststep',count);const start=performance.now();await new Promise(r=>setTimeout(r,1200));const seconds=(performance.now()-start)/1000;g.events.off('poststep',count);return {frames,seconds,fps:Math.round(frames/seconds*10)/10,renderer:g.renderer.type}})()`);
@@ -158,16 +173,16 @@ test("real Chromium validates Phaser rendering, input, collisions, camera, resiz
     for (let i = 0; i < 2; i++) { await evaluate("remount()"); await waitFor(() => evaluate("window.ready === true"), "remount"); assert.equal((await snapshot()).canvases, 1, "Remount never duplicates canvas"); }
     // Rendering fixture only: network authentication/transport is tested separately.
     await evaluate(`(async()=>{
-      await window.slot.dispose(); window.ready=false; window.networkClosed=0; window.networkInputs=0;
+      await window.slot.dispose(); window.ready=false; window.networkClosed=0; window.networkInputs=0;window.nonzeroInputs=0;
       const common={displayName:'Taylor',avatarKey:'fern',x:600,y:450,direction:'down',isMoving:false,connected:true};
       window.networkState={officeId:'fixture-office',mapVersion:'fixture-map',players:new Map([
         ['local',{...common,sessionId:'local',userId:'a'}],
         ['remote',{...common,x:640,sessionId:'remote',userId:'b',avatarKey:'slate',displayName:'Morgan'}]
       ])};
       const {createOfficeGame}=await import('/modules/office/engine/create-game.ts');
-      window.office=createOfficeGame(document.getElementById('world'),{onReady(){window.ready=true},onError(){window.failure=true}}, {avatarKey:'fern',displayName:'Taylor'},true);
+      window.office=createOfficeGame(document.getElementById('world'),{onReady(){window.ready=true},onError(){window.failure=true},onNavigation(state){window.navigation=state;window.navigationEvents=(window.navigationEvents||0)+1}}, {avatarKey:'fern',displayName:'Taylor'},true,'fixture-office');
       let closed=false;
-      office.setNetwork({snapshot:()=>window.networkState,sessionId:()=> 'local',input(){window.networkInputs++},appearanceChanged(){},close(){if(!closed){closed=true;window.networkClosed++}}});
+      office.setNetwork({snapshot:()=>window.networkState,sessionId:()=> 'local',input(x,y){window.networkInputs++;if(x||y)window.nonzeroInputs++},appearanceChanged(){},close(){if(!closed){closed=true;window.networkClosed++}}});
     })()`);
     await waitFor(() => evaluate("window.ready===true && office.game.scene.getScene('Office').remotes.size===1"), "network avatar rendering");
     assert.equal(await evaluate("office.game.scene.getScene('Office').player.body.enable"), false, "Multiplayer never delegates authoritative movement to local physics");
@@ -178,6 +193,23 @@ test("real Chromium validates Phaser rendering, input, collisions, camera, resiz
     assert.equal(await evaluate("window.remoteSprite.anims.currentAnim.key"), "avatar-slate-right-walk");
     await evaluate("networkState.players.get('remote').isMoving=false"); await delay(100);
     assert.equal(await evaluate("window.remoteSprite.anims.isPlaying"), false, "Remote stops walking when server reports idle");
+    await waitFor(()=>evaluate("navigation.findable.includes('remote')"),"authorized Find target");
+    const positionsBefore=await evaluate("JSON.stringify([...networkState.players].map(([id,p])=>[id,p.x,p.y]))");
+    assert.equal(await evaluate("office.navigate({type:'teammate',sessionId:'remote'})"),true);
+    assert.equal(await evaluate("office.navigate({type:'teammate',sessionId:'foreign-session'})"),false);
+    await evaluate("office.navigate({type:'teammate',sessionId:'remote'});networkState.players.get('remote').x=980;networkState.players.get('remote').y=220");
+    await waitFor(()=>evaluate("navigation.hint.includes('Meeting Room') && office.game.scene.getScene('Office').highlight.x>970"),"moving teammate highlight and textual marker hint");
+    await evaluate("networkState.players.get('remote').connected=false");await waitFor(()=>evaluate("navigation.mode==='self' && !navigation.findable.includes('remote')"),"disconnected target cleanup");
+    await evaluate("networkState.players.get('remote').connected=true");await waitFor(()=>evaluate("navigation.findable.includes('remote')"),"reconnected target eligibility");
+    assert.equal(await evaluate("navigation.mode"),"self","Reconnection never silently retargets the camera");
+    await evaluate("office.navigate({type:'teammate',sessionId:'remote'});networkState.players.get('remote').x=NaN");await waitFor(()=>evaluate("navigation.mode==='self' && !navigation.findable.includes('remote')"),"unknown position cleanup");
+    await evaluate("networkState.players.get('remote').x=680;networkState.players.get('remote').y=450");await waitFor(()=>evaluate("navigation.findable.includes('remote')"),"valid position recovery");
+    await evaluate("office.navigate({type:'teammate',sessionId:'remote'});networkState.officeId='another-company'");await waitFor(()=>evaluate("navigation.findable.length===0 && navigation.mode==='self'"),"foreign room snapshot rejection");
+    assert.equal(await evaluate("office.navigate({type:'teammate',sessionId:'remote'})"),false);
+    await evaluate("networkState.officeId='fixture-office'");await waitFor(()=>evaluate("navigation.findable.includes('remote')"),"original bound snapshot recovery");
+    await evaluate("office.navigate({type:'overview'});office.navigate({type:'area',id:'LOUNGE'});office.navigate({type:'self'})");
+    assert.equal(await evaluate("JSON.stringify([...networkState.players].map(([id,p])=>[id,p.x,p.y]))"),positionsBefore,"Camera commands never mutate authoritative coordinates");
+    assert.equal(await evaluate("window.nonzeroInputs"),0,"Camera navigation never creates nonzero movement input");
     await evaluate(`(()=>{const common=networkState.players.get('local'),presets=['fern','harbor','clay','plum','ochre','slate'];for(let i=0;i<8;i++)networkState.players.set('extra-'+i,{...common,sessionId:'extra-'+i,userId:'extra-'+i,displayName:'Colleague '+i,avatarKey:presets[i%6],x:500+i*24,y:500,isMoving:true,direction:'left'})})()`);
     await delay(100);
     assert.equal(await evaluate("office.game.scene.getScene('Office').remotes.size"), 9, "Ten players reuse ten avatar instances");

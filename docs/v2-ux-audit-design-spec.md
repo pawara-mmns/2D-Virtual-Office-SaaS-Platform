@@ -1,13 +1,15 @@
 # Virtual Office V2 — UX audit and design specification
 
 **Phase 6 · Step 0 · 27 October 2026 · Asia/Colombo**  
-**Status:** Step 0 audit baseline, with completed bounded Step 1A and Step 1B implementation records in sections 15–16. Broader V2 features remain proposals.  
-**Repository:** audit began on `feature/p6-s00-ux-audit-design-spec`; current verified branch is `feature/p6-s01b-office-layout-panels`. Branch identity was read from `.git/HEAD`; no Git operations were performed by the agent.  
+**Status:** Step 0 audit baseline, with completed bounded Step 1A, Step 1B and Step 2A implementation records in sections 15–17. Broader V2 features remain proposals.  
+**Repository:** audit began on `feature/p6-s00-ux-audit-design-spec`; current verified branch is `feature/p6-s02a-office-navigation-find`. Branch identity was read from `.git/HEAD`; no Git operations were performed by the agent.  
 **Product:** private virtual offices for software teams of 6–10 people, with multiple isolated companies.
 
 **Implementation update, 27 October 2026:** the subsequent Step 1A brief approved D01–D05 as the planning baseline for a bounded foundation pass. Sections 1–14 retain the original Step 0 observations and decisions at audit completion. Section 15 records the implementation and its actual validation; the broader V2 proposals remain future work.
 
-**Step 1B update:** section 16 records the office composition implementation on `feature/p6-s01b-office-layout-panels`. Earlier sections remain historical evidence; Step 2 features are still proposals.
+**Step 1B update:** section 16 records the office composition implementation on `feature/p6-s01b-office-layout-panels`. Earlier sections remain historical evidence.
+
+**Step 2A update:** section 17 records office overview, teammate finding and camera orientation. Pointer/destination movement remains Step 2B work; the historical roadmap is not a claim that it is implemented.
 
 ## 1. Executive Summary
 
@@ -1085,5 +1087,111 @@ The existing engine suites use software WebGL and short frame samples; their log
 - Before release, use an authorized test frontend/environment and verified isolated users to recheck workspace navigation, chat, appearance, availability and voice Join/Leave through these layouts. This requires a separately authorized deployment or an already permitted local test origin; do not start another authority sharing the hosted namespace. Real audio and Cloud original/refreshed replay/revocation remain separate security acceptance work.
 
 **Merge-ready: YES for the bounded Step 1B office composition.** All final checks above passed. This does not clear the separate hosted security/deployment gate or claim native device/AT/audio verification. No Step 2 work, production deployment or Git operations were started.
+
+## 17. Phase 6 Step 2A — Office Orientation, Find Teammate & Camera Navigation
+
+**27 October 2026 · branch `feature/p6-s02a-office-navigation-find`**, verified by reading `.git/HEAD`. This section supersedes the navigation-pending statements in earlier implementation records for Step 2A only. No Git operations, deployment, production configuration changes, migrations, dependencies, backend endpoints, shared protocol changes or new LiveKit grants were introduced. No local realtime service using the hosted LiveKit namespace was started.
+
+### Implementation and files changed
+
+The existing Phaser instance, canonical map, authoritative position snapshots and Step 1B panel ownership are reused. Camera commands change the view; they do not reposition avatars, update server positions, bypass collisions or grant meeting-zone/voice admission.
+
+| File | Step 2A responsibility |
+| --- | --- |
+| [engine/camera.ts](../apps/web/src/features/office/engine/camera.ts) | Typed camera commands/navigation state; true-fit and discrete zoom helpers; finite in-map position validation and bound-office teammate eligibility |
+| [engine/lifecycle.ts](../apps/web/src/features/office/engine/lifecycle.ts) | Forward commands through the existing serialized owner; refuse commands before readiness or after disposal |
+| [engine/create-game.ts](../apps/web/src/features/office/engine/create-game.ts) | Bind the current office ID, forward commands and manage the reduced-motion preference listener within existing teardown |
+| [scenes/office-scene.ts](../apps/web/src/features/office/scenes/office-scene.ts) | Overview/letterboxing, zoom limits, self/peer/area follow, highlight, marker hints and stale-target cleanup |
+| [components/office-canvas.tsx](../apps/web/src/features/office/components/office-canvas.tsx) | Fit/zoom/area controls, text orientation status, Return action, Find bridge and focus restoration; engine effect dependencies and media ownership retained |
+| [Participants](../apps/web/src/features/chat/participants.tsx) | Named Find buttons for other eligible participants, disabled/unavailable feedback and wrapping names |
+| [globals.css](../apps/web/src/app/globals.css) | Small wrapping camera-control and orientation groups using existing tokens; hidden controls stay absent from mobile panel surfaces |
+| [office.test.ts](../apps/web/src/features/office/office.test.ts) | Fit/zoom, eligible peer/foreign snapshot/invalid position and lifecycle command coverage |
+| [Office browser suite](../scripts/test-office-browser.mjs) | Actual Phaser map-edge fit, resize, limits, reduced motion, authoritative-body preservation, moving/unavailable targets and teardown |
+| [Communication browser suite](../scripts/test-communication-browser.mjs) | Actual React/Phaser controls at five widths, location/focus feedback, workspace replacement, movement-input checks and active simulated voice preservation; opt-in isolated preview export for screenshot review |
+| This specification and [five screenshots](assets/v2-office-navigation/) | Actual implementation/validation record and inspected connected-browser evidence; no new standalone document |
+
+### Overview, zoom and area orientation
+
+- **Fit Office** displays all four boundaries of the existing **1152×832** map. Fit is the smaller viewport/map axis ratio, rounded down to a **1/32** zoom step so rendered 32 px tiles occupy whole pixel widths without cropping. Exceptionally tiny viewports retain their positive raw fit rather than rounding to zero. Integer normal zoom levels and nearest-neighbor rendering remain; fractional stationary overview necessarily reduces fine sprite/text detail.
+- Camera bounds are padded only along axes smaller than the viewport, permitting centered letterboxing. Physics bounds and the map are unchanged. Overview refits on canvas resize. Zoom buttons use the same actual allowed levels as the engine; Zoom out disables at fit, Zoom in disables at the maximum, and Fit disables while fit mode is active. Zooming away from overview changes its text to “Office center,” avoiding a false full-map claim.
+- The native **View office area (camera only)** selector is derived from existing validated `Markers` objects: **Lounge, Development area, Meeting Room and Reception**. It follows/highlights that marker and publishes its textual description. These are canonical marker locations, not new rooms or claimed area polygons. Focusing Meeting Room does not change the avatar's server-verified zone or reveal Join Voice.
+- **Return to my avatar** restores normal self-follow and the remembered normal zoom. WASD/arrows also resume self-follow before their normal movement handling. Escape from the focused map returns to self; Tab can leave the map. Short camera follow interpolation is removed when `prefers-reduced-motion: reduce` applies, including preference changes during the session. No tween/timer or artificial movement is used.
+
+Phaser's public camera follow/zoom/bounds APIs are used. Because `startFollow` initializes scroll immediately, the transition retains the previous scroll when reduced motion is off; expanded camera bounds permit centered fit when the viewport is larger than the map. See the [Phaser camera API](https://docs.phaser.io/api-documentation/class/cameras-scene2d-camera). The actual rendered world-view boundaries are asserted after Phaser has rendered the new state.
+
+### Find teammate, security and lifecycle
+
+1. Open Participants and choose **Find** beside a connected teammate. Self has no Find button. A peer must exist with finite in-map coordinates in the current authorized snapshot, and the local participant must also be connected and positioned. Missing/invalid/unavailable targets have a disabled action and “Location unavailable” feedback.
+2. The existing controller resolves the target again at activation; it does not trust the roster alone. The snapshot's office ID must match the route-bound office. No global location service, extra admission, raw coordinate display or private account detail is added.
+3. The panel closes, focus moves to the map after mobile `inert` is removed, and the camera follows the rendered target. A static high-contrast outline identifies the target. A polite atomic text status reports, for example, **“Morgan · near Reception. Camera only.”** with the Return/movement/Escape instructions.
+4. The text uses the nearest existing marker as a coarse orientation hint, not a verified room boundary. Positions remain inside Phaser. React receives semantic mode/eligibility/name/nearest-marker/zoom changes only; ten target movement frames within one marker area produced **zero additional navigation callbacks** in the component regression.
+5. Disconnection, removal, missing/invalid positions or a foreign-office snapshot clear the selected target/highlight and return the camera to self. Reconnection enables a fresh Find action without silently retargeting. Workspace replacement clears selection and prior draft state; disposed lifecycle owners reject commands for old session IDs. Scene shutdown stops follow and clears references; the reduced-motion listener is removed at game destruction.
+
+**Freshness limitation:** the existing protocol has no per-player position timestamp. Find uses the latest snapshot that the existing transport currently exposes as connected; no new age/TTL guarantee is claimed. Transport outage, disconnected flags, missing targets and nonfinite/out-of-map positions are covered. Realtime authorization, Supabase RLS, server movement/collisions and LiveKit leases/grants/cleanup are unchanged. Camera actions produced **zero nonzero movement inputs** in the fixture; the normal engine loop may still send its existing neutral input.
+
+### Responsive and accessibility results
+
+The final isolated browser suite measured the real React/Phaser composition below. It checked all map edges against the rendered camera world view, page horizontal fit, mobile panel hiding, Find text/focus and Return. Values are laboratory observations, not authenticated hosted or physical-device results.
+
+| CSS viewport | Observed fit zoom | Result |
+| --- | --- | --- |
+| 1440×900 | 0.8125 | **PASS:** all map boundaries visible, page width 1440; compact desktop controls |
+| 1024×900 | 0.8125 | **PASS:** all boundaries visible, page width 1024; existing drawer behavior retained |
+| 820×1180 | 0.6875 | **PASS:** all boundaries visible, page width 820; controls outside the drawer remain accessible |
+| 390×844 | 0.3125 | **PASS:** all boundaries visible, page width 390; camera controls hidden while a mobile panel is active |
+| 320×740 | 0.25 | **PASS:** all boundaries visible, page width 320; wrapped location text and Return remain reachable |
+
+- Native buttons/selects retain Step 1A focus and disabled styling. Find has a person-specific accessible name; area selection and map controls explain camera-only behavior. The orientation status provides a textual equivalent for the highlight; it is not a stream of coordinates or per-frame screen-reader announcements.
+- Find/Return restore map focus; panel Close/Escape retain their existing trigger-focus behavior. On mobile, hidden/inert map controls cannot take focus. Manual movement is accepted only by the existing focused-map input owner. No Phaser keyboard capture or new focus trap was added.
+- Existing sampled **44 px** office controls, **48 px** form controls, **16 px** editable text and **4.157:1** control-border/white contrast passed. The existing 320 px chat test with 200% root-font resizing also passed; this is not native 200/400% browser-zoom certification.
+- Camera commands during an active simulated voice session at 1440 and 390 px preserved the same Room, one authorization, one capture and one connection. Panel/resize navigation did not mount a second engine. The fixture's deliberate route/remount sequence ended with **three mounts and three closes**, including the explicit workspace replacement, and **zero runtime errors**.
+
+### Connected-browser screenshots
+
+The connected Brave browser opened the **isolated local fixture at `http://127.0.0.1:3112`**. It renders the actual changed React/Phaser components and artwork, with synthetic identities, transport/history/profile and SDK/media boundaries. No credentials were entered, no voice was joined, no Cloud or database was contacted, and no hosted multi-user verification is claimed. The browser's existing 90% zoom was left unchanged; temporary viewport compensation was checked using `innerWidth` for each accepted capture. The override was reset, our tab was closed and the preview server was stopped afterward.
+
+All five saved JPEGs were displayed and visually inspected. One attempted mobile participant-panel screenshot timed out and was not saved or counted as visual evidence. The exact 1024 px boundary is verified by the automated browser suite; connected-browser rounding gave 1025 px, so it is not represented as an exact 1024 px capture.
+
+| Earlier evidence | Current connected-browser capture |
+| --- | --- |
+| Step 0 V08/V09: cropped initial view and unhelpful zoom-out | [1440 px full office overview](assets/v2-office-navigation/01-overview-desktop.jpg) |
+| Step 0 V10: roster without Find | [1440 px selected teammate, outline and location status](assets/v2-office-navigation/02-find-desktop.jpg) |
+| Step 1B: original map and tablet composition | [820 px overview with vertical letterboxing](assets/v2-office-navigation/03-overview-tablet.jpg) |
+| Step 1B: mobile panel surface | [390 px overview and Return](assets/v2-office-navigation/04-overview-mobile.jpg) |
+| Step 1B: narrow layout | [320 px focused teammate and wrapped textual controls](assets/v2-office-navigation/05-find-narrow.jpg) |
+
+The artwork is unchanged. Adjacent avatars' existing canvas name labels can overlap at close positions; Find's outline, named action and separate location text disambiguate the selected teammate. This step does not claim to solve general multiplayer label placement. Overview is for layout orientation; use Find/area/normal zoom to inspect details.
+
+![Office overview; actual components with synthetic browser data](assets/v2-office-navigation/01-overview-desktop.jpg)
+
+![Find teammate on a narrow viewport; synthetic browser data](assets/v2-office-navigation/05-find-narrow.jpg)
+
+### Automated regression validation
+
+| Command / coverage | Actual result |
+| --- | --- |
+| `pnpm.cmd lint` | **PASS**, final web/realtime checks, zero warnings |
+| `pnpm.cmd typecheck` | **PASS**, final web route generation/TypeScript and realtime TypeScript |
+| `pnpm.cmd --filter @virtual-office/web build` | **PASS**, frontend production build with the final production code |
+| `pnpm.cmd test` | **PASS, 126:** **98 application + 28 realtime**, zero skips; includes **13 office unit tests**. Isolated dependencies remain synthetic where specified |
+| From `apps/web`: `node --test tests/auth-routes.test.mjs tests/voice-routes.test.mjs` | **PASS, 13/13**, against the final production build; protected routing, proof handling, origin/admission denials and deferred bundle boundaries |
+| `node --test --test-concurrency=1 scripts/test-communication-browser.mjs scripts/test-chat-browser.mjs scripts/test-office-browser.mjs scripts/test-voice-browser.mjs` | **PASS, final combined run 4/4**, zero failures/cancellations/skips, **64.35 seconds** total |
+| Camera/engine-specific browser coverage | **PASS:** fit/resize and real zoom limits; self/area/peer selection; moving peer; disconnect/reconnect/invalid/foreign snapshots; reduced motion; unchanged body coordinates and zero nonzero movement input |
+| Composition-specific browser coverage | **PASS:** five widths; focus/hidden controls; text hints; workspace switch with selected old peer; no per-frame React navigation events; no duplicate engine; active simulated voice preserved during camera navigation |
+| Authenticated hosted users, actual audio, Cloud token replay/revocation | **NOT TESTED in Step 2A.** Prior hosted/security records and their outstanding acceptance gates remain unchanged |
+| Physical touch/mobile keyboard, screen reader, complete native high zoom | **NOT TESTED.** No claim of complete mobile movement or assistive-technology certification |
+
+Intermediate failures are not counted as passes: the first build found a TypeScript discriminated-union narrowing error (command variants separated); an early world-view assertion ran before Phaser rendered (changed to a bounded wait for the same actual map-edge condition). A browser run competing with production-route servers exceeded its 90-second suite timeout; subsequent standalone and final sequential runs passed, without raising the timeout or relaxing assertions. Final lint and typecheck were rerun after the last production changes. `pnpm.cmd` avoids the PowerShell `.ps1` shim restriction; no execution-policy setting was changed.
+
+Performance scope: the final office suite used Chrome 156 / SwiftShader software WebGL and short **1.2-second** samples. It observed **34.9 FPS** in the engine sample and **38.3 FPS** with ten rendered fixture avatars. Those are synthetic rendering observations under local machine load, not live transport, hardware-GPU or 6–10-user hosted benchmarks. No performance guarantee or Cloud/audio success is inferred.
+
+### Remaining Step 2B work and merge decision
+
+- **Step 2A complete. Merge-ready: YES for this bounded camera/orientation change**, based on the passing final checks above. This is not hosted security acceptance or deployment approval.
+- **Step 2B remains unimplemented:** pointer/touch/destination movement, any corresponding accessible movement alternative and authoritative path/collision integration. No click-to-move or teleportation was added. Mobile users still need a keyboard to move into a voice zone; camera area focus does not move them there.
+- Before release, verify Find/Return with authorized hosted peers moving/disconnecting and a workspace switch, inspect native keyboard/AT/zoom behavior and check voice continuity in that permitted environment. Do not start another realtime authority sharing the hosted LiveKit namespace. Actual bidirectional audio, tenant isolation and original/refreshed token replay/active Cloud revocation remain separate acceptance checks.
+- The only intentional transitional scaling exception is the stationary fractional overview. Labels may be too small there; readable text controls and normal zoom/Find remain available. Coarse marker hints are not fresh server location or zone-admission guarantees.
+
+No Step 2B work, production deployment, database modification or Git operation was performed.
 
 
