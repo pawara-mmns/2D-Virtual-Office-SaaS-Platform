@@ -1,3 +1,6 @@
+import { composeEnvironment } from "../../../../../../packages/shared/src/environment/compose.ts";
+import { environmentPaint } from "../../../../../../packages/shared/src/environment/visuals.ts";
+import type { EnvironmentConfig } from "../../../../../../packages/shared/src/environment/catalog.ts";
 import Phaser from "phaser";
 import { mapMarkers, TILE_SIZE, validateOfficeMap } from "../maps/map-data.ts";
 import { clampOfficeZoom, findOfficeTeammate, fitOfficeZoom, isMapPosition, nextOfficeZoom, zoomLevels, type CameraCommand, type NavigationState, type OfficeArea } from "../engine/camera.ts";
@@ -30,12 +33,13 @@ export class OfficeScene extends Phaser.Scene {
   private notice = "";
   private positionsUnavailable = false;
   private readonly movementInput = { x: 0, y: 0, facing: "down" as const };
-  constructor(private readonly pressed: ReadonlySet<string>, private readonly callbacks: OfficeCallbacks, private appearance: AvatarAppearance, private readonly multiplayer = false, private readonly officeId?: string) { super("Office"); }
+  constructor(private readonly pressed: ReadonlySet<string>, private readonly callbacks: OfficeCallbacks, private appearance: AvatarAppearance, private readonly multiplayer = false, private readonly officeId?: string, private readonly environment?: EnvironmentConfig) { super("Office"); }
   preload() {
     this.load.once(Phaser.Loader.Events.FILE_LOAD_ERROR, () => { this.failed = true; this.callbacks.onError(); });
-    this.load.image("office-tiles", "/office/office-tiles.png");
+    this.load.image("office-tiles", this.environment ? `/office/environments/${this.environment.theme}.png` : "/office/office-tiles.png");
     this.load.spritesheet("avatar", "/office/avatar.png", { frameWidth: 32, frameHeight: 32 });
-    this.load.tilemapTiledJSON("studio", "/office/studio.json");
+    if (this.environment) this.cache.tilemap.add("studio", { format: Phaser.Tilemaps.Formats.TILED_JSON, data: composeEnvironment(this.environment) });
+    else this.load.tilemapTiledJSON("studio", "/office/studio.json");
   }
   create() {
     if (this.failed) return;
@@ -44,7 +48,22 @@ export class OfficeScene extends Phaser.Scene {
       const map = this.make.tilemap({ key: "studio" });
       const tiles = map.addTilesetImage("office", "office-tiles", 32, 32, 0, 0);
       if (!tiles) throw new Error("Office tiles unavailable");
-      for (const name of ["Floor", "Architecture", "Furniture"]) if (!map.createLayer(name, tiles, 0, 0)) throw new Error("Office layer unavailable");
+      if (!map.createLayer("Floor", tiles, 0, 0)) throw new Error("Office floor unavailable");
+      if (this.environment) {
+        const paint = environmentPaint(data, this.environment), graphics = this.add.graphics();
+        for (const rect of paint.rugs) graphics.fillStyle(parseInt(rect.color, 16), rect.alpha).fillRect(rect.x, rect.y, rect.width, rect.height);
+        this.cameras.main.setBackgroundColor("#" + paint.theme.background);
+      }
+      for (const name of ["Architecture", "Furniture"]) if (!map.createLayer(name, tiles, 0, 0)) throw new Error("Office layer unavailable");
+      if (this.environment) {
+        const paint = environmentPaint(data, this.environment), graphics = this.add.graphics();
+        for (const sign of paint.signs) {
+          graphics.fillStyle(parseInt(paint.theme.background,16), 1).fillRoundedRect(sign.x, sign.y, sign.width!, sign.height!, 3);
+          graphics.fillStyle(parseInt(paint.accent,16), 1).fillRect(sign.x, sign.y, 4, sign.height!);
+          const title = this.add.text(sign.x+10, sign.y+10, sign.name, {fontFamily:"Arial, sans-serif",fontSize:"10px",color:"#ffffff"});
+          if (title.width > sign.width!-14) title.setScale((sign.width!-14)/title.width, 1);
+        }
+      }
       const collision = map.createLayer("Collision", tiles, 0, 0);
       if (!collision) throw new Error("Office collision unavailable");
       collision.setVisible(false).setCollisionByExclusion([-1]);

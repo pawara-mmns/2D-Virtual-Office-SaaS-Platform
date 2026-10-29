@@ -1,3 +1,4 @@
+import type { EnvironmentMaps } from "./environment/maps.ts";
 import { defineServer, defineRoom, matchMaker } from "colyseus";
 import { OfficeTransport } from "./transport.ts";
 import type { OfficeMap } from "../../../packages/shared/src/map.ts";
@@ -11,9 +12,9 @@ import { VoiceError, type VoiceService } from "./voice/service.ts";
 import { validVoiceRequest } from "../../../packages/shared/src/voice.ts";
 import type { ReadinessReport } from "../../../packages/shared/src/readiness.ts";
 
-export function createRealtimeServer(options: { authorize: Authorize; map: OfficeMap; origins: string[]; chat?: ChatStore; voice?: VoiceService; readiness?: () => Promise<ReadinessReport> }) {
+export function createRealtimeServer(options: { authorize: Authorize; map: OfficeMap; loadMap?: EnvironmentMaps; origins: string[]; chat?: ChatStore; voice?: VoiceService; readiness?: () => Promise<ReadinessReport> }) {
   const admission = createAdmission();
-  const OfficeRoom = officeRoomClass({ ...admission, authorize: options.authorize, map: options.map, chat: options.chat, voice: options.voice });
+  const OfficeRoom = officeRoomClass({ ...admission, authorize: options.authorize, map: options.map, chat: options.chat, voice: options.voice, loadMap: options.loadMap });
   const origins = new Set(options.origins);
   matchMaker.controller.exposedMethods = [];
   matchMaker.controller.DEFAULT_CORS_HEADERS = {
@@ -115,11 +116,12 @@ export function createRealtimeServer(options: { authorize: Authorize; map: Offic
           const body: unknown = JSON.parse(text);
           if (!body || typeof body !== "object" || Array.isArray(body) || Object.keys(body).some((key) => !["officeId", "mapVersion"].includes(key))) { res.status(400).json({ error: "Invalid office request." }); return; }
           const input = body as { officeId?: unknown; mapVersion?: unknown };
-          if (input.mapVersion !== mapVersion(options.map)) { res.status(409).json({ error: "Office map changed. Reload this page." }); return; }
           const header = req.get("authorization");
           const auth = await options.authorize(header?.startsWith("Bearer ") ? header.slice(7) : undefined, input.officeId);
           if (rejectDuringShutdown(res)) return;
-          const seat = await admission.reserve(auth);
+          const map = options.loadMap ? await options.loadMap(auth, true) : options.map;
+          if (input.mapVersion !== mapVersion(map)) { res.status(409).json({ code: "MAP_CHANGED", error: "Office setup changed. Reload this page." }); return; }
+          const seat = await admission.reserve(auth, map);
           if (rejectDuringShutdown(res)) return;
           res.json(seat);
         } catch (error) {

@@ -1,0 +1,40 @@
+﻿import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { readFileSync } from 'node:fs';
+import { setTimeout as delay } from 'node:timers/promises';
+import { matchMaker } from 'colyseus';
+import { createRealtimeServer } from '../server.ts';
+import { AccessDenied,type Authorize } from '../auth/authorize.ts';
+import { composeEnvironment } from '../../../../packages/shared/src/environment/compose.ts';
+import { defaultEnvironment } from '../../../../packages/shared/src/environment/catalog.ts';
+import { mapVersion,ENVIRONMENT_CHANGED_CODE } from '../../../../packages/shared/src/protocol.ts';
+import { mapMarkers,validateOfficeMap,type OfficeMap } from '../../../../packages/shared/src/map.ts';
+import type { OfficeState } from '../state/office-state.ts';
+const native=globalThis.WebSocket;globalThis.WebSocket=undefined as unknown as typeof WebSocket;
+const {Client}=await import('@colyseus/sdk');globalThis.WebSocket=native;
+const id=(n:number)=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
+const origin='http://localhost:3000';
+const until=async(check:()=>boolean,timeout=8000)=>{const began=Date.now();while(!check()){if(Date.now()-began>timeout)throw Error('Environment lifecycle timed out');await delay(25);}};
+test('authoritative composed environments isolate tenants, rotate changed rooms and preserve collision/voice contracts',{timeout:25000},async()=>{
+  const old=validateOfficeMap(JSON.parse(readFileSync(new URL('../../../web/public/office/studio.json',import.meta.url),'utf8')));
+  const maps=new Map<string,OfficeMap>([[id(101),composeEnvironment(defaultEnvironment)],[id(102),composeEnvironment({...defaultEnvironment,layout:'corporate-hq',theme:'dark-tech'})]]);
+  const authorize:Authorize=async(token,office)=>{const n=typeof token==='string'&&/^fixture-[123]$/.test(token)?Number(token.slice(-1)):0;if(!n||office!==id(n===3?102:101))throw new AccessDenied();return{userId:id(n),organizationId:id(n===3?202:201),officeId:String(office),token:String(token),expiresAt:Date.now()+60000,checkedAt:Date.now(),avatarKey:'fern',displayName:'Fixture '+n};};
+  let outage=false;const server=createRealtimeServer({authorize,map:old,origins:[origin],loadMap:async auth=>{if(outage)throw Error('Synthetic outage');return maps.get(auth.officeId)!;}});
+  const rooms:import('@colyseus/sdk').Room<object,OfficeState>[]=[];
+  await server.listen(0,'127.0.0.1');const address=server.transport.server!.address();assert.ok(address&&typeof address==='object');const base='http://127.0.0.1:'+address.port;
+  const reserve=(n:number,version=mapVersion(maps.get(id(n===3?102:101))!),office=id(n===3?102:101))=>fetch(base+'/office/join',{method:'POST',headers:{Origin:origin,'Content-Type':'application/json',Authorization:'Bearer fixture-'+n},body:JSON.stringify({officeId:office,mapVersion:version})});
+  const join=async(n:number)=>{const response=await reserve(n);assert.equal(response.status,200);const room=await new Client(base,{headers:{Origin:origin}}).consumeSeatReservation<OfficeState>(await response.json());room.onMessage('voice.state',()=>{});rooms.push(room);await until(()=>!!room.state?.players?.get(room.sessionId));return room;};
+  try{
+    const wrong=await reserve(1,'forged-version');assert.equal(wrong.status,409);assert.equal((await wrong.json()).code,'MAP_CHANGED');assert.equal((await reserve(1,'forged-version',id(102))).status,403,'authorization precedes map disclosure');
+    const [a,b,c]=await Promise.all([join(1),join(2),join(3)]);assert.equal(a.roomId,b.roomId);assert.notEqual(a.roomId,c.roomId);assert.equal(a.state.mapVersion,mapVersion(maps.get(id(101))!));assert.equal(c.state.mapVersion,mapVersion(maps.get(id(102))!));
+    const spawn=mapMarkers(maps.get(id(101))!).find(m=>m.type==='spawn')!;assert.ok(Math.abs(a.state.players.get(a.sessionId)!.y-spawn.y)<.001);
+    const local=matchMaker.getLocalRoomById(a.roomId)!;const player=(local.state as OfficeState).players.get(a.sessionId)!;player.x=41;player.y=27*32;let seq=1;for(let i=0;i<8;i++){a.send('input',{seq:seq++,x:-1,y:0});await delay(55);}assert.ok(player.x>=39,'server uses composed boundary collision');
+    let changedCode=0;const original=a.roomId;a.onLeave(code=>{changedCode=code;});
+    maps.set(id(101),composeEnvironment({...defaultEnvironment,layout:'training-hub',theme:'eco-green',furniture:'collaborative'}));
+    assert.equal((await reserve(2,a.state.mapVersion)).status,409,'stale clients cannot join updated geometry');
+    const next=await join(1);await until(()=>changedCode===ENVIRONMENT_CHANGED_CODE);assert.notEqual(next.roomId,original);assert.equal(matchMaker.getLocalRoomById(original),undefined);assert.equal(next.state.mapVersion,mapVersion(maps.get(id(101))!));assert.equal(c.connection.isOpen,true,'another tenant is unaffected');
+    outage=true;const stable=next.state.mapVersion;await delay(5100);assert.equal(next.connection.isOpen,true,'dependency failure cannot substitute a fallback map');assert.equal(next.state.mapVersion,stable);outage=false;
+    let appliedCode=0;next.onLeave(code=>{appliedCode=code;});maps.set(id(101),composeEnvironment({...defaultEnvironment,layout:'startup-office'}));await until(()=>appliedCode===ENVIRONMENT_CHANGED_CODE,8000);assert.equal(c.connection.isOpen,true,'owner apply polling is office scoped');
+    const again=await join(2);assert.equal(again.state.mapVersion,mapVersion(maps.get(id(101))!));console.info('Real local HTTP/WebSocket environment rotation, collision and tenant isolation passed; synthetic identities only.');
+  }finally{for(const room of rooms){room.reconnection.enabled=false;if(room.connection.isOpen)await room.leave();room.removeAllListeners();}await server.gracefullyShutdown(false);}
+});
