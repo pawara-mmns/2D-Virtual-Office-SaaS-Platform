@@ -2,21 +2,23 @@
 
 import type { ReactNode } from "react";
 import Link from "next/link";
+import { HudGlass } from "./hud-glass";
 import type { Presence } from "../../../../../../packages/shared/src/protocol.ts";
 
 export type OfficeContext = { workspaceName: string; officeName: string; workspaceHref: string };
 
 // Presentation only. The office owns selection, subscriptions, renderer and
 // media; responsive CSS never moves or replaces a mounted feature component.
-export function OfficeHud({ context, presence, retry, settings, controls, camera, panels, voice, notices }: {
+export function OfficeHud({ context, presence, reducedEffects, retry, settings, controls, camera, panels, voice, notices }: {
   context: OfficeContext; presence: Presence; retry(): void;
   settings: ReactNode; controls: ReactNode; camera: ReactNode;
   panels: ReactNode; voice: ReactNode; notices: ReactNode;
+  reducedEffects?: boolean;
 }) {
   const connection = presence.status === "online" ? `Connected · ${presence.count} online`
     : presence.status === "connecting" ? "Connecting" : presence.status === "reconnecting" ? "Reconnecting"
     : presence.status === "denied" ? "Access denied" : "Disconnected";
-  return <div className="office-hud">
+  return <HudGlass reducedEffects={reducedEffects}>
     <header className="office-page-header">
       <div className="office-identity">
         <div className="office-context"><p>{context.workspaceName}</p><h1>{context.officeName}</h1></div>
@@ -41,5 +43,5 @@ export function OfficeHud({ context, presence, retry, settings, controls, camera
       {notices}
       <div className="office-voice-dock">{voice}</div>
     </div>
-  </div>;
+  </HudGlass>;
 }
