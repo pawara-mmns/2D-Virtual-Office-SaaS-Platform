@@ -1,3 +1,6 @@
+import { ENVIRONMENT_CHANGED_CODE } from "../../../../packages/shared/src/protocol.ts";
+import { mapVersion } from "../../../../packages/shared/src/protocol.ts";
+import type { OfficeMap } from "../../../../packages/shared/src/map.ts";
 import { matchMaker } from "colyseus";
 import type { Authorization } from "../auth/authorize.ts";
 import type { OfficeState } from "../state/office-state.ts";
@@ -12,16 +15,21 @@ export function createAdmission() {
     claimed(officeId: string, userId: string, sessionId: string) { return claims.get(key(officeId, userId))?.sessionId === sessionId; },
     release(officeId: string, userId: string, sessionId: string) { if (claims.get(key(officeId, userId))?.sessionId === sessionId) claims.delete(key(officeId, userId)); },
     disposed(officeId: string, roomId: string) { if (rooms.get(officeId) === roomId) rooms.delete(officeId); },
-    reserve(auth: Authorization) {
+    reserve(auth: Authorization, map?: OfficeMap) {
       const officeId = auth.officeId;
       const previous = queues.get(officeId) ?? Promise.resolve();
       const operation = previous.catch(() => {}).then(async () => {
-        const claimKey = key(officeId, auth.userId), current = claims.get(claimKey);
+        const claimKey = key(officeId, auth.userId);
+        let current = claims.get(claimKey);
         const roomId = rooms.get(officeId);
-        const local = roomId ? matchMaker.getLocalRoomById(roomId) : undefined;
+        let local = roomId ? matchMaker.getLocalRoomById(roomId) : undefined;
+        if (local && map && (local.state as OfficeState).mapVersion !== mapVersion(map)) {
+          await local.disconnect(ENVIRONMENT_CHANGED_CODE); local = undefined; current = undefined;
+          for (const id of claims.keys()) if (id.startsWith(officeId+"/")) claims.delete(id);
+        }
         const active = local && [...(local.state as OfficeState).players.values()].some((p) => p.userId === auth.userId);
         if (active || current && current.until > Date.now()) throw new Error("This account is already entering or connected. Close the other tab, or wait ten seconds and retry.");
-        const listing = local ? await matchMaker.getRoomById(roomId!) : await matchMaker.createRoom("office", { officeId });
+        const listing = local ? await matchMaker.getRoomById(roomId!) : await matchMaker.createRoom("office", { officeId, map });
         rooms.set(officeId, listing.roomId);
         claims.set(claimKey, { until: Date.now() + 10_000 });
         try {

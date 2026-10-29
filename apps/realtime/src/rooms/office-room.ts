@@ -1,3 +1,5 @@
+import { ENVIRONMENT_CHANGED_CODE } from "../../../../packages/shared/src/protocol.ts";
+import type { EnvironmentMaps } from "../environment/maps.ts";
 import { Room, ServerError, ClientState, type Client } from "colyseus";
 import { OfficeState, PlayerState } from "../state/office-state.ts";
 import { canStand, simulate } from "../movement/simulation.ts";
@@ -15,6 +17,7 @@ export type RoomServices = {
   authorize: Authorize; map: OfficeMap;
   chat?: ChatStore;
   voice?: VoiceService;
+  loadMap?: EnvironmentMaps;
   claimed(officeId: string, userId: string, sessionId: string): boolean;
   release(officeId: string, userId: string, sessionId: string): void;
   disposed(officeId: string, roomId: string): void;
@@ -27,6 +30,8 @@ export function officeRoomClass(services: RoomServices) {
     // Local diagnostics, deliberately outside synchronized Schema state.
     simulationTicks = 0;
     simulationWorkMs = 0;
+    private officeMap = services.map;
+    private checkingEnvironment = false;
     private controls = new Map<string, Control>();
     private revoked = new Set<string>();
     private chatPending = new Set<string>();
@@ -35,11 +40,13 @@ export function officeRoomClass(services: RoomServices) {
     // All default matchmaking paths fail closed. Only our authorized endpoint
     // can reserve seats with trusted authData. Never inherit bundle JWT defaults.
     static async onAuth(): Promise<never> { throw new ServerError(403, "Use authorized office admission."); }
-    onCreate(options: { officeId: string }) {
+    onCreate(options: { officeId: string; map?: OfficeMap }) {
+      this.officeMap = options.map ?? services.map;
       this.state.officeId = options.officeId;
-      this.state.mapVersion = mapVersion(services.map);
+      this.state.mapVersion = mapVersion(this.officeMap);
       this.seatReservationTimeout = 10;
       this.patchRate = TICK_MS;
+      if (services.loadMap) this.clock.setInterval(() => void this.checkEnvironment(), 5000);
       this.setFixedTimestep(() => this.tick(), 1000 / TICK_MS);
       this.onMessage("input", (client, value: unknown) => {
         const control = this.controls.get(client.sessionId), now = Date.now();
@@ -60,6 +67,17 @@ export function officeRoomClass(services: RoomServices) {
       this.onMessage("availability.set", (client, value: unknown) => { void this.setAvailability(client, value); });
       this.onMessage("voice.leave", (client) => { void services.voice?.revoke(client.sessionId); });
       this.onMessage("*", (client) => this.deny(client));
+    }
+    private async checkEnvironment() {
+      const auth = this.clients.find(client => this.state.players.get(client.sessionId)?.connected)?.auth;
+      if (!services.loadMap || !auth || this.checkingEnvironment) return;
+      this.checkingEnvironment = true;
+      try {
+        const fresh = await services.authorize(auth.token, this.state.officeId);
+        const current = await services.loadMap(fresh);
+        if (this.clients.length && mapVersion(current) !== this.state.mapVersion) await this.disconnect(ENVIRONMENT_CHANGED_CODE);
+      } catch { /* Never substitute geometry on an outage; normal auth leases still apply. */ }
+      finally { this.checkingEnvironment = false; }
     }
     private async actionIdentity(client: OfficeClient) {
       const auth = client.auth;
@@ -105,11 +123,11 @@ export function officeRoomClass(services: RoomServices) {
         const fresh = await services.authorize(auth.token, this.state.officeId);
         if (client.state === ClientState.LEAVING || client.state === ClientState.CLOSED || fresh.userId !== auth.userId || fresh.organizationId !== auth.organizationId || this.state.players.size >= 10 || [...this.state.players.values()].some((p) => p.userId === fresh.userId)) throw new Error();
         client.auth = fresh;
-        const spawn = mapMarkers(services.map).find((m) => m.type === "spawn")!;
+        const spawn = mapMarkers(this.officeMap).find((m) => m.type === "spawn")!;
         let spawnX = spawn.x;
         for (let i = 0; i < 20; i++) {
           const x = spawn.x + (i % 2 ? 1 : -1) * Math.ceil(i / 2) * 24;
-          if (canStand(services.map, x, spawn.y) && [...this.state.players.values()].every((p) => Math.hypot(p.x - x, p.y - spawn.y) >= 20)) { spawnX = x; break; }
+          if (canStand(this.officeMap, x, spawn.y) && [...this.state.players.values()].every((p) => Math.hypot(p.x - x, p.y - spawn.y) >= 20)) { spawnX = x; break; }
         }
         const player = new PlayerState();
         Object.assign(player, { sessionId: client.sessionId, userId: fresh.userId, avatarKey: fresh.avatarKey, displayName: fresh.displayName, x: spawnX, y: spawn.y });
@@ -151,8 +169,8 @@ export function officeRoomClass(services: RoomServices) {
         if (!control || !player) continue;
         if (!client.auth || now >= client.auth.expiresAt || now - client.auth.checkedAt >= AUTH_LEASE_MS) { this.deny(client); continue; }
         if (now >= control.nextCheck && !control.refreshing) void this.revalidate(client);
-        simulate(services.map, player, now - control.lastInput < 250 && player.connected ? control.input : { x: 0, y: 0 });
-        if (player.connected && services.voice) services.voice.observe(client.sessionId,client.auth,meetingZone(services.map,player.x,player.y),(value) => client.send("voice.state",value));
+        simulate(this.officeMap, player, now - control.lastInput < 250 && player.connected ? control.input : { x: 0, y: 0 });
+        if (player.connected && services.voice) services.voice.observe(client.sessionId,client.auth,meetingZone(this.officeMap,player.x,player.y),(value) => client.send("voice.state",value));
       }
       this.simulationWorkMs += performance.now() - began;
     }
