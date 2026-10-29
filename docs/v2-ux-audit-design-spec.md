@@ -1,8 +1,8 @@
 # Virtual Office V2 — UX audit and design specification
 
 **Phase 6 · Step 0 · 27 October 2026 · Asia/Colombo**  
-**Status:** Step 0 audit baseline, with completed bounded Step 1A, Step 1B, Step 2A and Step 2C implementation records in sections 15-18. Broader V2 features remain proposals.
-**Repository:** audit began on `feature/p6-s00-ux-audit-design-spec`; current verified branch is `feature/p6-s02c-ingame-hud`. Branch identity was read from `.git/HEAD`; no Git operations were performed by the agent.
+**Status:** Step 0 audit baseline, with completed bounded Step 1A, Step 1B, Step 2A and Step 2C implementation records in sections 15-18, and the scoped Liquid Glass / wheel zoom update in section 19. Broader V2 features remain proposals.
+**Repository:** audit began on `feature/p6-s00-ux-audit-design-spec`; current verified branch is `feature/p6-hud-liquid-glass-wheel-zoom`. Branch identity was read from `.git/HEAD`; no Git operations were performed by the agent.
 **Product:** private virtual offices for software teams of 6–10 people, with multiple isolated companies.
 
 **Implementation update, 27 October 2026:** the subsequent Step 1A brief approved D01–D05 as the planning baseline for a bounded foundation pass. Sections 1–14 retain the original Step 0 observations and decisions at audit completion. Section 15 records the implementation and its actual validation; the broader V2 proposals remain future work.
@@ -12,6 +12,8 @@
 **Step 2A update:** section 17 records office overview, teammate finding and camera orientation. Pointer/destination movement remains Step 2B work; the historical roadmap is not a claim that it is implemented.
 
 **Step 2C update, 29 October 2026:** section 18 records the immersive React HUD, retained feature lifecycles, browser evidence and remaining Step 2D work. Historical layout proposals and earlier validation results remain dated evidence.
+
+**Liquid Glass / wheel zoom update, 29 October 2026:** section 19 records the requested change to the in-game HUD material only, renderer-aware fallbacks, pointer reflections and bounded wheel zoom. The earlier restrained-glass guidance remains historical; other application surfaces retain it.
 
 ## 1. Executive Summary
 
@@ -1292,5 +1294,152 @@ These eight PNGs were captured by the isolated local Chromium composition fixtur
 - Hosted two-user audio, genuine network interruption, Cloud revocation/token replay, physical mobile hardware and native assistive-technology checks remain separate acceptance work. The existing keyboard-required movement and camera-only area navigation are preserved; this step does not add pointer/path movement.
 
 Work stops after Step 2C. No migrations, backend protocol/grant changes, screen sharing, new dependencies, deployment or production configuration updates were made.
+
+## 19. Scoped Liquid Glass HUD and mouse-wheel camera zoom
+
+**29 October 2026 · Asia/Colombo · Branch: `feature/p6-hud-liquid-glass-wheel-zoom` · Merge-ready: YES for this scoped implementation.** The user's new brief intentionally replaces the earlier restrained-glass direction for the **in-game HUD only**. Public pages, authentication and workspace administration retain their previous design. The starting worktree was clean; the existing branch was read, not created or switched. No commit, push, merge or deployment was performed.
+
+### Material, interaction and fallback decisions
+
+The existing HUD slots and feature components are retained. `HudGlass` supplies decorative material preferences around those slots, without moving the Phaser host or creating another feature tree. All selectors for the new material are scoped to `.office-hud`; the root layout imports the material stylesheet directly alongside the global foundation stylesheet.
+
+- The enhanced surface uses **86% cream**, **8 px backdrop blur**, **1.1 saturation**, a thin reflected edge, restrained layered shadows and a 10 px surface radius. Forest accents remain. Light and dark scenery can show through the material. The header, standalone HUD actions, panels, map controls, voice surface and supported top-level notices share the material tokens/rules.
+- Nested buttons receive a legible coat without another backdrop filter. Text inputs remain opaque, the chat composer has a strongly backed reading surface, and status/error colors keep their meaning. Disabled controls retain native disabling and add a dashed boundary rather than fading all their text. Normal text opacity is never reduced. The voice dock now fits its content instead of blurring a largely empty full-width band.
+- Pointer reflection is a decorative radial highlight. One delegated DOM owner chooses one eligible surface. Pointer position goes to CSS variables through **one pending requestAnimationFrame**, with finite easing until the target settles. It creates **zero pointer-driven React commits**. Geometry is cached at entry and refreshed on resize; it is not read for every move/frame. The reflection clears to neutral on leave/cancel, scroll, resize or window blur. Hover changes surface depth subtly; pressed buttons move by 1 px. No listener prevents pointer movement or captures pointer input intended for the game.
+- Opaque styling is the baseline when backdrop filtering is unsupported. Reduced transparency, forced colors, coarse/touch pointers, slow-update media, and conservative low-resource hints (at most four logical processors or at most 4 GB reported device memory) select solid surfaces. Reduced motion disables moving reflections/pressed transitions and makes wheel zoom immediate. Unsupported media queries cannot expose unavailable OS preferences; the manual fallback remains available.
+- Settings adds **Always use solid HUD surfaces**, stored as a nonsensitive device preference. A blocked/private local store still permits an in-session selection. This does not persist a tenant's chat, profile, voice state or credentials.
+- Measured software-rendering cost justified an additional automatic fallback. Phaser's existing renderer is inspected once at boot: Canvas rendering and recognized software paths (including SwiftShader, llvmpipe/softpipe and Microsoft Basic Render Driver) request reduced HUD effects. Only a boolean crosses the local engine callback; driver descriptions are not logged or stored. Unavailable/private renderer information retains the normal capability/device policy and manual control. No second graphics context or renderer is created.
+
+`backdrop-filter` applies to HUD surfaces, not the Phaser world. The canvas retains `image-rendering: pixelated`, nearest-neighbor rendering, disabled antialiasing and the original art. Glass enhancement does not change map geometry, avatar positions, collision authority, tenant membership or voice admission.
+
+### Wheel zoom and camera ownership
+
+There is one non-passive DOM wheel listener on the existing office host, and no additional Phaser wheel listener. HUD panels are siblings of that host. Events over chat, textareas, drawers, selects or other HUD controls cannot bubble into the map listener. Hidden/inert surfaces and already-cancelled events are ignored. Ctrl, Cmd, Alt and Shift gestures, horizontal-dominant gestures, and invalid/zero deltas pass through without preventing default behavior. Wheel zoom does not take keyboard focus.
+
+Pixel-mode trackpad precision is retained. Line-mode deltas use 16 CSS pixels per line; page-mode deltas use the active host height. A single event is capped at ±160 normalized pixels, with exponential gain of `exp(-pixels × 0.0018)`. Repeated input accumulates only within the existing fit/max bounds; reversing direction starts from the displayed zoom rather than an old pending target. Zoom cannot become zero or negative.
+
+The scene uses its existing update loop for short exponential interpolation, with no independent animation timer. It reuses the original fit minimum and maximum, camera bounds and follow modes. Zoom is **camera-centered**: pointer anchoring was deliberately avoided because it would compete with avatar/teammate/area follow. Wheel input does not change those modes or move an avatar. Return and Find remain the existing camera commands.
+
+Wheel zoom may settle at a fractional scale; it keeps nearest-neighbor sampling rather than blurring the world. Zoom buttons still choose the **next original discrete level in their direction**, including from a fractional wheel value. Fit Office cancels pending wheel interpolation and computes the original exact overview. Resize also cancels pending interpolation and clamps the displayed zoom. Button eligibility follows the requested bound while interpolating, then the settled value. Navigation snapshots report semantic changes and gesture boundaries rather than streaming all interpolation frames into React.
+
+### Modified and added files
+
+| File | Purpose |
+| --- | --- |
+| [hud-glass.css](../apps/web/src/features/office/components/hud-glass.css) — new | Office-scoped material, reflection, control/notice treatment and CSS fallbacks |
+| [hud-glass.tsx](../apps/web/src/features/office/components/hud-glass.tsx) — new | Media/capability subscription, device preference/control and reflection lifecycle; `useSyncExternalStore` provides stable external preference snapshots |
+| [hud-reflections.ts](../apps/web/src/features/office/components/hud-reflections.ts) — new | Delegated pointer lighting, cached geometry, bounded frames and cleanup |
+| [wheel-zoom.ts](../apps/web/src/features/office/input/wheel-zoom.ts) — new | Delta normalization, modifier/target guards and owned wheel listener |
+| [renderer-effects.ts](../apps/web/src/features/office/engine/renderer-effects.ts) — new | Narrow known-software renderer classification |
+| [wheel-zoom.test.ts](../apps/web/src/features/office/input/wheel-zoom.test.ts) — new | Five focused normalization, bounds, discrete-level interoperability and renderer-policy tests |
+| [globals.css](../apps/web/src/app/globals.css) | Retains the Tailwind/foundation stylesheet; the cross-directory material CSS import was removed in the development-build fix below |
+| [layout.tsx](../apps/web/src/app/layout.tsx) | Imports the material stylesheet directly through Next alongside `globals.css`; no game/media JavaScript import is added |
+| [office-hud.tsx](../apps/web/src/features/office/components/office-hud.tsx) | Wraps existing slots in `HudGlass` and receives the local reduced-effects signal |
+| [office-canvas.tsx](../apps/web/src/features/office/components/office-canvas.tsx) | Adds the appearance preference/help and receives the renderer boolean; retains all feature owners |
+| [camera.ts](../apps/web/src/features/office/engine/camera.ts) | Continuous clamping and next-discrete-level helpers using the existing limits |
+| [create-game.ts](../apps/web/src/features/office/engine/create-game.ts) | One wheel listener and cleanup; one existing-renderer capability read at boot |
+| [office-scene.ts](../apps/web/src/features/office/scenes/office-scene.ts) | Wheel target/interpolation, cancellation, bounds and bounded navigation publication; optional local renderer callback type |
+| [test-communication-browser.mjs](../scripts/test-communication-browser.mjs) | Actual component/engine wheel, reflection, fallback, contrast, performance and lifecycle regressions |
+| This specification and `docs/assets/v2-liquid-glass/` | Validation record and 13 reviewed before/after/fallback PNGs |
+
+No voice implementation, server authorization, LiveKit grants, shared network protocol, database, dependency manifest or production configuration was modified. `ChatPanel`, Participants, AvatarSettings, OfficeDisclosure, VoiceBar and VoiceSession remain the existing components.
+
+### Browser and accessibility results
+
+The final four-suite browser run passed **4/4**, with no skips/cancellations, in **82.85 seconds**. The expanded HUD suite took **42.08 seconds**, retaining its original 90-second timeout. It uses actual React/Phaser/artwork, real DOM wheel/pointer/keyboard events and SDK-simulated voice with synthetic profile/history/transport/media boundaries. No hosted account, Cloud admission or real microphone audio was tested.
+
+**Important fixture distinction:** the headless browser deliberately uses SwiftShader. The isolated bundler fixture explicitly suppresses the renderer's reduced-effects boolean for glass screenshots and enhancement/performance tests, then applies the **actual detected boolean** and verifies the production automatic solid fallback. This override exists only in the test harness; there is no application debug route, production override or security bypass. Touch/reduced-preference and unsupported-capability cases are explicit emulations.
+
+| Required regression | Actual result |
+| --- | --- |
+| Wheel up/down and mice/trackpads | PASS: native wheel direction; fractional pixel, line and page normalization covered by focused tests |
+| Min/max and repeated input | PASS: 50-event bursts at either end clamp to the original bounds; zoom remains positive |
+| Fit/buttons after wheel | PASS: Fit restores exact overview and all map edges; buttons select the next discrete value and reflect disabled bounds |
+| Chat/textarea/menu and drawer scrolling | PASS: native list/drawer scroll position changes while camera zoom remains unchanged; select events retain default behavior |
+| Modified gestures | PASS: Ctrl/Cmd/Alt/Shift events do not become map zoom; horizontal and malformed deltas pass through |
+| Area, Find and Return | PASS: wheel retains selected area/teammate focus; Return works; camera-only actions generate zero nonzero movement inputs |
+| Smoothness/publication | PASS: eight distinct monotonic positive zoom samples in a 650 ms forced-glass sample, one navigation callback within that sample; normal interpolation then settles. This is not a 60 FPS claim |
+| Listener ownership | PASS: one wheel owner and one eligible reflection owner after Strict Mode; media/fallback switching detaches lighting; remount replaces the wheel owner; all tracked listeners detach on exit |
+| Glass/opacity fallback | PASS: actual software renderer detected; applying its policy makes surfaces opaque without remounting game/voice; unsupported-backdrop simulation, low-resource hints, coarse pointer and manual solid control also pass |
+| Reduced motion/transparency | PASS: dynamic media changes stop reflection listeners; reduced-motion wheel has no pending animation and zero transition duration; reduced transparency removes backdrop filtering |
+| Pointer React/layout work | PASS: 30 pointer moves cause zero React commits and no more than three geometry reads, rather than one read per move/frame; leaving clears reflection state |
+| Feature/lifecycle preservation | PASS: same renderer/transport and active SDK Room; one authorization, capture, publication and application disconnect listener through panel, material, viewport and camera changes |
+| Chat and workspace boundaries | PASS: draft/history/reading anchor preserved across panel/material changes; intentional workspace replacement clears old draft/selection |
+| Accessibility/focus | PASS: native labels, Tab/Escape/Close focus restoration, hidden/inert focus exclusion, disabled controls, 44 px sampled targets, 48 px inputs and 16 px editable text retained |
+
+The enhanced material's conservative black-backdrop composite calculation produced **9.93:1** ink contrast and **5.50:1** supporting-text contrast; a white backdrop is lighter. The reflection only adds light. The sampled opaque input border/background contrast was **5.16:1**. These are bounded material/control checks, not certification of every possible state. The actual canvas computed filter was `none` and image rendering was `pixelated`.
+
+| CSS viewport | Result |
+| --- | --- |
+| 1440 × 900 | PASS: compact controls, right overlay, content-sized voice dock, legible light/dark backdrop examples |
+| 1024 × 900 | PASS: full-width stable renderer, no page overflow, visible zoom and composer |
+| 820 × 1180 | PASS: tablet overlay; no compressed canvas or clipped panel controls |
+| 390 × 844 | PASS: focused mobile panel, accessible composer above voice, coarse-pointer solid fallback |
+| 320 × 740 | PASS: narrow controls/composer/voice reflow and focus restoration; chat also passes 200% root text size |
+
+No horizontal page overflow was observed at these widths. The connected-voice composer ended at least 7 px above the voice surface. Physical mobile input/rotation/safe areas, native full browser zoom, screen readers and hardware-accelerated Safari/Firefox/Chromium remain untested. Viewport emulation and root-font resizing do not substitute for those checks.
+
+### Performance measurements and limits
+
+The final HUD comparison used Chrome 156 on an Intel i7-1165G7 machine with **SwiftShader software WebGL**, a 1440 × 900 viewport, chat open and an active simulated voice session. Each sample was about **1.2 seconds**, in glass/manual-solid/automatic-solid order; these short sequential samples are not a controlled sustained benchmark or causal improvement guarantee.
+
+| Final measured mode | Frames | Observed FPS | Sample p95 frame interval |
+| --- | --- | --- | --- |
+| Glass deliberately forced on SwiftShader | 15 | 12.5 | 102.8 ms |
+| Manual solid surfaces | 39 | 32.5 | 50.0 ms |
+| Actual automatic software-renderer fallback | 39 | 32.5 | 44.7 ms |
+
+The glass cost is real in this software environment. It is why production automatically chooses solid surfaces for recognized software renderers rather than using the forced-glass fixture mode. An earlier 12 px/full-width voice experiment observed 10 FPS versus 25 FPS solid; the shipped material uses 8 px blur and a content-sized dock. No hardware-GPU improvement or uniform frame-rate promise is inferred from either experiment. Unknown slow graphics paths can still need the manual solid preference. The separate engine-only suite observed 38.2 FPS, and 38.1 FPS with ten synthetic avatars; it did not include the enhanced HUD or live accounts.
+
+### Commands and final results
+
+| Check | Result |
+| --- | --- |
+| `.\.cache\corepack\pnpm.cmd -r lint` | PASS: web and realtime, zero warnings |
+| `.\.cache\corepack\pnpm.cmd -r typecheck` | PASS: both TypeScript projects and Next route generation |
+| From `apps/web`: `node node_modules/next/dist/bin/next build` | PASS: frontend production build |
+| From `apps/web`: `node --experimental-strip-types --test "src/**/*.test.ts"` | PASS: **103 application tests**, including five new focused tests, zero skips |
+| From `apps/realtime`: `node --import tsx --test "src/**/*.test.ts"` | PASS: **28 realtime tests**, zero skips |
+| From `apps/web`: `node --test tests/auth-routes.test.mjs tests/voice-routes.test.mjs` | PASS: **13 production-route checks** |
+| `node --test --test-concurrency=1 scripts/test-chat-browser.mjs scripts/test-communication-browser.mjs scripts/test-office-browser.mjs scripts/test-voice-browser.mjs` | PASS: **4/4 browser suites**, no failures/skips/cancellations; final combined run 82.85 s |
+| `git diff --check` | PASS |
+
+The baseline HUD was also captured and passed before implementation. Initial lint rejected synchronous preference-state initialization inside an effect; the shipped code uses a lazy local preference and `useSyncExternalStore` for external media/capability snapshots, and final lint passes. Browser fixtures ran outside the sandbox using their local synthetic boundaries. No hosted audio, security/revocation timing or multi-user hardware performance validation is claimed.
+
+### Reviewed before/after screenshots
+
+All **13 PNGs** below were displayed and visually inspected. Baseline images were captured in this task before source changes; after images use the final material/engine code. They show the same synthetic fixture and original office art. Enhanced screenshots deliberately force the glass branch on SwiftShader as described above; mobile coarse-pointer and automatic software fallback images show solid surfaces.
+
+| Capture | File |
+| --- | --- |
+| Before: desktop, 1440 × 900 | [before desktop](assets/v2-liquid-glass/before-desktop.png) |
+| After: desktop glass, 1440 × 900 | [after desktop](assets/v2-liquid-glass/after-desktop.png) |
+| Before: desktop chat | [before chat](assets/v2-liquid-glass/before-chat-desktop.png) |
+| After: chat material over light/dark scenery | [after chat](assets/v2-liquid-glass/after-chat-desktop.png) |
+| After: 1024 px boundary | [1024](assets/v2-liquid-glass/after-1024.png) |
+| After: 820 px tablet | [tablet](assets/v2-liquid-glass/after-tablet.png) |
+| Before: 390 px chat and simulated voice | [before mobile](assets/v2-liquid-glass/before-chat-voice-mobile.png) |
+| After: 390 px coarse-pointer styling | [mobile](assets/v2-liquid-glass/after-mobile.png) |
+| After: 320 px narrow panel/voice | [narrow](assets/v2-liquid-glass/after-narrow.png) |
+| After: pointer-reflection state | [reflection](assets/v2-liquid-glass/reflection-desktop.png) |
+| Actual software-renderer policy applied | [automatic fallback](assets/v2-liquid-glass/automatic-software-fallback.png) |
+| Reduced-transparency emulation | [reduced transparency](assets/v2-liquid-glass/reduced-transparency.png) |
+| Mobile avatar editor / visible Close focus | [avatar](assets/v2-liquid-glass/avatar-mobile.png) |
+
+![Final glass chat surface; enhancement forced in the synthetic software-renderer fixture](assets/v2-liquid-glass/after-chat-desktop.png)
+
+![Automatic solid fallback using the actual detected software-renderer policy](assets/v2-liquid-glass/automatic-software-fallback.png)
+
+### Merge readiness and stop boundary
+
+**Merge-ready: YES for this scoped HUD/wheel implementation**, with the software-renderer fallback, passing final checks and recorded test limitations. This is not deployment approval or hosted audio/security acceptance. Hardware-GPU and physical-device accessibility/performance checks remain release validation work. Fullscreen remains the separate Step 2D task. Proximity voice remains unimplemented and requires its own security/realtime architecture work.
+
+No database migration, new backend API, Colyseus protocol change, LiveKit permission change, production configuration update, dependency addition, deployment, branch operation, commit, push or merge was performed. Work stops after this scoped implementation.
+
+### Development CSS import correction — 29 October 2026
+
+The running Turbopack development server returned HTTP 500 with Tailwind's `Can't resolve '../features/office/components/hud-glass.css'` error even though that stylesheet existed at the resolved path. The earlier production build checks had not exposed this development-server failure. The cross-directory CSS `@import` was removed from `globals.css`; `layout.tsx` now imports `hud-glass.css` directly alongside `globals.css`, letting Next load the separate stylesheet without that Tailwind import-resolution step. The material rules and feature behavior were not changed.
+
+The existing development server recovered **without a restart**: `/login` and its compiled CSS returned HTTP 200, with both foundation and glass material rules present and no CSS resolution error. This remained true after the new production build. The production build, targeted layout lint and **13/13 production-route checks** passed. The complete HUD browser regression also passed again in **42.55 seconds**, with all five widths, wheel/reflection/fallback/focus/scroll checks, stable renderer/voice ownership and zero runtime errors. `git diff --check` passed. The earlier screenshot/performance tables retain their recorded implementation-run evidence; this follow-up validates the corrected development and production import path.
 
 
