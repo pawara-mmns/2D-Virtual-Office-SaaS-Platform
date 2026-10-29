@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { OfficeDisclosure } from "@/components/office-disclosure";
 import { OfficeHud, type OfficeContext } from "./office-hud";
 import { HudGlassControl } from "./hud-glass";
+import { GlassSurface } from "./glass-surface";
+import { HudIcon } from "@/components/hud-icon";
 import { mountOffice } from "../engine/lifecycle";
 import { AvatarSettings } from "@/features/avatars/avatar-settings";
 import type { AvatarAppearance, AvatarKey } from "@/features/avatars/presets";
@@ -138,23 +140,23 @@ export default function OfficeCanvas({ appearance, profileWarning, officeId, use
     </div>
     <OfficeHud context={context} presence={presence} reducedEffects={reducedEffects}
       retry={() => { setNavigation(null); setStatus("loading"); setPresence({ status: "connecting", count: 0, notice: "Connecting to your office..." }); setAttempt((value) => value + 1); }}
-      settings={<OfficeDisclosure label="Settings" panel={{ open: panel === "settings", onOpenChange: settingsPanel, container: panelHost }}>
+      settings={<OfficeDisclosure label="Settings" icon={<HudIcon name="settings" />} material="elevated" panel={{ open: panel === "settings", onOpenChange: settingsPanel, container: panelHost }}>
         <div className="space-y-4"><div><label htmlFor="office-availability" className="mb-2 block text-sm font-medium">Your availability</label>
           <select id="office-availability" className="office-control" value={own?.availability ?? "AVAILABLE"} disabled={presence.status !== "online" || !own?.connected} onChange={(event) => { setAvailabilityError(""); const value = event.target.value; if (isAvailability(value) && !network.current?.setAvailability?.(value)) setAvailabilityError("Reconnect before changing availability."); }}><option value="AVAILABLE">Available</option><option value="BUSY">Busy</option><option value="DO_NOT_DISTURB">Do not disturb</option></select>
         </div><HudGlassControl /><p id="office-instructions" className="text-sm leading-6 text-muted">Keyboard required: click or Tab into the office, then use WASD or arrows. Tab to leave. Map navigation changes your view, not your position. Scroll over the map to zoom; Ctrl/Cmd+scroll keeps browser zoom.</p>
         <p className="text-sm leading-6 text-muted">Voice is available in the Meeting Room. Join Voice requests microphone access only when you choose it.</p></div>
       </OfficeDisclosure>}
       controls={<>
-        <Participants participants={participants} panel={{ open: panel === "participants", onOpenChange: participantsPanel, container: panelHost }} findable={findable} onFind={(sessionId) => navigateCamera({ type: "teammate", sessionId }, true)} />
-        <button ref={chatToggle} className="office-control" aria-expanded={chatOpen} aria-controls="office-chat" onClick={() => setPanel((value) => value === "chat" ? null : "chat")}>Office Chat</button>
-        <AvatarSettings currentKey={avatarKey} displayName={displayName} panel={{ open: panel === "avatar", onOpenChange: avatarPanel, container: panelHost }} onSaved={(key, name) => { setSavedKey(key); if (name) setSavedName(name); network.current?.appearanceChanged(); }} />
+        <Participants participants={participants} icon={<HudIcon name="people" />} panel={{ open: panel === "participants", onOpenChange: participantsPanel, container: panelHost }} findable={findable} onFind={(sessionId) => navigateCamera({ type: "teammate", sessionId }, true)} />
+        <button ref={chatToggle} className="office-control" aria-expanded={chatOpen} aria-controls="office-chat" onClick={() => setPanel((value) => value === "chat" ? null : "chat")}><HudIcon name="chat" /><span className="hud-control-label">Office Chat</span></button>
+        <AvatarSettings currentKey={avatarKey} displayName={displayName} icon={<HudIcon name="avatar" />} panel={{ open: panel === "avatar", onOpenChange: avatarPanel, container: panelHost }} onSaved={(key, name) => { setSavedKey(key); if (name) setSavedName(name); network.current?.appearanceChanged(); }} />
       </>}
-      camera={<div className="office-map-hud" hidden={compact && panel !== null}>
+      camera={<GlassSurface className="office-map-hud" variant="clear" hidden={compact && panel !== null}>
         <div ref={zoomControls} role="group" aria-label="Office camera" hidden={compact && panel !== null} className="office-camera-controls">
           <div className="office-zoom">
-            <button className="office-control" disabled={status !== "ready" || !navigation?.canZoomOut} onClick={() => controls.current?.zoomBy(-1)} aria-label="Zoom out">−</button>
-            <button className="office-control" disabled={status !== "ready" || !navigation || navigation.fit} onClick={() => navigateCamera({ type: "overview" }, true)}>Fit Office</button>
-            <button className="office-control" disabled={status !== "ready" || !navigation?.canZoomIn} onClick={() => controls.current?.zoomBy(1)} aria-label="Zoom in">+</button>
+            <button className="office-control" disabled={status !== "ready" || !navigation?.canZoomOut} onClick={() => controls.current?.zoomBy(-1)} aria-label="Zoom out"><HudIcon name="minus" /><span className="sr-only">−</span></button>
+            <button className="office-control" disabled={status !== "ready" || !navigation || navigation.fit} onClick={() => navigateCamera({ type: "overview" }, true)}><HudIcon name="fit" /><span>Fit Office</span></button>
+            <button className="office-control" disabled={status !== "ready" || !navigation?.canZoomIn} onClick={() => controls.current?.zoomBy(1)} aria-label="Zoom in"><HudIcon name="plus" /><span className="sr-only">+</span></button>
           </div>
           <label htmlFor="office-area" className="sr-only">View office area (camera only)</label>
           <select id="office-area" className="office-control" aria-describedby="office-camera-hint" disabled={status !== "ready" || !navigation?.areas.length} value={navigation?.areaId ?? ""} onChange={(event) => { if (event.target.value) navigateCamera({ type: "area", id: event.target.value }); }}>
@@ -162,15 +164,15 @@ export default function OfficeCanvas({ appearance, profileWarning, officeId, use
           </select>
         </div>
         {navigation && <div className="office-status office-orientation"><p id="office-camera-hint" role="status" aria-live="polite" aria-atomic="true">{navigation.hint}{navigation.canReturn && " Move or press Escape to follow yourself."}</p>{navigation.mode !== "self" && <button className="office-control" disabled={!navigation.canReturn} onClick={() => navigateCamera({ type: "self" }, true)}>Return to my avatar</button>}</div>}
-      </div>}
+      </GlassSurface>}
       panels={<>
         <ChatPanel key={officeId} officeId={officeId} open={chatOpen} onClose={closeChat} events={chatEvents} userId={userId ?? own?.userId} names={names} send={sendChat} />
         <div ref={setPanelHost} className="office-panels" />
       </>}
       voice={voice?.zone ? <VoiceBar key={voice.sessionId} officeId={officeId} state={voice} leave={leaveVoice} /> : <section aria-label="Office voice" className="office-voice office-voice-idle"><p role="status">{presence.status === "denied" ? "Voice authorization ended. Return to the workspace and check your access." : presence.status !== "online" ? "Voice disconnected. Reconnect to the office to use voice." : "Voice unavailable here. Enter the Meeting Room to join."}</p></section>}
       notices={<>
-        {availabilityError && <p role="alert" className="ui-notice ui-notice-error">{availabilityError}</p>}
-        {profileWarning && <p role="alert" className="ui-notice ui-notice-warning">{profileWarning}</p>}
+        {availabilityError && <p role="alert" className="ui-notice ui-notice-error" data-glass-surface="" data-glass-variant="elevated">{availabilityError}</p>}
+        {profileWarning && <p role="alert" className="ui-notice ui-notice-warning" data-glass-surface="" data-glass-variant="elevated">{profileWarning}</p>}
       </>}
     />
   </section>;

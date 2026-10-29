@@ -12,6 +12,7 @@ const root = resolve(import.meta.dirname, ".."), web = resolve(root, "apps/web")
 const requireRealtime = createRequire(resolve(root, "apps/realtime/package.json"));
 const { build } = createRequire(requireRealtime.resolve("tsx"))("esbuild");
 const browser = process.env.OFFICE_TEST_BROWSER || ["C:/Program Files/Google/Chrome/Application/chrome.exe", "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"].find(existsSync);
+const nativeRendering=process.env.OFFICE_TEST_RENDERER==="native";
 async function until(check) { for (let i=0;i<120;i++) { if (await check()) return; await delay(80); } throw new Error("Communication fixture timed out"); }
 async function devtools(endpoint) {
   const socket = new WebSocket(endpoint); await new Promise(done => socket.addEventListener("open",done,{once:true}));
@@ -64,15 +65,16 @@ test("office communication composition: responsive panels, focus, drafts, engine
   }
   const server=createServer((req,res)=>{const path=new URL(req.url,"http://localhost").pathname;if(path==="/fixture.js"){res.setHeader("Content-Type","text/javascript");res.end(built.outputFiles[0].contents);}else if(path.startsWith("/office/")&&["studio.json","avatar.png","office-tiles.png"].includes(path.slice(8))){res.setHeader("Content-Type",path.endsWith("png")?"image/png":"application/json");res.end(readFileSync(resolve(web,"public",path.slice(1))));}else{res.setHeader("Content-Type","text/html");res.end(fixtureHtml);}});
   await new Promise(done=>server.listen(0,"127.0.0.1",done));const cache=resolve(root,".cache");mkdirSync(cache,{recursive:true});const profile=mkdtempSync(resolve(cache,"communication-browser-"));
-  const child=spawn(browser,["--headless=new","--remote-debugging-port=0",`--user-data-dir=${profile}`,"--no-first-run","--no-default-browser-check","--enable-unsafe-swiftshader","--use-angle=swiftshader","--window-size=1440,900","about:blank"],{stdio:"ignore",windowsHide:true});let tools;
+  const child=spawn(browser,["--headless=new","--remote-debugging-port=0",`--user-data-dir=${profile}`,"--no-first-run","--no-default-browser-check",...(nativeRendering?[]:["--enable-unsafe-swiftshader","--use-angle=swiftshader"]),"--window-size=1440,900","about:blank"],{stdio:"ignore",windowsHide:true});let tools;
   try{
-    await until(()=>existsSync(resolve(profile,"DevToolsActivePort")));const port=readFileSync(resolve(profile,"DevToolsActivePort"),"utf8").split("\n")[0];const tabs=await(await fetch(`http://127.0.0.1:${port}/json`)).json();tools=await devtools(tabs.find(t=>t.type==="page").webSocketDebuggerUrl);
-    const {command,evaluate}=tools;await command("Runtime.enable");await command("Page.enable");await command("Page.navigate",{url:`http://127.0.0.1:${server.address().port}`});await until(()=>evaluate("window.communicationFixture?.mounts===1 && !!document.querySelector('canvas')"));
+    let port;await until(()=>{try{port=readFileSync(resolve(profile,"DevToolsActivePort"),"utf8").split("\n")[0];return /^\d+$/.test(port)}catch{return false}});const tabs=await(await fetch(`http://127.0.0.1:${port}/json`)).json();tools=await devtools(tabs.find(t=>t.type==="page").webSocketDebuggerUrl);
+    const {command,evaluate}=tools;const media=(features=[])=>command("Emulation.setEmulatedMedia",{features:[...(features.some(f=>f.name==="prefers-color-scheme")?[]:[{name:"prefers-color-scheme",value:"light"}]),...features]});await command("Runtime.enable");await command("Page.enable");await command("Page.navigate",{url:`http://127.0.0.1:${server.address().port}`});await until(()=>evaluate("window.communicationFixture?.mounts===1 && !!document.querySelector('canvas')"));
     const button=text=>evaluate(`(()=>{const node=[...document.querySelectorAll('button,summary')].find(n=>n.textContent===${JSON.stringify(text)}&&n.getClientRects().length&&!n.closest('[hidden],[inert]'));if(!node)throw new Error('Visible control missing');node.focus();node.click()})()`);
     const layout=()=>evaluate("({width:innerWidth,height:innerHeight,scrollWidth:document.documentElement.scrollWidth,scrollHeight:document.documentElement.scrollHeight,canvasHeight:document.querySelector('.office-stage').getBoundingClientRect().height,canvasWidth:document.querySelector('.office-stage').getBoundingClientRect().width})");
-    const snapshot=async name=>writeFileSync(resolve(cache,name),Buffer.from((await command("Page.captureScreenshot",{format:"png"})).data,"base64"));
-    await command("Emulation.setDeviceMetricsOverride",{width:1440,height:900,deviceScaleFactor:1,mobile:false});await delay(120);
+    const snapshot=async name=>writeFileSync(resolve(cache,nativeRendering?"native-"+name:name),Buffer.from((await command("Page.captureScreenshot",{format:"png"})).data,"base64"));
+    await media();await command("Emulation.setDeviceMetricsOverride",{width:1440,height:900,deviceScaleFactor:1,mobile:false});await delay(120);
     assert.equal(await evaluate("document.querySelectorAll('.office-disclosure[data-open=true]').length"),0);
+    const renderer=await evaluate(`(()=>{const r=communicationFixture.engine.game.renderer,gl=r.gl,e=gl?.getExtension('WEBGL_debug_renderer_info');return{requestedNative:${nativeRendering},type:r.type,description:e?gl.getParameter(e.UNMASKED_RENDERER_WEBGL):'unavailable',reducedEffects:communicationFixture.detectedReducedEffects}})()`);
     const desktop=await layout();assert.ok(desktop.canvasHeight>desktop.height*.65);assert.ok(desktop.scrollHeight<=desktop.height);assert.ok(desktop.scrollWidth<=desktop.width);await snapshot("communication-office-desktop.png");
     assert.equal(desktop.canvasHeight,900,"Renderer owns the full viewport height");
     assert.equal(await evaluate("document.querySelector('.office-work-area').contains(document.querySelector('.office-hud'))"),false,"HUD and renderer have independent DOM ownership");
@@ -95,9 +97,14 @@ test("office communication composition: responsive panels, focus, drafts, engine
     })()`);
     assert.notEqual(glass.backdrop,"none");assert.ok(glass.alpha<1 && glass.minimumInkContrast>=4.5 && glass.minimumMutedContrast>=4.5);
     assert.equal(glass.worldFilter,"none");assert.equal(glass.pixelArt,"pixelated");
+    const materials=await evaluate(`(()=>{const style=s=>getComputedStyle(document.querySelector(s)),alpha=s=>Number(style(s).backgroundColor.match(/[\\d.]+/g)[3]??1);return{clear:alpha('.office-toolbar'),regular:alpha('.office-identity'),elevated:alpha('.office-disclosure-panel[data-glass-variant="elevated"]'),dockSurfaces:document.querySelectorAll('.office-toolbar [data-glass-surface]').length,leafFilters:[...document.querySelectorAll('.office-toolbar button,.office-hud-actions .office-control')].map(n=>getComputedStyle(n).backdropFilter)}})()`);
+    assert.ok(materials.clear<materials.regular && materials.regular<materials.elevated && materials.elevated<1,"Three distinct translucent material strengths");
+    assert.equal(materials.dockSurfaces,0,"Navigation shares a single optical boundary");
+    assert.ok(materials.leafFilters.every(value=>value==="none"),"Leaf controls never stack backdrop filters");
+    await evaluate("(()=>{const p=document.getElementById('office-chat');communicationFixture.panelTransitions={entry:0,exit:0};p.addEventListener('transitionrun',e=>{if(e.propertyName==='opacity')communicationFixture.panelTransitions[p.hidden?'exit':'entry']++})})()");
     const pointerCommits=await evaluate("communicationFixture.commits");
     await evaluate("(()=>{const n=document.querySelector('.office-identity'),read=n.getBoundingClientRect.bind(n);communicationFixture.geometryReads=0;n.getBoundingClientRect=()=>{communicationFixture.geometryReads++;return read()};const r=read();for(let i=0;i<30;i++)n.dispatchEvent(new PointerEvent('pointermove',{bubbles:true,pointerType:'mouse',clientX:r.left+r.width*.8,clientY:r.top+r.height*.7}))})()");
-    await delay(180);
+    await until(()=>evaluate("parseFloat(document.querySelector('.office-identity').style.getPropertyValue('--glass-x'))>70"));
     assert.equal(await evaluate("communicationFixture.commits"),pointerCommits,"Pointer reflections never publish React state");
     assert.ok(await evaluate("communicationFixture.geometryReads<=3"),"Pointer lighting does not read geometry for every move/frame");
     assert.ok(await evaluate("parseFloat(document.querySelector('.office-identity').style.getPropertyValue('--glass-x'))>70"));
@@ -121,7 +128,7 @@ test("office communication composition: responsive panels, focus, drafts, engine
     await button("Return to my avatar");
     assert.equal(await evaluate("JSON.stringify([...communicationFixture.snapshot.players].map(([id,p])=>[id,p.x,p.y]))"),positions,"Wheel never moves avatars");
     for(const preference of ["prefers-reduced-motion","prefers-reduced-transparency"]){
-      await command("Emulation.setEmulatedMedia",{features:[{name:preference,value:"reduce"}]});
+      await media([{name:preference,value:"reduce"}]);
       await until(()=>evaluate("communicationFixture.listenerCount('pointermove')===0"));
       if(preference==="prefers-reduced-motion"){
         const reduced=await evaluate(`(()=>{const h=document.querySelector('.office-stage');h.dispatchEvent(new WheelEvent('wheel',{deltaY:20,bubbles:true,cancelable:true}));return{pending:${scene}.wheelZoomTarget,transition:getComputedStyle(document.querySelector('.office-control')).transitionDuration}})()`);
@@ -129,10 +136,10 @@ test("office communication composition: responsive panels, focus, drafts, engine
       }else assert.equal(await evaluate("getComputedStyle(document.querySelector('.office-identity')).backdropFilter"),"none");
     }
     await snapshot("glass-reduced-transparency.png");
-    await command("Emulation.setEmulatedMedia",{features:[]});
+    await media();
     await command("Emulation.setTouchEmulationEnabled",{enabled:true,maxTouchPoints:1});
-    await until(()=>evaluate("document.querySelector('.office-hud').dataset.glass==='solid'"));
-    assert.equal(await evaluate("getComputedStyle(document.querySelector('.office-identity')).backdropFilter"),"none");
+    await until(()=>evaluate("document.querySelector('.office-hud').dataset.glass==='enhanced' && communicationFixture.listenerCount('pointermove')===0"));
+    assert.notEqual(await evaluate("getComputedStyle(document.querySelector('.office-identity')).backdropFilter"),"none","Touch retains static glass without pointer tracking");
     await command("Emulation.setTouchEmulationEnabled",{enabled:false});
     await until(()=>evaluate("document.querySelector('.office-hud').dataset.glass==='enhanced' && communicationFixture.listenerCount('pointermove')===1"));
     const tap=async text=>{
@@ -193,8 +200,17 @@ test("office communication composition: responsive panels, focus, drafts, engine
     await evaluate("communicationFixture.snapshot.players.get('other').x=NaN");await until(()=>evaluate("communicationFixture.navigation.mode==='self' && !communicationFixture.navigation.findable.includes('other')"));
     await evaluate("communicationFixture.snapshot.players.get('other').x=590");await until(()=>evaluate("communicationFixture.navigation.findable.includes('other')"));
     await button("Office Chat");await until(()=>evaluate("document.querySelectorAll('#office-chat li').length===2"));assert.equal(await evaluate("document.querySelector('#office-chat .chat-own').textContent.includes('Alex Lee (you)')"),true);assert.equal(await evaluate("document.querySelector('#office-chat ol').textContent.includes('Morgan')"),true,"Roster profiles replace legacy generic snapshots without queries");
-    await evaluate("document.getElementById('office-chat-draft').focus()");await command("Input.insertText",{text:"Unsent draft"});const history=await evaluate("communicationFixture.history");await command("Input.dispatchKeyEvent",{type:"keyDown",key:"Escape",code:"Escape"});await button("Office Chat");assert.equal(await evaluate("document.getElementById('office-chat-draft').value"),"Unsent draft");assert.equal(await evaluate("communicationFixture.history"),history,"Toggling must not reload history");
+    await evaluate("document.getElementById('office-chat-draft').focus()");await command("Input.insertText",{text:"Unsent draft"});const history=await evaluate("communicationFixture.history");await command("Input.dispatchKeyEvent",{type:"keyDown",key:"Escape",code:"Escape"});assert.equal(await evaluate("document.getElementById('office-chat').inert"),true,"Closing window becomes inert immediately");await until(()=>evaluate("getComputedStyle(document.getElementById('office-chat')).display==='none'"));await button("Office Chat");assert.equal(await evaluate("document.getElementById('office-chat-draft').value"),"Unsent draft");assert.equal(await evaluate("communicationFixture.history"),history,"Toggling must not reload history");
+    await until(()=>evaluate("communicationFixture.panelTransitions.entry>0 && communicationFixture.panelTransitions.exit>0"));
     await snapshot("communication-chat-desktop.png");
+    await until(()=>evaluate("(()=>{const a=document.querySelector('.office-dock-selection').getBoundingClientRect(),b=[...document.querySelectorAll('.office-panel-controls button')].find(n=>n.textContent==='Office Chat').getBoundingClientRect();return Math.abs(a.top-b.top)<1&&Math.abs(a.left-b.left)<1})()"));
+    await media([{name:"prefers-color-scheme",value:"dark"}]);await delay(100);await snapshot("apple-chat-dark.png");
+    const darkContrast=await evaluate(`(()=>{const s=getComputedStyle(document.querySelector('.office-identity')),c=v=>v.match(/[\\d.]+/g).map(Number),lum=a=>a.slice(0,3).map(n=>{n/=255;return n<=.04045?n/12.92:((n+.055)/1.055)**2.4}).reduce((sum,n,i)=>sum+n*[.2126,.7152,.0722][i],0),bg=c(s.backgroundColor),back=bg.slice(0,3).map(v=>(v*bg[3]+255*(1-bg[3]))*.85+255*.15),ratio=a=>(Math.max(lum(a),lum(back))+.05)/(Math.min(lum(a),lum(back))+.05);return{ink:ratio(c(s.color)),muted:ratio(c(getComputedStyle(document.querySelector('.office-context > p')).color))}})()`);
+    assert.ok(darkContrast.ink>=4.5 && darkContrast.muted>=4.5,"Dark material stays readable over a white backdrop plus a conservative reflection allowance");
+    await button("Avatar settings");await until(()=>evaluate("getComputedStyle(document.querySelector('.office-disclosure-panel:not([hidden])')).opacity==='1'"));await snapshot("apple-avatar-dark.png");
+    assert.ok(await evaluate("parseFloat(getComputedStyle(document.querySelector('label:has(input[name=avatarKey]:checked)')).backgroundColor.match(/[\\d.]+/g)[3]??1)<1"),"Dark avatar options use the material palette");
+    await button("Office Chat");await media();await until(()=>evaluate("getComputedStyle(document.getElementById('office-chat')).opacity==='1'"));
+    assert.equal(await evaluate("document.getElementById('office-chat-draft').value"),"Unsent draft","Theme and panel changes preserve the composer");
     assert.equal(await evaluate("document.querySelector('.office-stage').getBoundingClientRect().width"),1440,"HUD panels retain the full renderer width");
     await evaluate("(()=>{const f=communicationFixture;for(let n=3;n<45;n++)f.options.onChat({type:'message',message:{id:String(n),channelId:f.id(3),senderId:f.id(2),senderName:'Morgan',body:'Synthetic history row '+n+' — '+('context '.repeat(12)),clientMessageId:f.id(n+100),createdAt:'2026-10-22T08:30:00Z'}})})()");
     await until(()=>evaluate("document.querySelectorAll('#office-chat li').length===44"));
@@ -202,7 +218,7 @@ test("office communication composition: responsive panels, focus, drafts, engine
     const readingTop=await evaluate("document.querySelector('[aria-label=\"Chat messages\"]').scrollTop");
     const chatZoom=await zoom();await wheelAt('[aria-label="Chat messages"]',180);await delay(100);
     assert.equal(await zoom(),chatZoom,"Native chat scrolling never reaches the map wheel owner");
-    assert.ok(await evaluate("document.querySelector('[aria-label=\"Chat messages\"]').scrollTop")>readingTop,"Chat still scrolls normally");
+    await until(()=>evaluate(`document.querySelector('[aria-label="Chat messages"]').scrollTop>${readingTop}`));
     await wheelAt("#office-chat-draft",50);assert.equal(await zoom(),chatZoom,"Textarea wheel does not zoom");
     const menuWheel=await evaluate("(()=>{const e=new WheelEvent('wheel',{deltaY:-100,bubbles:true,cancelable:true});document.getElementById('office-area').dispatchEvent(e);return e.defaultPrevented})()");
     assert.equal(menuWheel,false,"Select wheel retains native behavior");
@@ -224,7 +240,7 @@ test("office communication composition: responsive panels, focus, drafts, engine
     await command("Emulation.setDeviceMetricsOverride",{width:390,height:844,deviceScaleFactor:1,mobile:true});
     await until(()=>evaluate("document.activeElement.getAttribute('aria-label')==='Close Participants (2)'"));
     await command("Input.dispatchKeyEvent",{type:"keyDown",key:"Escape",code:"Escape"});assert.equal(await evaluate("document.activeElement.textContent"),"Participants (2)");await button("Office Chat");
-    await command("Emulation.setDeviceMetricsOverride",{width:390,height:844,deviceScaleFactor:1,mobile:true});await delay(120);const mobile=await layout();assert.ok(mobile.scrollWidth<=390);assert.ok(mobile.scrollHeight<=844);assert.equal(await evaluate("getComputedStyle(document.querySelector('.office-world')).visibility"),"hidden");assert.equal(await evaluate("document.querySelector('.office-world').inert && document.querySelector('.office-camera-controls').hidden"),true);assert.ok(await evaluate("document.getElementById('office-chat-draft').getBoundingClientRect().bottom<=innerHeight"));await snapshot("communication-chat-mobile.png");
+    await command("Emulation.setDeviceMetricsOverride",{width:390,height:844,deviceScaleFactor:1,mobile:true});await delay(120);const mobile=await layout();assert.ok(mobile.scrollWidth<=390);assert.ok(mobile.scrollHeight<=844);assert.equal(await evaluate("getComputedStyle(document.querySelector('.office-world')).visibility"),"visible");assert.equal(await evaluate("document.querySelector('.office-world').inert && document.querySelector('.office-camera-controls').hidden"),true);assert.ok(await evaluate("document.getElementById('office-chat-draft').getBoundingClientRect().bottom<=innerHeight"));await snapshot("communication-chat-mobile.png");
     await evaluate("document.querySelector('.office-stage').focus();document.querySelector('[aria-label=\"Zoom out\"]').focus()");assert.equal(await evaluate("document.activeElement.closest('.office-world,.office-zoom')!==null"),false,"Hidden map/zoom controls cannot take focus");
     await button("Close chat");assert.equal(await evaluate("document.activeElement.textContent"),"Office Chat");await button("Avatar settings");await snapshot("communication-settings-mobile.png");assert.ok(await evaluate("(()=>{const r=document.querySelector('.office-disclosure-panel:not([hidden])').getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&r.bottom<=innerHeight})()"));const drawerZoom=await zoom();await wheelAt(".office-disclosure-panel:not([hidden]) .office-panel-body",180);await delay(80);
     assert.equal(await zoom(),drawerZoom,"Drawer scrolling does not zoom the hidden map");
@@ -250,22 +266,29 @@ test("office communication composition: responsive panels, focus, drafts, engine
     await command("Emulation.setDeviceMetricsOverride",{width:1440,height:900,deviceScaleFactor:1,mobile:false});await delay(100);
     await button("Office Chat");
     const measure=label=>evaluate(`(async()=>{const g=communicationFixture.engine.game,times=[];let previous=performance.now();const count=()=>{const now=performance.now();times.push(now-previous);previous=now};g.events.on('poststep',count);const start=performance.now();await new Promise(r=>setTimeout(r,1200));g.events.off('poststep',count);const seconds=(performance.now()-start)/1000;return{label:${JSON.stringify(label)},frames:times.length,seconds,fps:Math.round(times.length/seconds*10)/10,p95FrameMs:times.toSorted((a,b)=>a-b)[Math.floor(times.length*.95)]}})()`);
-    const glassPerformance=await measure("forced glass on SwiftShader + chat + simulated voice");assert.ok(glassPerformance.frames>0);
-    const toggleSolid=async()=>{await button("Settings");await evaluate("document.querySelector('.hud-glass-preference input').click()");await button("Office Chat");};
+    const glassPerformance=await measure(nativeRendering?"glass with browser-selected renderer + chat + simulated voice":"forced glass on SwiftShader + chat + simulated voice");assert.ok(glassPerformance.frames>0);
+    const toggleSolid=async()=>{await button("Settings");await evaluate("(()=>{const s=document.getElementById('office-hud-material');s.value=s.value==='solid'?'auto':'solid';s.dispatchEvent(new Event('change',{bubbles:true}))})()");await button("Office Chat");};
     await toggleSolid();await until(()=>evaluate("document.querySelector('.office-hud').dataset.glass==='solid'"));
     assert.equal(await evaluate("getComputedStyle(document.querySelector('.office-chat')).backdropFilter"),"none");
     assert.equal(await evaluate("communicationFixture.listenerCount('pointermove')"),0);
     await snapshot("glass-solid-desktop.png");const solidPerformance=await measure("solid HUD + chat + simulated voice");
     await toggleSolid();await until(()=>evaluate("document.querySelector('.office-hud').dataset.glass==='enhanced'"));
-    assert.equal(await evaluate("communicationFixture.detectedReducedEffects"),true,"Actual SwiftShader renderer requests reduced effects");
-    await evaluate("communicationFixture.applyRendererPolicy(communicationFixture.detectedReducedEffects)");
+    if(!nativeRendering)assert.equal(await evaluate("communicationFixture.detectedReducedEffects"),true,"Actual SwiftShader renderer requests reduced effects");
+    await evaluate(`communicationFixture.applyRendererPolicy(${nativeRendering?"true":"communicationFixture.detectedReducedEffects"})`);
     await until(()=>evaluate("document.querySelector('.office-hud').dataset.glass==='solid' && communicationFixture.listenerCount('pointermove')===0"));
     await snapshot("glass-auto-software-desktop.png");
     const automaticFallbackPerformance=await measure("automatic software-renderer fallback + chat + simulated voice");
     assert.equal(await evaluate("communicationFixture.mounts===1 && communicationFixture.room===communicationFixture.initialRoom && communicationFixture.voiceConnects===1 && communicationFixture.captures===1 && communicationFixture.publications===1"),true,"Renderer policy changes retain game, transport and active voice");
+    await button("Settings");await evaluate("(()=>{const s=document.getElementById('office-hud-material');s.value='glass';s.dispatchEvent(new Event('change',{bubbles:true}))})()");
+    await until(()=>evaluate("document.querySelector('.office-hud').dataset.glass==='enhanced'"));await snapshot("apple-appearance-settings.png");
+    await button("Office Chat");assert.equal(await evaluate("communicationFixture.room===communicationFixture.initialRoom && communicationFixture.mounts===1"),true,"Explicit Liquid Glass preference changes presentation only");
+    await media([{name:"prefers-reduced-transparency",value:"reduce"}]);await until(()=>evaluate("document.querySelector('.office-hud').dataset.glass==='solid'"));
+    await media();await until(()=>evaluate("document.querySelector('.office-hud').dataset.glass==='enhanced'"));
+    await button("Settings");await evaluate("(()=>{const s=document.getElementById('office-hud-material');s.value='auto';s.dispatchEvent(new Event('change',{bubbles:true}))})()");await button("Office Chat");
+    await until(()=>evaluate("document.querySelector('.office-hud').dataset.glass==='solid'"));
     await evaluate("communicationFixture.applyRendererPolicy(false)");await until(()=>evaluate("document.querySelector('.office-hud').dataset.glass==='enhanced'"));
     await evaluate(`${scene}.navigate({type:'overview'});${scene}.zoomBy(1)`);await delay(80);
-    const cameraSmoothness=await evaluate(`(async()=>{const s=${scene},g=communicationFixture.engine.game,samples=[],before={x:s.cameras.main.midPoint.x,y:s.cameras.main.midPoint.y};const sample=()=>samples.push(s.cameras.main.zoom);g.events.on('poststep',sample);const events=communicationFixture.navigationEvents;document.querySelector('.office-stage').dispatchEvent(new WheelEvent('wheel',{deltaY:-100,bubbles:true,cancelable:true}));await new Promise(r=>setTimeout(r,650));g.events.off('poststep',sample);return{samples,before,after:{x:s.cameras.main.midPoint.x,y:s.cameras.main.midPoint.y},navigationEvents:communicationFixture.navigationEvents-events}})()`);
+    const cameraSmoothness=await evaluate(`(async()=>{const s=${scene},g=communicationFixture.engine.game,samples=[],before={x:s.cameras.main.midPoint.x,y:s.cameras.main.midPoint.y};const sample=()=>samples.push(s.cameras.main.zoom);g.events.on('poststep',sample);const events=communicationFixture.navigationEvents;document.querySelector('.office-stage').dispatchEvent(new WheelEvent('wheel',{deltaY:-100,bubbles:true,cancelable:true}));const began=performance.now();for(let i=0;i<60&&s.wheelZoomTarget!==null;i++)await new Promise(r=>setTimeout(r,50));g.events.off('poststep',sample);return{samples,durationMs:performance.now()-began,before,after:{x:s.cameras.main.midPoint.x,y:s.cameras.main.midPoint.y},navigationEvents:communicationFixture.navigationEvents-events}})()`);
     assert.ok(new Set(cameraSmoothness.samples).size>3,"Normal wheel zoom interpolates over multiple frames");
     assert.ok(cameraSmoothness.samples.every((v,i,a)=>Number.isFinite(v)&&v>0&&(i===0||v>=a[i-1])),"Camera interpolation is finite and monotonic");
     assert.ok(cameraSmoothness.navigationEvents<=3,"Wheel interpolation never streams every zoom frame into React");
@@ -351,7 +374,7 @@ test("office communication composition: responsive panels, focus, drafts, engine
     await evaluate("communicationFixture.unmount()");await until(()=>evaluate("document.querySelectorAll('canvas').length===0 && communicationFixture.authUnsubscribed"));assert.equal(await evaluate("communicationFixture.closes"),3);assert.deepEqual(tools.errors,[]);
     assert.equal(await evaluate("['wheel','pointermove','pointerout','pointercancel','scroll'].every(type=>communicationFixture.listenerCount(type)===0)"),true,"HUD and wheel listeners all detach on exit");
     await evaluate("communicationFixture.audio?.close()");
-    console.info(JSON.stringify({scope:"Actual office composition and SDK-simulated voice; glass forced on SwiftShader for enhancement coverage, production software fallback also verified; no hosted service or audio verification",desktop,boundary,tablet,mobile,foundation,glass,glassPerformance,solidPerformance,automaticFallbackPerformance,softwareRendererDetected:true,cameraSmoothness:{samples:cameraSmoothness.samples.length,distinctZooms:new Set(cameraSmoothness.samples).size,navigationEvents:cameraSmoothness.navigationEvents},wheelAndFallbackChecks:true,pointerReactCommits:0,textResize320:true,readingPositionPreserved:true,voiceLayouts,cameraLayouts,cameraOnlyMovement:true,workspaceReplacement:true,oneMediaSession:true,equivalentVoiceSnapshotCommits:voiceCommits,settingsPersistence:true,engineMounts:3,engineCloses:3,runtimeErrors:tools.errors.length}));
+    console.info(JSON.stringify({scope:"Actual office composition and SDK-simulated voice; glass forced on SwiftShader for enhancement coverage, production software fallback also verified; no hosted service or audio verification",renderer,desktop,boundary,tablet,mobile,foundation,glass,materials,darkContrast,glassPerformance,solidPerformance,automaticFallbackPerformance,softwareRendererDetected:renderer.reducedEffects,panelTransitions:true,cameraSmoothness:{durationMs:cameraSmoothness.durationMs,samples:cameraSmoothness.samples.length,distinctZooms:new Set(cameraSmoothness.samples).size,navigationEvents:cameraSmoothness.navigationEvents},wheelAndFallbackChecks:true,pointerReactCommits:0,textResize320:true,readingPositionPreserved:true,voiceLayouts,cameraLayouts,cameraOnlyMovement:true,workspaceReplacement:true,oneMediaSession:true,equivalentVoiceSnapshotCommits:voiceCommits,settingsPersistence:true,engineMounts:3,engineCloses:3,runtimeErrors:tools.errors.length}));
   }catch(error){
     if(tools)try{console.info(JSON.stringify({fixtureFailure:true,runtimeErrors:tools.errors,state:await tools.evaluate("({mounts:window.communicationFixture?.mounts,captures:window.communicationFixture?.captures,authorizations:window.communicationFixture?.authorizations,voiceConnects:window.communicationFixture?.voiceConnects,requestAborted:window.communicationFixture?.voiceSignal?.aborted,body:document.body.innerText.slice(0,2000)})")}));writeFileSync(resolve(cache,"communication-failure.png"),Buffer.from((await tools.command("Page.captureScreenshot",{format:"png"})).data,"base64"));}catch{}
     throw error;

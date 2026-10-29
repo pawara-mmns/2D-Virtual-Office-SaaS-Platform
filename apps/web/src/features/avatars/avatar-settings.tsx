@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useState, type ReactNode } from "react";
 import { OfficeDisclosure, type OfficePanelControl } from "@/components/office-disclosure";
 import { avatarPresets, type AvatarKey } from "./presets";
 import { saveAvatarAction } from "./actions";
@@ -9,7 +9,7 @@ import type { AvatarSaveState } from "./service";
 function Preview({ index, scale = 2 }: { index: number; scale?: 1 | 2 }) {
   return <span aria-hidden="true" className="block shrink-0 pixel-art" style={{ width: 32 * scale, height: 32 * scale, backgroundImage: "url('/office/avatar.png')", backgroundRepeat: "no-repeat", backgroundSize: `${96 * scale}px ${768 * scale}px`, backgroundPosition: `0 -${index * 128 * scale}px` }} />;
 }
-export function AvatarSettings({ currentKey, displayName, onSaved, panel }: { currentKey: AvatarKey; displayName: string; onSaved(key: AvatarKey, name?: string): void; panel?: OfficePanelControl }) {
+export function AvatarSettings({ currentKey, displayName, onSaved, panel, icon }: { currentKey: AvatarKey; displayName: string; onSaved(key: AvatarKey, name?: string): void; panel?: OfficePanelControl; icon?: ReactNode }) {
   const [draft, setDraft] = useState(currentKey);
   const [name, setName] = useState(displayName);
   const [state, action, pending] = useActionState(async (_previous: AvatarSaveState, form: FormData): Promise<AvatarSaveState> => {
@@ -18,7 +18,7 @@ export function AvatarSettings({ currentKey, displayName, onSaved, panel }: { cu
     return result;
   }, { status: "idle" });
   const preview = avatarPresets.find((preset) => preset.key === draft)!;
-  return <OfficeDisclosure label="Avatar settings" panel={panel} onOpen={() => { setDraft(currentKey); setName(displayName); }}>
+  return <OfficeDisclosure label="Avatar settings" panel={panel} icon={icon} material="elevated" onOpen={() => { setDraft(currentKey); setName(displayName); }}>
     <form action={action} className="space-y-4">
       <h3 className="text-sm font-semibold">Your appearance</h3>
       <div className="flex items-center gap-3"><Preview index={preview.index} /><div><p className="text-sm font-semibold">{preview.name}</p><p className="mt-1 text-xs text-muted">{preview.description}</p></div></div>

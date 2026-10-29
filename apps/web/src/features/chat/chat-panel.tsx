@@ -4,6 +4,7 @@ import { loadOfficeChat } from "./actions";
 import type { ChatEvents } from "./events";
 import { mergeMessages, normalizeBody, type ChatMessage } from "../../../../../packages/shared/src/chat.ts";
 import { avatarDisplayName } from "../avatars/presets";
+import { HudIcon } from "@/components/hud-icon";
 
 type Pending = { id: string; body: string; senderId: string };
 const MessageRow = memo(function MessageRow({ message, name, own }: { message: ChatMessage; name: string; own: boolean }) {
@@ -131,8 +132,8 @@ export const ChatPanel = memo(function ChatPanel({ officeId, open, onClose, even
     setSending(true);
     timer.current = setTimeout(() => { setSending(false); setSendError("Delivery could not be confirmed. Retry this draft to check without duplicating it."); }, 12_000);
   };
-  return <aside id="office-chat" aria-label="Office Chat" hidden={!open} className="office-chat border-line bg-white" onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); onClose(); } }}>
-    <header className="office-panel-header"><h2 className="text-sm font-semibold">Office Chat</h2><button className="office-control" onClick={onClose}>Close chat</button></header>
+  return <aside id="office-chat" aria-label="Office Chat" hidden={!open} inert={!open} className="office-chat border-line bg-white" data-glass-surface="" data-glass-variant="regular" onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); onClose(); } }}>
+    <header className="office-panel-header"><h2 className="text-sm font-semibold"><HudIcon name="chat" />Office Chat</h2><button className="office-control office-panel-close" onClick={onClose}><HudIcon name="close" /><span>Close chat</span></button></header>
     {!online && <p role="status" className="border-b border-line bg-surface px-4 py-2 text-xs leading-5 text-muted">Chat disconnected. Reconnect to send; your draft is kept.</p>}
     <div ref={list} tabIndex={0} aria-label="Chat messages" aria-busy={loading} className="min-h-0 flex-1 overflow-y-auto px-4 py-3 focus-visible:outline-2 focus-visible:outline-forest" onScroll={() => { if (!opened.current) return; const node = list.current!; readingTop.current = node.scrollTop; nearBottom.current = node.scrollHeight-node.scrollTop-node.clientHeight < 70; }}>
       {cursor && <button className="auth-text-link mb-4" disabled={loading} onClick={() => void load(cursor)}>Load older messages</button>}
