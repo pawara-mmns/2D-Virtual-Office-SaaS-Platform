@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useId, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 export type OfficePanelControl = {
@@ -19,7 +19,12 @@ export function OfficeDisclosure({ label, children, onOpen, panel }: {
   const change = panel?.onOpenChange ?? setLocalOpen;
   const trigger = useRef<HTMLButtonElement>(null);
   const content = useRef<HTMLElement>(null);
+  const body = useRef<HTMLDivElement>(null);
+  const readingTop = useRef(0);
   const id = useId();
+  useLayoutEffect(() => {
+    if (open && body.current) body.current.scrollTop = readingTop.current;
+  }, [open]);
   useEffect(() => {
     if (open) content.current?.querySelector<HTMLElement>("button")?.focus({ preventScroll: true });
   }, [open]);
@@ -35,7 +40,7 @@ export function OfficeDisclosure({ label, children, onOpen, panel }: {
   const contents = <section ref={content} id={id} hidden={!open} aria-label={label} className="office-panel office-disclosure-panel"
     onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(); } }}>
     <header className="office-panel-header"><h2>{label}</h2><button type="button" className="office-control" aria-label={`Close ${label}`} onClick={close}>Close</button></header>
-    <div className="office-panel-body">{children}</div>
+    <div ref={body} className="office-panel-body" onScroll={() => { if (open && body.current) readingTop.current = body.current.scrollTop; }}>{children}</div>
   </section>;
   return <div className="office-disclosure" data-open={open}>
     <button ref={trigger} type="button" className="office-control" aria-expanded={open} aria-controls={id}
