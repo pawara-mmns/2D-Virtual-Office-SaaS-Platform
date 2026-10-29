@@ -90,6 +90,10 @@ body {
 .office-toolbar > div { min-width: 0; }
 .office-panel-controls, .office-zoom { display: flex; flex-wrap: wrap; gap: 8px; }
 .office-zoom[hidden] { display: none; }
+.office-camera-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+.office-camera-controls[hidden] { display: none; }
+.office-orientation { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; width: 100%; }
+.office-orientation > p { flex: 1; min-width: 160px; }
 .office-control[aria-expanded="true"] { background: var(--surface-subtle); border-color: var(--action-primary); }
 .office-shell .office-work-area { flex: 1; min-height: 160px; }
 .office-shell[data-panel="chat"] .office-work-area { min-height: 20rem; }
