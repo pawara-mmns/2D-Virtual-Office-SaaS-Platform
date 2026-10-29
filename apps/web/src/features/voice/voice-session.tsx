@@ -33,7 +33,7 @@ export function Controls({ leave, error }: { leave(): void; error(message: strin
   return <>
     <div className="voice-session-controls">
       <div className="voice-session-summary">
-      <span role="status" className="mr-2 text-xs">{connection === "connected" ? "Voice connected" : connection === "reconnecting" || connection === "signalReconnecting" ? "Voice reconnecting…" : "Voice connecting…"}</span>
+      <span role="status" className="mr-2 text-xs">{connection === "connected" ? "Voice connected" : connection === "disconnected" ? "Voice disconnected" : connection === "reconnecting" || connection === "signalReconnecting" ? "Voice reconnecting…" : "Voice connecting…"}</span>
       <span className="text-xs text-muted">{isMicrophoneEnabled ? "Mic on" : "Mic muted"}</span>
       </div>
       <div className="voice-session-actions">
