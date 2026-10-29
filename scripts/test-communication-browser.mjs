@@ -31,6 +31,7 @@ test("office communication composition: responsive panels, focus, drafts, engine
       import OfficeCanvas from ${JSON.stringify(resolve(web,"src/features/office/components/office-canvas.tsx").replaceAll("\\","/"))};
       const id=n=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
       const f=window.communicationFixture={id,commits:0,mounts:0,closes:0,history:0,saves:0,changes:0,nonzeroInputs:0,navigationEvents:0,voiceConnects:0,voiceDisconnects:0,captures:0,authorizations:0,publications:0,tracks:[],profile:{avatarKey:'fern',displayName:'Taylor'},people:[{sessionId:'self',userId:id(1),displayName:'Taylor',avatarKey:'fern',connected:true,availability:'AVAILABLE',isSelf:true},{sessionId:'other',userId:id(2),displayName:'Morgan',avatarKey:'slate',connected:true,availability:'BUSY'}]};
+      f.listeners=new Map();for(const method of ['addEventListener','removeEventListener']){const native=EventTarget.prototype[method];EventTarget.prototype[method]=function(type,listener,...rest){if(this instanceof HTMLElement&&this.matches('.office-stage,.office-hud')&&['wheel','pointermove','pointerout','pointercancel','scroll'].includes(type)){let events=f.listeners.get(this);if(!events)f.listeners.set(this,events=new Map());let callbacks=events.get(type);if(!callbacks)events.set(type,callbacks=new Set());method==='addEventListener'?callbacks.add(listener):callbacks.delete(listener);}return native.call(this,type,listener,...rest);};}f.listenerCount=type=>[...f.listeners.values()].reduce((total,events)=>total+(events.get(type)?.size||0),0);
       navigator.mediaDevices.getUserMedia=async()=>{f.captures++;f.audio??=new AudioContext();const stream=f.audio.createMediaStreamDestination().stream;f.tracks.push(...stream.getTracks());return stream;};
       const nativeFetch=window.fetch.bind(window);window.fetch=async(url,options)=>{if(url!=='/api/v1/voice/token')return nativeFetch(url,options);f.authorizations++;f.voiceSignal=options.signal;return new Response(JSON.stringify({url:'wss://voice-fixture.livekit.cloud',token:'synthetic-no-network-proof'}),{headers:{'Content-Type':'application/json'}})};
       f.snapshot={officeId:id(3),mapVersion:'fixture',players:new Map(f.people.map((p,i)=>[p.sessionId,{...p,x:560+i*30,y:735,direction:'down',isMoving:false}]))};
@@ -46,7 +47,7 @@ test("office communication composition: responsive panels, focus, drafts, engine
       plugin.onResolve({filter:/^next\/link$/},()=>({path:"link",namespace:"fixture"}));
       plugin.onResolve({filter:/^livekit-client$/},args=>args.importer.replaceAll('\\','/').endsWith('/voice-session.tsx')?{path:'voice-sdk',namespace:'fixture'}:undefined);
       plugin.onResolve({filter:/^\.\/actions$/},args=>args.importer.endsWith("avatar-settings.tsx")?{path:"profile",namespace:"fixture"}:args.importer.endsWith("chat-panel.tsx")?{path:"history",namespace:"fixture"}:undefined);
-      plugin.onLoad({filter:/.*/,namespace:"fixture"},args=>({resolveDir:web,loader:"js",contents:args.path==="engine"?`import{createOfficeGame as create}from'./src/features/office/engine/create-game.ts';export function createOfficeGame(...args){const f=window.communicationFixture,callbacks=args[1];args[1]={...callbacks,onNavigation(state){f.navigation=state;f.navigationEvents++;callbacks.onNavigation?.(state)}};f.engine=create(...args);return f.engine;}`:args.path==="link"?`import React from'react';export default function Link({href,children,...props}){return React.createElement('a',{...props,href},children)}`:args.path==="voice-sdk"?`
+      plugin.onLoad({filter:/.*/,namespace:"fixture"},args=>({resolveDir:web,loader:"js",contents:args.path==="engine"?`import{createOfficeGame as create}from'./src/features/office/engine/create-game.ts';export function createOfficeGame(...args){const f=window.communicationFixture,callbacks=args[1];args[1]={...callbacks,onReducedEffects(reduced){f.detectedReducedEffects=reduced;f.applyRendererPolicy=callbacks.onReducedEffects;/* Force enhancement only inside this synthetic visual/performance fixture. */callbacks.onReducedEffects?.(false)},onNavigation(state){f.navigation=state;f.navigationEvents++;callbacks.onNavigation?.(state)}};f.engine=create(...args);return f.engine;}`:args.path==="link"?`import React from'react';export default function Link({href,children,...props}){return React.createElement('a',{...props,href},children)}`:args.path==="voice-sdk"?`
         import{Room as NativeRoom,Track}from'livekit-client';export*from'livekit-client';
         export class Room extends NativeRoom{constructor(...args){super(...args);const f=window.communicationFixture;this.connect=async()=>{f.voiceConnects++;f.room=this;await this.simulateParticipants({publish:{audio:true,video:false,useRealTracks:false},participants:{count:2,video:false,audio:false}});this.localParticipant.name='Alex Lee';};this.localParticipant.publishTrack=async()=>{f.publications++;return this.localParticipant.getTrackPublication(Track.Source.Microphone)};const disconnect=this.disconnect.bind(this);this.disconnect=async(...args)=>{f.voiceDisconnects++;return disconnect(...args);};}}
       `:args.path==="auth"?`export const createClient=()=>({auth:{getSession:async()=>({data:{session:null}}),onAuthStateChange:()=>({data:{subscription:{unsubscribe(){window.communicationFixture.authUnsubscribed=true}}}})}});`:
@@ -75,6 +76,65 @@ test("office communication composition: responsive panels, focus, drafts, engine
     const desktop=await layout();assert.ok(desktop.canvasHeight>desktop.height*.65);assert.ok(desktop.scrollHeight<=desktop.height);assert.ok(desktop.scrollWidth<=desktop.width);await snapshot("communication-office-desktop.png");
     assert.equal(desktop.canvasHeight,900,"Renderer owns the full viewport height");
     assert.equal(await evaluate("document.querySelector('.office-work-area').contains(document.querySelector('.office-hud'))"),false,"HUD and renderer have independent DOM ownership");
+    const scene="communicationFixture.engine.game.scene.getScene('Office')";
+    const zoom=()=>evaluate(`${scene}.cameras.main.zoom`);
+    const settled=()=>until(()=>evaluate(`${scene}.wheelZoomTarget===null`));
+    const wheelAt=async(selector,deltaY,modifiers=0)=>{
+      const point=await evaluate(`(()=>{const n=document.querySelector(${JSON.stringify(selector)}),r=n.getBoundingClientRect();return{x:r.left+r.width/2,y:r.top+r.height/2}})()`);
+      await command("Input.dispatchMouseEvent",{type:"mouseWheel",...point,deltaX:0,deltaY,modifiers});
+    };
+    await until(()=>evaluate("document.querySelector('.office-hud').dataset.glass==='enhanced'"));
+    assert.equal(await evaluate("communicationFixture.listenerCount('wheel')"),1,"One native wheel owner after Strict Mode replay");
+    assert.equal(await evaluate("communicationFixture.listenerCount('pointermove')"),1,"One delegated reflection owner");
+    assert.equal(await evaluate("!!document.elementFromPoint(innerWidth/2,innerHeight/2).closest('.office-world')"),true,"Empty HUD space passes through to the map");
+    const glass=await evaluate(`(()=>{
+      const s=getComputedStyle(document.querySelector('.office-identity')),world=getComputedStyle(document.querySelector('canvas'));
+      const rgb=value=>value.match(/[\\d.]+/g).map(Number),luminance=c=>c.slice(0,3).map(n=>{n/=255;return n<=.04045?n/12.92:((n+.055)/1.055)**2.4}).reduce((sum,n,i)=>sum+n*[.2126,.7152,.0722][i],0),ratio=(a,b)=>(Math.max(luminance(a),luminance(b))+.05)/(Math.min(luminance(a),luminance(b))+.05);
+      const bg=rgb(s.backgroundColor),dark=bg.slice(0,3).map(n=>n*(bg[3]??1)),muted=rgb(getComputedStyle(document.querySelector('.office-context > p')).color),ink=rgb(s.color);
+      return{backdrop:s.backdropFilter,alpha:bg[3]??1,minimumInkContrast:ratio(ink,dark),minimumMutedContrast:ratio(muted,dark),worldFilter:world.filter,pixelArt:world.imageRendering};
+    })()`);
+    assert.notEqual(glass.backdrop,"none");assert.ok(glass.alpha<1 && glass.minimumInkContrast>=4.5 && glass.minimumMutedContrast>=4.5);
+    assert.equal(glass.worldFilter,"none");assert.equal(glass.pixelArt,"pixelated");
+    const pointerCommits=await evaluate("communicationFixture.commits");
+    await evaluate("(()=>{const n=document.querySelector('.office-identity'),read=n.getBoundingClientRect.bind(n);communicationFixture.geometryReads=0;n.getBoundingClientRect=()=>{communicationFixture.geometryReads++;return read()};const r=read();for(let i=0;i<30;i++)n.dispatchEvent(new PointerEvent('pointermove',{bubbles:true,pointerType:'mouse',clientX:r.left+r.width*.8,clientY:r.top+r.height*.7}))})()");
+    await delay(180);
+    assert.equal(await evaluate("communicationFixture.commits"),pointerCommits,"Pointer reflections never publish React state");
+    assert.ok(await evaluate("communicationFixture.geometryReads<=3"),"Pointer lighting does not read geometry for every move/frame");
+    assert.ok(await evaluate("parseFloat(document.querySelector('.office-identity').style.getPropertyValue('--glass-x'))>70"));
+    await snapshot("glass-pointer-desktop.png");
+    await evaluate("document.querySelector('.office-identity').dispatchEvent(new PointerEvent('pointerout',{bubbles:true,pointerType:'mouse',relatedTarget:document.querySelector('canvas')}))");
+    assert.equal(await evaluate("document.querySelector('.office-identity').hasAttribute('data-glass-hover')"),false);
+    const initialZoom=await zoom(), positions=await evaluate("JSON.stringify([...communicationFixture.snapshot.players].map(([id,p])=>[id,p.x,p.y]))");
+    await wheelAt(".office-stage",-100);await settled();assert.ok(await zoom()>initialZoom,"Wheel up zooms in");
+    const inZoom=await zoom();await wheelAt(".office-stage",100);await settled();assert.ok(await zoom()<inZoom,"Wheel down zooms out");
+    const unmodified=await zoom();
+    for(const modifiers of [2,4,1,8])await wheelAt(".office-stage",-100,modifiers);
+    assert.equal(await zoom(),unmodified,"Ctrl/Cmd/Alt/Shift wheel passes through without camera zoom");
+    await evaluate("(()=>{const h=document.querySelector('.office-stage');for(let i=0;i<50;i++)h.dispatchEvent(new WheelEvent('wheel',{deltaY:-10000,bubbles:true,cancelable:true}))})()");
+    await settled();assert.equal(await zoom(),4);assert.equal(await evaluate("document.querySelector('[aria-label=\"Zoom in\"]').disabled"),true);
+    await evaluate("(()=>{const h=document.querySelector('.office-stage');for(let i=0;i<50;i++)h.dispatchEvent(new WheelEvent('wheel',{deltaY:10000,bubbles:true,cancelable:true}))})()");
+    await settled();assert.ok(await zoom()>0);assert.equal(await evaluate("document.querySelector('[aria-label=\"Zoom out\"]').disabled"),true);
+    await wheelAt(".office-stage",-60);await settled();await button("+");assert.equal(await zoom(),2,"Buttons select the next original level after fractional wheel zoom");
+    await button("Fit Office");assert.equal(await evaluate("communicationFixture.navigation.fit"),true);await button("Return to my avatar");
+    await evaluate("document.getElementById('office-area').value='LOUNGE';document.getElementById('office-area').dispatchEvent(new Event('change',{bubbles:true}))");
+    await wheelAt(".office-stage",-80);await settled();assert.equal(await evaluate("communicationFixture.navigation.areaId"),"LOUNGE","Wheel retains area focus");
+    await button("Return to my avatar");
+    assert.equal(await evaluate("JSON.stringify([...communicationFixture.snapshot.players].map(([id,p])=>[id,p.x,p.y]))"),positions,"Wheel never moves avatars");
+    for(const preference of ["prefers-reduced-motion","prefers-reduced-transparency"]){
+      await command("Emulation.setEmulatedMedia",{features:[{name:preference,value:"reduce"}]});
+      await until(()=>evaluate("communicationFixture.listenerCount('pointermove')===0"));
+      if(preference==="prefers-reduced-motion"){
+        const reduced=await evaluate(`(()=>{const h=document.querySelector('.office-stage');h.dispatchEvent(new WheelEvent('wheel',{deltaY:20,bubbles:true,cancelable:true}));return{pending:${scene}.wheelZoomTarget,transition:getComputedStyle(document.querySelector('.office-control')).transitionDuration}})()`);
+        assert.equal(reduced.pending,null);assert.equal(reduced.transition,"0s");
+      }else assert.equal(await evaluate("getComputedStyle(document.querySelector('.office-identity')).backdropFilter"),"none");
+    }
+    await snapshot("glass-reduced-transparency.png");
+    await command("Emulation.setEmulatedMedia",{features:[]});
+    await command("Emulation.setTouchEmulationEnabled",{enabled:true,maxTouchPoints:1});
+    await until(()=>evaluate("document.querySelector('.office-hud').dataset.glass==='solid'"));
+    assert.equal(await evaluate("getComputedStyle(document.querySelector('.office-identity')).backdropFilter"),"none");
+    await command("Emulation.setTouchEmulationEnabled",{enabled:false});
+    await until(()=>evaluate("document.querySelector('.office-hud').dataset.glass==='enhanced' && communicationFixture.listenerCount('pointermove')===1"));
     const tap=async text=>{
       const point=await evaluate(`(()=>{const n=[...document.querySelectorAll('button')].find(n=>n.textContent===${JSON.stringify(text)}&&n.getClientRects().length&&!n.closest('[hidden],[inert]'));if(!n)throw new Error('HUD target missing');const r=n.getBoundingClientRect(),x=r.left+r.width/2,y=r.top+r.height/2;return{x,y,hit:n.contains(document.elementFromPoint(x,y)),height:r.height}})()`);
       assert.ok(point.hit && point.height>=44,'HUD control has an unobscured 44px target: '+text);
@@ -140,6 +200,13 @@ test("office communication composition: responsive panels, focus, drafts, engine
     await until(()=>evaluate("document.querySelectorAll('#office-chat li').length===44"));
     await evaluate("document.querySelector('[aria-label=\"Chat messages\"]').scrollTop=120");await delay(80);
     const readingTop=await evaluate("document.querySelector('[aria-label=\"Chat messages\"]').scrollTop");
+    const chatZoom=await zoom();await wheelAt('[aria-label="Chat messages"]',180);await delay(100);
+    assert.equal(await zoom(),chatZoom,"Native chat scrolling never reaches the map wheel owner");
+    assert.ok(await evaluate("document.querySelector('[aria-label=\"Chat messages\"]').scrollTop")>readingTop,"Chat still scrolls normally");
+    await wheelAt("#office-chat-draft",50);assert.equal(await zoom(),chatZoom,"Textarea wheel does not zoom");
+    const menuWheel=await evaluate("(()=>{const e=new WheelEvent('wheel',{deltaY:-100,bubbles:true,cancelable:true});document.getElementById('office-area').dispatchEvent(e);return e.defaultPrevented})()");
+    assert.equal(menuWheel,false,"Select wheel retains native behavior");
+    await evaluate(`document.querySelector('[aria-label="Chat messages"]').scrollTop=${readingTop}`);await delay(80);
     await button("Participants (2)");await until(()=>evaluate("document.querySelector('#office-chat').hidden"));
     assert.equal(await evaluate("document.querySelectorAll('.office-panel:not([hidden])').length"),1);
     assert.equal(await evaluate("document.activeElement.getAttribute('aria-label')"),"Close Participants (2)");
@@ -159,7 +226,10 @@ test("office communication composition: responsive panels, focus, drafts, engine
     await command("Input.dispatchKeyEvent",{type:"keyDown",key:"Escape",code:"Escape"});assert.equal(await evaluate("document.activeElement.textContent"),"Participants (2)");await button("Office Chat");
     await command("Emulation.setDeviceMetricsOverride",{width:390,height:844,deviceScaleFactor:1,mobile:true});await delay(120);const mobile=await layout();assert.ok(mobile.scrollWidth<=390);assert.ok(mobile.scrollHeight<=844);assert.equal(await evaluate("getComputedStyle(document.querySelector('.office-world')).visibility"),"hidden");assert.equal(await evaluate("document.querySelector('.office-world').inert && document.querySelector('.office-camera-controls').hidden"),true);assert.ok(await evaluate("document.getElementById('office-chat-draft').getBoundingClientRect().bottom<=innerHeight"));await snapshot("communication-chat-mobile.png");
     await evaluate("document.querySelector('.office-stage').focus();document.querySelector('[aria-label=\"Zoom out\"]').focus()");assert.equal(await evaluate("document.activeElement.closest('.office-world,.office-zoom')!==null"),false,"Hidden map/zoom controls cannot take focus");
-    await button("Close chat");assert.equal(await evaluate("document.activeElement.textContent"),"Office Chat");await button("Avatar settings");await snapshot("communication-settings-mobile.png");assert.ok(await evaluate("(()=>{const r=document.querySelector('.office-disclosure-panel:not([hidden])').getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&r.bottom<=innerHeight})()"));await command("Input.dispatchKeyEvent",{type:"keyDown",key:"Escape",code:"Escape"});assert.equal(await evaluate("document.querySelectorAll('.office-disclosure[data-open=true]').length"),0);
+    await button("Close chat");assert.equal(await evaluate("document.activeElement.textContent"),"Office Chat");await button("Avatar settings");await snapshot("communication-settings-mobile.png");assert.ok(await evaluate("(()=>{const r=document.querySelector('.office-disclosure-panel:not([hidden])').getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&r.bottom<=innerHeight})()"));const drawerZoom=await zoom();await wheelAt(".office-disclosure-panel:not([hidden]) .office-panel-body",180);await delay(80);
+    assert.equal(await zoom(),drawerZoom,"Drawer scrolling does not zoom the hidden map");
+    assert.ok(await evaluate("document.querySelector('.office-disclosure-panel:not([hidden]) .office-panel-body').scrollTop>0"),"Drawer retains native scrolling");
+    await command("Input.dispatchKeyEvent",{type:"keyDown",key:"Escape",code:"Escape"});assert.equal(await evaluate("document.querySelectorAll('.office-disclosure[data-open=true]').length"),0);
     await command("Emulation.setDeviceMetricsOverride",{width:320,height:740,deviceScaleFactor:1,mobile:true});await delay(80);await button("Avatar settings");
     assert.equal(await evaluate("document.documentElement.scrollWidth<=320 && document.querySelector('.office-panel:not([hidden])').scrollWidth<=document.querySelector('.office-panel:not([hidden])').clientWidth"),true,"Small mobile settings have no horizontal overflow");
     assert.equal(await evaluate("document.activeElement.getAttribute('aria-label')"),"Close Avatar settings","Opening focuses the nonmodal panel's close control");
@@ -177,9 +247,34 @@ test("office communication composition: responsive panels, focus, drafts, engine
     assert.equal(await evaluate("document.querySelector('.voice-context').textContent.includes('Voice connecting')"),false,"Connected HUD never retains the connecting label");
     assert.equal(await evaluate("communicationFixture.room.remoteParticipants.size"),1,"The SDK fixture contains a second voice participant, not a second local media session");
     await evaluate("communicationFixture.initialRoom=communicationFixture.room;undefined");
+    await command("Emulation.setDeviceMetricsOverride",{width:1440,height:900,deviceScaleFactor:1,mobile:false});await delay(100);
+    await button("Office Chat");
+    const measure=label=>evaluate(`(async()=>{const g=communicationFixture.engine.game,times=[];let previous=performance.now();const count=()=>{const now=performance.now();times.push(now-previous);previous=now};g.events.on('poststep',count);const start=performance.now();await new Promise(r=>setTimeout(r,1200));g.events.off('poststep',count);const seconds=(performance.now()-start)/1000;return{label:${JSON.stringify(label)},frames:times.length,seconds,fps:Math.round(times.length/seconds*10)/10,p95FrameMs:times.toSorted((a,b)=>a-b)[Math.floor(times.length*.95)]}})()`);
+    const glassPerformance=await measure("forced glass on SwiftShader + chat + simulated voice");assert.ok(glassPerformance.frames>0);
+    const toggleSolid=async()=>{await button("Settings");await evaluate("document.querySelector('.hud-glass-preference input').click()");await button("Office Chat");};
+    await toggleSolid();await until(()=>evaluate("document.querySelector('.office-hud').dataset.glass==='solid'"));
+    assert.equal(await evaluate("getComputedStyle(document.querySelector('.office-chat')).backdropFilter"),"none");
+    assert.equal(await evaluate("communicationFixture.listenerCount('pointermove')"),0);
+    await snapshot("glass-solid-desktop.png");const solidPerformance=await measure("solid HUD + chat + simulated voice");
+    await toggleSolid();await until(()=>evaluate("document.querySelector('.office-hud').dataset.glass==='enhanced'"));
+    assert.equal(await evaluate("communicationFixture.detectedReducedEffects"),true,"Actual SwiftShader renderer requests reduced effects");
+    await evaluate("communicationFixture.applyRendererPolicy(communicationFixture.detectedReducedEffects)");
+    await until(()=>evaluate("document.querySelector('.office-hud').dataset.glass==='solid' && communicationFixture.listenerCount('pointermove')===0"));
+    await snapshot("glass-auto-software-desktop.png");
+    const automaticFallbackPerformance=await measure("automatic software-renderer fallback + chat + simulated voice");
+    assert.equal(await evaluate("communicationFixture.mounts===1 && communicationFixture.room===communicationFixture.initialRoom && communicationFixture.voiceConnects===1 && communicationFixture.captures===1 && communicationFixture.publications===1"),true,"Renderer policy changes retain game, transport and active voice");
+    await evaluate("communicationFixture.applyRendererPolicy(false)");await until(()=>evaluate("document.querySelector('.office-hud').dataset.glass==='enhanced'"));
+    await evaluate(`${scene}.navigate({type:'overview'});${scene}.zoomBy(1)`);await delay(80);
+    const cameraSmoothness=await evaluate(`(async()=>{const s=${scene},g=communicationFixture.engine.game,samples=[],before={x:s.cameras.main.midPoint.x,y:s.cameras.main.midPoint.y};const sample=()=>samples.push(s.cameras.main.zoom);g.events.on('poststep',sample);const events=communicationFixture.navigationEvents;document.querySelector('.office-stage').dispatchEvent(new WheelEvent('wheel',{deltaY:-100,bubbles:true,cancelable:true}));await new Promise(r=>setTimeout(r,650));g.events.off('poststep',sample);return{samples,before,after:{x:s.cameras.main.midPoint.x,y:s.cameras.main.midPoint.y},navigationEvents:communicationFixture.navigationEvents-events}})()`);
+    assert.ok(new Set(cameraSmoothness.samples).size>3,"Normal wheel zoom interpolates over multiple frames");
+    assert.ok(cameraSmoothness.samples.every((v,i,a)=>Number.isFinite(v)&&v>0&&(i===0||v>=a[i-1])),"Camera interpolation is finite and monotonic");
+    assert.ok(cameraSmoothness.navigationEvents<=3,"Wheel interpolation never streams every zoom frame into React");
+    assert.ok(Math.hypot(cameraSmoothness.after.x-cameraSmoothness.before.x,cameraSmoothness.after.y-cameraSmoothness.before.y)<3,"Centered zoom retains the follow target without a jump");
+    await settled();await evaluate(`${scene}.navigate({type:'self'})`);await snapshot("glass-live-desktop.png");
     const voiceLayouts=[];
     for(const [width,height] of [[1440,900],[1024,900],[820,1180],[390,844],[320,740]]){
       await command("Emulation.setDeviceMetricsOverride",{width,height,deviceScaleFactor:1,mobile:width<640});await delay(100);
+      await command("Emulation.setTouchEmulationEnabled",{enabled:width<640,maxTouchPoints:1});
       await tap("Settings");await until(()=>evaluate("document.activeElement.getAttribute('aria-label')==='Close Settings'"));
       await tap("Office Chat");await until(()=>evaluate("document.activeElement.id==='office-chat-draft'"));
       await tap("Participants (2)");if(width===320){await delay(80);await snapshot("communication-people-320.png");}await button("Avatar settings");await button("Office Chat");await delay(80);
@@ -192,6 +287,7 @@ test("office communication composition: responsive panels, focus, drafts, engine
       assert.equal(await evaluate("document.getElementById('office-chat-draft').value"),"Unsent draft");
       if(width===1440||width===390){
         await button("Close chat");await button("Fit Office");await button("Return to my avatar");await button("Participants (2)");await button("Find");await button("Return to my avatar");await button("Office Chat");
+        if(width===1440){await button("Close chat");await button("Participants (2)");await button("Find");await wheelAt(".office-stage",30);await settled();assert.equal(await evaluate("communicationFixture.navigation.mode"),"teammate","Wheel preserves Find focus");await button("Return to my avatar");await button("Office Chat");}
         assert.equal(await evaluate("communicationFixture.room===communicationFixture.initialRoom && communicationFixture.voiceConnects===1 && communicationFixture.authorizations===1 && communicationFixture.captures===1"),true,"Camera commands preserve an already active voice session");
         assert.equal(await evaluate("communicationFixture.nonzeroInputs"),0);
       }
@@ -223,6 +319,7 @@ test("office communication composition: responsive panels, focus, drafts, engine
     const cameraLayouts=[];
     for(const [width,height] of [[1440,900],[1024,900],[820,1180],[390,844],[320,740]]){
       await command("Emulation.setDeviceMetricsOverride",{width,height,deviceScaleFactor:1,mobile:width<640});await delay(100);
+      await command("Emulation.setTouchEmulationEnabled",{enabled:width<640,maxTouchPoints:1});
       await button("Fit Office");await until(()=>evaluate("communicationFixture.navigation.fit"));
       await until(()=>evaluate("(()=>{const v=communicationFixture.engine.game.scene.getScene('Office').cameras.main.worldView;return v.left<=.1&&v.top<=.1&&v.right>=1151.9&&v.bottom>=831.9})()"));
       assert.equal(await evaluate("document.querySelector('[aria-label=\"Zoom out\"]').disabled"),true);
@@ -236,17 +333,25 @@ test("office communication composition: responsive panels, focus, drafts, engine
       await snapshot(`navigation-find-${width}.png`);await button("Return to my avatar");
       assert.equal(await evaluate("communicationFixture.mounts"),1);
     }
-    await evaluate("communicationFixture.remount()");await until(()=>evaluate("communicationFixture.mounts===2"));await button("Avatar settings");assert.equal(await evaluate("document.getElementById('office-display-name').value"),"Alex Lee");assert.equal(await evaluate("document.querySelector('input[name=avatarKey]:checked').value"),"plum","Saved preset persists when remounted from the profile");
+    await command("Emulation.setDeviceMetricsOverride",{width:1440,height:900,deviceScaleFactor:1,mobile:false});await command("Emulation.setTouchEmulationEnabled",{enabled:false});
+    await evaluate("communicationFixture.nativeSupports=CSS.supports;CSS.supports=()=>false;communicationFixture.remount()");await until(()=>evaluate("communicationFixture.mounts===2"));
+    assert.equal(await evaluate("document.querySelector('.office-hud').dataset.glass"),"solid","Unsupported backdrop uses opaque surfaces");
+    assert.equal(await evaluate("getComputedStyle(document.querySelector('.office-identity')).backdropFilter"),"none");
+    assert.equal(await evaluate("communicationFixture.listenerCount('wheel')"),1,"Remount removes the old wheel owner");
+    await evaluate("CSS.supports=communicationFixture.nativeSupports");
+    await button("Avatar settings");assert.equal(await evaluate("document.getElementById('office-display-name').value"),"Alex Lee");assert.equal(await evaluate("document.querySelector('input[name=avatarKey]:checked').value"),"plum","Saved preset persists when remounted from the profile");
     await button("Office Chat");await evaluate("document.getElementById('office-chat-draft').focus()");await command("Input.insertText",{text:"Old office draft"});await button("Participants (2)");await until(()=>evaluate("!document.querySelector('[aria-label=\"Find Morgan in the office\"]').disabled"));await button("Find");await until(()=>evaluate("communicationFixture.navigation.mode==='teammate'"));
-    await evaluate("communicationFixture.switchOffice()");await until(()=>evaluate("communicationFixture.mounts===3 && communicationFixture.navigation?.findable.length===0"));
+    await evaluate("Object.defineProperty(navigator,'hardwareConcurrency',{value:2,configurable:true});communicationFixture.switchOffice()");await until(()=>evaluate("communicationFixture.mounts===3 && communicationFixture.navigation?.findable.length===0"));
+    assert.equal(await evaluate("document.querySelector('.office-hud').dataset.glass"),"solid","Conservative low-resource hints choose the solid fallback");
     assert.equal(await evaluate("communicationFixture.navigation.mode"),"self","Workspace replacement clears a selected camera target");
     assert.equal(await evaluate("communicationFixture.engine.navigate({type:'teammate',sessionId:'other'})"),false);
     await button("Office Chat");assert.equal(await evaluate("document.getElementById('office-chat-draft').value"),"","Workspace replacement never carries another office's draft");
     await evaluate("communicationFixture.options.onPresence({status:'denied',count:0,notice:'Membership ended.'})");assert.equal(await evaluate("[...document.querySelectorAll('button')].some(b=>b.textContent==='Retry connection')"),false);assert.equal(await evaluate("document.querySelector('.office-connection').textContent.includes('Access denied')"),true);
     assert.match(await evaluate("document.querySelector('[aria-label=\"Office voice\"]').textContent"),/Voice authorization ended/);
     await evaluate("communicationFixture.unmount()");await until(()=>evaluate("document.querySelectorAll('canvas').length===0 && communicationFixture.authUnsubscribed"));assert.equal(await evaluate("communicationFixture.closes"),3);assert.deepEqual(tools.errors,[]);
+    assert.equal(await evaluate("['wheel','pointermove','pointerout','pointercancel','scroll'].every(type=>communicationFixture.listenerCount(type)===0)"),true,"HUD and wheel listeners all detach on exit");
     await evaluate("communicationFixture.audio?.close()");
-    console.info(JSON.stringify({scope:"Actual office composition, Phaser and SDK-simulated voice; synthetic profile/history/network/media, no authenticated service or Cloud/audio verification",desktop,boundary,tablet,mobile,foundation,textResize320:true,readingPositionPreserved:true,voiceLayouts,cameraLayouts,cameraOnlyMovement:true,workspaceReplacement:true,oneMediaSession:true,equivalentVoiceSnapshotCommits:voiceCommits,settingsPersistence:true,engineMounts:3,engineCloses:3,runtimeErrors:tools.errors.length}));
+    console.info(JSON.stringify({scope:"Actual office composition and SDK-simulated voice; glass forced on SwiftShader for enhancement coverage, production software fallback also verified; no hosted service or audio verification",desktop,boundary,tablet,mobile,foundation,glass,glassPerformance,solidPerformance,automaticFallbackPerformance,softwareRendererDetected:true,cameraSmoothness:{samples:cameraSmoothness.samples.length,distinctZooms:new Set(cameraSmoothness.samples).size,navigationEvents:cameraSmoothness.navigationEvents},wheelAndFallbackChecks:true,pointerReactCommits:0,textResize320:true,readingPositionPreserved:true,voiceLayouts,cameraLayouts,cameraOnlyMovement:true,workspaceReplacement:true,oneMediaSession:true,equivalentVoiceSnapshotCommits:voiceCommits,settingsPersistence:true,engineMounts:3,engineCloses:3,runtimeErrors:tools.errors.length}));
   }catch(error){
     if(tools)try{console.info(JSON.stringify({fixtureFailure:true,runtimeErrors:tools.errors,state:await tools.evaluate("({mounts:window.communicationFixture?.mounts,captures:window.communicationFixture?.captures,authorizations:window.communicationFixture?.authorizations,voiceConnects:window.communicationFixture?.voiceConnects,requestAborted:window.communicationFixture?.voiceSignal?.aborted,body:document.body.innerText.slice(0,2000)})")}));writeFileSync(resolve(cache,"communication-failure.png"),Buffer.from((await tools.command("Page.captureScreenshot",{format:"png"})).data,"base64"));}catch{}
     throw error;

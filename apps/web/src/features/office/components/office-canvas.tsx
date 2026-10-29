@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { OfficeDisclosure } from "@/components/office-disclosure";
 import { OfficeHud, type OfficeContext } from "./office-hud";
+import { HudGlassControl } from "./hud-glass";
 import { mountOffice } from "../engine/lifecycle";
 import { AvatarSettings } from "@/features/avatars/avatar-settings";
 import type { AvatarAppearance, AvatarKey } from "@/features/avatars/presets";
@@ -26,6 +27,7 @@ export default function OfficeCanvas({ appearance, profileWarning, officeId, use
   const focusOffice = useRef(false);
   const [attempt, setAttempt] = useState(0);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [reducedEffects, setReducedEffects] = useState(false);
   const [savedKey, setSavedKey] = useState<AvatarKey | null>(null);
   const [savedName, setSavedName] = useState<string | null>(null);
   const network = useRef<OfficeNetwork | null>(null);
@@ -95,6 +97,7 @@ export default function OfficeCanvas({ appearance, profileWarning, officeId, use
       const { createOfficeGame } = await import("../engine/create-game");
       return () => createOfficeGame(element, {
         onNavigation(value) { if (active) setNavigation(value); },
+        onReducedEffects(value) { if (active) setReducedEffects(value); },
         onReady(version) {
           window.clearTimeout(timeout);
           if (!active) return;
@@ -133,12 +136,12 @@ export default function OfficeCanvas({ appearance, profileWarning, officeId, use
       </div>}
     </div>
     </div>
-    <OfficeHud context={context} presence={presence}
+    <OfficeHud context={context} presence={presence} reducedEffects={reducedEffects}
       retry={() => { setNavigation(null); setStatus("loading"); setPresence({ status: "connecting", count: 0, notice: "Connecting to your office..." }); setAttempt((value) => value + 1); }}
       settings={<OfficeDisclosure label="Settings" panel={{ open: panel === "settings", onOpenChange: settingsPanel, container: panelHost }}>
         <div className="space-y-4"><div><label htmlFor="office-availability" className="mb-2 block text-sm font-medium">Your availability</label>
           <select id="office-availability" className="office-control" value={own?.availability ?? "AVAILABLE"} disabled={presence.status !== "online" || !own?.connected} onChange={(event) => { setAvailabilityError(""); const value = event.target.value; if (isAvailability(value) && !network.current?.setAvailability?.(value)) setAvailabilityError("Reconnect before changing availability."); }}><option value="AVAILABLE">Available</option><option value="BUSY">Busy</option><option value="DO_NOT_DISTURB">Do not disturb</option></select>
-        </div><p id="office-instructions" className="text-sm leading-6 text-muted">Keyboard required: click or Tab into the office, then use WASD or arrows. Tab to leave. Map navigation changes your view, not your position.</p>
+        </div><HudGlassControl /><p id="office-instructions" className="text-sm leading-6 text-muted">Keyboard required: click or Tab into the office, then use WASD or arrows. Tab to leave. Map navigation changes your view, not your position. Scroll over the map to zoom; Ctrl/Cmd+scroll keeps browser zoom.</p>
         <p className="text-sm leading-6 text-muted">Voice is available in the Meeting Room. Join Voice requests microphone access only when you choose it.</p></div>
       </OfficeDisclosure>}
       controls={<>

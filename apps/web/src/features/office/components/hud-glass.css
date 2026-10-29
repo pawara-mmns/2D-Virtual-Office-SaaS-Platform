@@ -1,0 +1,76 @@
+/* Office-only material. Opaque first; enhancement never changes text opacity. */
+.office-hud {
+  --hud-glass-solid: #f8f9f5;
+  --hud-glass-background: var(--hud-glass-solid);
+  --hud-glass-backdrop: none;
+  --hud-glass-reflection: none;
+  --hud-glass-edge: rgb(255 255 255 / .72);
+  --hud-glass-shadow: 0 3px 12px rgb(22 46 34 / .12), 0 1px 3px rgb(22 46 34 / .06), inset 0 1px 0 var(--hud-glass-edge);
+  --text-secondary: #40554b;
+  --border-control: #5e7264;
+}
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .office-hud[data-glass="enhanced"] {
+    --hud-glass-background: rgb(248 249 245 / .86);
+    --hud-glass-backdrop: blur(8px) saturate(1.1);
+    --hud-glass-reflection: block;
+  }
+}
+.office-hud :is(.office-identity, .office-map-hud, .office-panel, .office-chat, .office-voice, .office-hud-actions .office-control, .office-panel-controls .office-control, .office-hud-bottom > .ui-notice) {
+  isolation: isolate;
+  background: var(--hud-glass-background);
+  border: 1px solid rgb(94 114 100 / .65);
+  border-top-color: rgb(255 255 255 / .9);
+  border-radius: 10px;
+  box-shadow: var(--hud-glass-shadow);
+  -webkit-backdrop-filter: var(--hud-glass-backdrop);
+  backdrop-filter: var(--hud-glass-backdrop);
+}
+.office-hud :is(.office-identity, .office-voice, .office-hud-actions .office-control, .office-panel-controls .office-control, .office-hud-bottom > .ui-notice) { position: relative; }
+.office-hud :is(.office-identity, .office-map-hud, .office-panel, .office-chat, .office-voice, .office-hud-actions .office-control, .office-panel-controls .office-control, .office-hud-bottom > .ui-notice)::before {
+  content: "";
+  display: var(--hud-glass-reflection);
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  background: radial-gradient(260px circle at var(--glass-x, 50%) var(--glass-y, 0%), rgb(255 255 255 / .48), transparent 70%);
+  opacity: 0;
+  transition: opacity 180ms ease-out;
+}
+.office-hud [data-glass-hover="true"]::before { opacity: .8; }
+/* Nested controls receive a light coat, never another layer of backdrop blur. */
+.office-hud .office-control {
+  color: var(--text-primary);
+  border-color: var(--border-control);
+  border-radius: 8px;
+  background-color: #fcfdf9;
+  transition: background-color 140ms ease-out, box-shadow 140ms ease-out, transform 100ms ease-out;
+}
+.office-hud :is(.office-hud-actions, .office-panel-controls) .office-control { border-color: var(--border-control); }
+.office-hud .office-control:hover:not(:disabled) { background-color: #f8fcf6; box-shadow: inset 0 1px 0 white, 0 2px 6px rgb(22 46 34 / .12); }
+.office-hud .office-control[aria-expanded="true"] { color: var(--action-hover); background-color: #ddebda; border-color: var(--action-primary); }
+.office-hud button:active:not(:disabled) { transform: translateY(1px); }
+.office-hud .office-panel-header { background: rgb(255 255 255 / .36); }
+.office-hud .office-chat > form { background: rgb(248 249 245 / .9); }
+.office-hud .office-voice { width: fit-content; max-width: 100%; }
+.office-hud .chat-own { background: rgb(237 241 233 / .9); }
+.office-hud :is(.auth-input, .auth-button) { -webkit-backdrop-filter: none; backdrop-filter: none; }
+.office-hud .office-control:disabled { opacity: 1; color: var(--text-secondary); background-color: var(--surface-subtle); border-style: dashed; }
+.office-hud .office-hud-bottom > .ui-notice-error { color: var(--status-error); border-left: 3px solid var(--status-error); background: rgb(254 242 242 / .96); }
+.office-hud .office-hud-bottom > .ui-notice-warning { color: var(--status-warning); border-left: 3px solid var(--status-warning); background: rgb(255 251 235 / .96); }
+.hud-glass-preference { display: flex; align-items: center; gap: 10px; min-height: 44px; font-size: 14px; line-height: 22px; cursor: pointer; }
+.hud-glass-preference input { width: 18px; height: 18px; flex-shrink: 0; accent-color: var(--action-primary); }
+/* Preferences override enhancement even before client effects initialize. */
+@media (prefers-reduced-transparency: reduce), (pointer: coarse), (hover: none), (update: slow) {
+  .office-hud[data-glass] { --hud-glass-background: var(--hud-glass-solid); --hud-glass-backdrop: none; --hud-glass-reflection: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .office-hud[data-glass] { --hud-glass-reflection: none; }
+  .office-hud .office-control, .office-hud button, .office-hud ::before { transition: none; transform: none; }
+}
+@media (forced-colors: active) {
+  .office-hud[data-glass] { --hud-glass-background: Canvas; --hud-glass-backdrop: none; --hud-glass-reflection: none; --hud-glass-shadow: none; }
+  .office-hud :is(.office-panel, .office-chat, .office-control, .office-identity, .office-voice, .office-map-hud) { color: CanvasText; border: 1px solid ButtonText; }
+}
