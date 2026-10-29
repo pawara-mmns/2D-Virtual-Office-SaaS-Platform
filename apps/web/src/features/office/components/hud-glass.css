@@ -153,14 +153,21 @@
 .office-hud .office-camera-controls > select { flex: 1; width: 160px; background: var(--glass-control); border-color: var(--glass-field-border); }
 .office-hud .office-status { color: var(--glass-ink); padding: 2px 7px 4px; }
 .office-hud .office-orientation > .office-control { min-height: 44px; font-size: 12px; }
-/* Content windows stay mounted. Inert excludes closing controls immediately. */
+/* Inert excludes closing controls immediately. Keep the absolute box during
+   its visibility/opacity transition; Tailwind's important hidden reset lives
+   in the base layer, so this narrowly scoped override must share that layer. */
+@layer base {
+  .office-hud :is(.office-panel, .office-chat)[hidden] { display: flex !important; }
+}
 .office-hud :is(.office-panel, .office-chat) {
-  width: min(380px, 100%); border-radius: 24px; opacity: 1; transform: translateX(0);
-  transition: opacity var(--glass-panel-time) var(--glass-ease), transform var(--glass-panel-time) var(--glass-ease);
-  transition: opacity var(--glass-panel-time) var(--glass-ease), transform var(--glass-panel-time) var(--glass-ease), display var(--glass-panel-time) allow-discrete;
+  width: min(380px, 100%); border-radius: 24px; opacity: 1; visibility: visible; transform: translateX(0);
+  transition: opacity var(--glass-panel-time) var(--glass-ease), transform var(--glass-panel-time) var(--glass-ease), visibility 0s;
 }
 .office-hud :is(.office-panel, .office-chat):not([hidden]) { z-index: 2; }
-.office-hud :is(.office-panel, .office-chat)[hidden] { z-index: 1; opacity: 0; transform: translateX(6px); pointer-events: none; }
+.office-hud :is(.office-panel, .office-chat)[hidden] {
+  z-index: 1; opacity: 0; visibility: hidden; transform: translateX(6px); pointer-events: none;
+  transition: opacity var(--glass-panel-time) var(--glass-ease), transform var(--glass-panel-time) var(--glass-ease), visibility 0s var(--glass-panel-time);
+}
 @starting-style {
   .office-hud :is(.office-panel, .office-chat):not([hidden]) { opacity: 0; transform: translateX(6px); }
 }
@@ -250,6 +257,7 @@
 @media (prefers-reduced-motion: reduce) {
   .office-hud [data-glass-surface], .office-hud .office-control, .office-hud button, .office-hud .office-dock-selection, .office-hud [data-glass-surface]::before { transition: none; transform: none; }
   .office-hud :is(.office-panel, .office-chat):not([hidden]) { opacity: 1; }
+  .office-hud :is(.office-panel, .office-chat)[hidden] { transition: none; }
   .office-hud [data-glass-surface]::before { opacity: .35; }
   .office-hud .office-dock-selection { transform: translateY(calc(var(--dock-index, 0) * 52px)); }
 }
