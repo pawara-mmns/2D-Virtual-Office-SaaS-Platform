@@ -1,12 +1,13 @@
 import Phaser from "phaser";
 import { mapMarkers, TILE_SIZE, validateOfficeMap } from "../maps/map-data.ts";
-import { officeZoom } from "../engine/camera.ts";
+import { findOfficeTeammate, fitOfficeZoom, isMapPosition, officeZoom, zoomLevels, type CameraCommand, type NavigationState, type OfficeArea } from "../engine/camera.ts";
+import { avatarDisplayName } from "../../avatars/presets.ts";
 import { PlayerAvatar } from "../engine/player-avatar.ts";
 import type { AvatarAppearance } from "../../avatars/presets.ts";
 import { mapVersion, type OfficeNetwork } from "../../../../../../packages/shared/src/protocol.ts";
 import { movement } from "../input/movement.ts";
 
-export type OfficeCallbacks = { onReady(mapVersion?: string): void; onError(): void };
+export type OfficeCallbacks = { onReady(mapVersion?: string): void; onError(): void; onNavigation?(state: NavigationState): void };
 export class OfficeScene extends Phaser.Scene {
   player!: Phaser.Physics.Arcade.Sprite;
   avatar!: PlayerAvatar;
@@ -15,8 +16,19 @@ export class OfficeScene extends Phaser.Scene {
   private mapHeight = 0;
   private network?: OfficeNetwork;
   private remotes = new Map<string, PlayerAvatar>();
+  private areas: (OfficeArea & { x: number; y: number })[] = [];
+  private mode: NavigationState["mode"] = "self";
+  private areaId: string | null = null;
+  private teammate: string | null = null;
+  private fitMode = false;
+  private followZoom = 2;
+  private reducedMotion = false;
+  private highlight?: Phaser.GameObjects.Graphics;
+  private navigationKey = "";
+  private notice = "";
+  private positionsUnavailable = false;
   private readonly movementInput = { x: 0, y: 0, facing: "down" as const };
-  constructor(private readonly pressed: ReadonlySet<string>, private readonly callbacks: OfficeCallbacks, private appearance: AvatarAppearance, private readonly multiplayer = false) { super("Office"); }
+  constructor(private readonly pressed: ReadonlySet<string>, private readonly callbacks: OfficeCallbacks, private appearance: AvatarAppearance, private readonly multiplayer = false, private readonly officeId?: string) { super("Office"); }
   preload() {
     this.load.once(Phaser.Loader.Events.FILE_LOAD_ERROR, () => { this.failed = true; this.callbacks.onError(); });
     this.load.image("office-tiles", "/office/office-tiles.png");
@@ -35,6 +47,10 @@ export class OfficeScene extends Phaser.Scene {
       if (!collision) throw new Error("Office collision unavailable");
       collision.setVisible(false).setCollisionByExclusion([-1]);
       this.mapWidth = data.width * TILE_SIZE; this.mapHeight = data.height * TILE_SIZE;
+      this.areas = mapMarkers(data).filter((marker) => marker.type === "area" && isMapPosition(marker, this.mapWidth, this.mapHeight)).map((marker) => {
+        const name = marker.name === "DEVELOPMENT" ? "Development area" : marker.name.toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase());
+        return { id: marker.name, name, x: marker.x, y: marker.y, description: `View the ${name} marker. Camera only; your avatar stays in place.` };
+      });
       this.physics.world.setBounds(0, 0, this.mapWidth, this.mapHeight);
       const spawn = mapMarkers(data).find((marker) => marker.type === "spawn")!;
       this.avatar = new PlayerAvatar(this, spawn.x, spawn.y, this.appearance);
@@ -45,46 +61,136 @@ export class OfficeScene extends Phaser.Scene {
         this.add.text(marker.x, marker.y, marker.name, { fontFamily: "Courier New, monospace", fontSize: "10px", color: "#344c48", backgroundColor: "#e9e5d2", padding: { x: 5, y: 3 } }).setOrigin(.5).setDepth(1);
       }
       const camera = this.cameras.main;
-      camera.setBounds(0, 0, this.mapWidth, this.mapHeight).startFollow(this.player, true);
       camera.roundPixels = true;
+      this.highlight = this.add.graphics().setDepth(2).lineStyle(3, 0xf8f9f5).strokeRect(-20, -24, 40, 48).lineStyle(1, 0x245743).strokeRect(-20, -24, 40, 48).setVisible(false);
       this.resetZoom();
       this.scale.on(Phaser.Scale.Events.RESIZE, this.resize, this);
-      this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => { this.scale.off(Phaser.Scale.Events.RESIZE, this.resize, this); this.network?.close(); this.remotes.clear(); });
+      this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => { this.scale.off(Phaser.Scale.Events.RESIZE, this.resize, this); camera.stopFollow(); this.teammate = null; this.areaId = null; this.network?.close(); this.remotes.clear(); });
       this.events.once(Phaser.Scenes.Events.DESTROY, () => { this.network?.close(); this.remotes.clear(); });
       this.callbacks.onReady(mapVersion(data));
     } catch { this.failed = true; this.callbacks.onError(); }
   }
-  private resize() { this.setZoom(this.cameras.main.zoom); }
+  private resize() {
+    this.setZoom(this.fitMode ? fitOfficeZoom(this.scale.width, this.scale.height, this.mapWidth, this.mapHeight) : this.cameras.main.zoom);
+    if (this.mode === "overview") this.cameras.main.centerOn(this.mapWidth / 2, this.mapHeight / 2);
+    this.publishNavigation();
+  }
   private setZoom(value: number) {
     if (!this.mapWidth) return;
-    this.cameras.main.setZoom(officeZoom(value, this.scale.width, this.scale.height, this.mapWidth, this.mapHeight));
+    const camera = this.cameras.main;
+    camera.setZoom(officeZoom(value, this.scale.width, this.scale.height, this.mapWidth, this.mapHeight));
+    // Pad only an axis smaller than the viewport: centered letterboxing without
+    // changing physics bounds or pretending that out-of-map space is walkable.
+    const x = Math.max(0, (camera.width / camera.zoom - this.mapWidth) / 2);
+    const y = Math.max(0, (camera.height / camera.zoom - this.mapHeight) / 2);
+    camera.setBounds(-x, -y, this.mapWidth + x * 2, this.mapHeight + y * 2);
   }
-  zoomBy(step: number) { this.setZoom(this.cameras.main.zoom + step); }
-  resetZoom() { this.setZoom(2); }
+  zoomBy(step: number) {
+    if (!this.mapWidth || !Number.isFinite(step) || !step) return;
+    const levels = zoomLevels(this.scale.width, this.scale.height, this.mapWidth, this.mapHeight);
+    const index = levels.indexOf(this.cameras.main.zoom);
+    this.fitMode = false;
+    this.setZoom(levels[Math.max(0, Math.min(levels.length - 1, index + Math.trunc(step)))]!);
+    this.followZoom = Math.max(1, this.cameras.main.zoom);
+    this.publishNavigation();
+  }
+  resetZoom() { this.followZoom = 2; this.followSelf(true); }
+  setReducedMotion(value: boolean) { this.reducedMotion = value; this.cameras?.main?.setLerp(value ? 1 : .18); }
+  private follow(target: { x: number; y: number }, immediate = false) {
+    const camera = this.cameras.main, { scrollX, scrollY } = camera;
+    const snap = immediate || this.reducedMotion;
+    camera.startFollow(target, true, snap ? 1 : .18);
+    // startFollow initializes scroll immediately; restore the old view only
+    // when a short, purposeful transition is allowed by the user's preference.
+    if (!snap) camera.setScroll(scrollX, scrollY);
+  }
+  private selfAvailable() {
+    if (!this.multiplayer) return !!this.player;
+    const snapshot = this.network?.snapshot(), id = this.network?.sessionId(), own = id ? snapshot?.players.get(id) : undefined;
+    return !!this.officeId && snapshot?.officeId === this.officeId && !!own?.connected && isMapPosition(own, this.mapWidth, this.mapHeight);
+  }
+  private followSelf(immediate = false, notice = "") {
+    if (!this.player) return;
+    this.mode = "self"; this.areaId = null; this.teammate = null; this.fitMode = false; this.notice = notice;
+    this.highlight?.setVisible(false); this.setZoom(this.followZoom); this.follow(this.player, immediate); this.publishNavigation();
+  }
+  navigate(command: CameraCommand): boolean {
+    if (!this.player || !this.mapWidth || this.failed) return false;
+    this.notice = "";
+    if (command.type === "self") {
+      if (!this.selfAvailable()) { this.notice = "Your avatar position is unavailable. Reconnect to return to it."; this.publishNavigation(); return false; }
+      this.followSelf(); return true;
+    }
+    if (command.type === "overview") {
+      this.mode = "overview"; this.fitMode = true; this.teammate = null; this.areaId = null; this.highlight?.setVisible(false);
+      this.cameras.main.stopFollow(); this.resize(); return true;
+    }
+    if (command.type === "area") {
+      const area = this.areas.find((area) => area.id === command.id);
+      if (!area) return false;
+      this.mode = "area"; this.fitMode = false; this.teammate = null; this.areaId = area.id;
+      this.setZoom(this.followZoom); this.follow(area); this.highlight?.setPosition(area.x, area.y).setVisible(true); this.publishNavigation(); return true;
+    }
+    const person = findOfficeTeammate(this.network?.snapshot(), this.officeId, this.network?.sessionId(), command.sessionId, this.mapWidth, this.mapHeight);
+    const avatar = this.remotes.get(command.sessionId);
+    if (!person || !avatar) { this.notice = "That teammate's current location is unavailable. Try again when they reconnect."; this.publishNavigation(); return false; }
+    this.mode = "teammate"; this.fitMode = false; this.areaId = null; this.teammate = command.sessionId;
+    this.setZoom(this.followZoom); this.follow(avatar.sprite); this.highlight?.setPosition(avatar.sprite.x, avatar.sprite.y).setVisible(true); this.publishNavigation(); return true;
+  }
+  private location(x: number, y: number) {
+    const area = this.areas.reduce<(typeof this.areas)[number] | undefined>((best, area) => !best || Math.hypot(x - area.x, y - area.y) < Math.hypot(x - best.x, y - best.y) ? area : best, undefined);
+    return area ? `near ${area.name}` : "in this office";
+  }
+  private publishNavigation() {
+    if (!this.mapWidth) return;
+    const snapshot = this.network?.snapshot(), self = this.network?.sessionId();
+    const findable = snapshot ? [...snapshot.players.keys()].filter((id) => this.remotes.has(id) && !!findOfficeTeammate(snapshot, this.officeId, self, id, this.mapWidth, this.mapHeight)).sort() : [];
+    const person = this.teammate ? findOfficeTeammate(snapshot, this.officeId, self, this.teammate, this.mapWidth, this.mapHeight) : undefined;
+    const area = this.areas.find((area) => area.id === this.areaId);
+    const hint = this.notice || (this.mode === "teammate" && person ? `${avatarDisplayName(person.displayName)} · ${this.location(person.x, person.y)}. Camera only.` : area ? area.description : this.mode === "overview" ? `${this.fitMode ? "Office overview" : "Office center"}. Camera only; your avatar has not moved.` : this.selfAvailable() ? "Following your avatar." : "Your avatar position is not available yet.");
+    const levels = zoomLevels(this.scale.width, this.scale.height, this.mapWidth, this.mapHeight), zoom = this.cameras.main.zoom;
+    const state: NavigationState = { mode: this.mode, areaId: this.areaId, fit: this.fitMode, zoom, canZoomIn: zoom < levels.at(-1)!, canZoomOut: zoom > levels[0]!, canReturn: this.mode !== "self" && this.selfAvailable(), findable, hint, areas: this.areas.map(({ id, name, description }) => ({ id, name, description })) };
+    const key = JSON.stringify(state);
+    if (key !== this.navigationKey) { this.navigationKey = key; this.callbacks.onNavigation?.(state); }
+  }
   setAppearance(appearance: AvatarAppearance) { this.appearance = appearance; if (!this.multiplayer) this.avatar?.setAppearance(appearance); }
   setNetwork(network: OfficeNetwork) { this.network = network; }
   update(_time: number, delta: number) {
     if (!this.player || this.failed) return;
     if (this.multiplayer) {
-      const snapshot = this.network?.snapshot(), sessionId = this.network?.sessionId();
+      const current = this.network?.snapshot(), sessionId = this.network?.sessionId();
+      const snapshot = !this.officeId || current?.officeId === this.officeId ? current : undefined;
       const own = sessionId ? snapshot?.players.get(sessionId) : undefined;
-      this.player.setVisible(!!own); this.avatar.label.setVisible(!!own);
-      if (!snapshot || !own) {
+      this.player.setVisible(isMapPosition(own, this.mapWidth, this.mapHeight)); this.avatar.label.setVisible(isMapPosition(own, this.mapWidth, this.mapHeight));
+      if (!snapshot || !own || !isMapPosition(own, this.mapWidth, this.mapHeight)) {
+        this.positionsUnavailable = true;
         for (const avatar of this.remotes.values()) avatar.destroy();
-        this.remotes.clear(); return;
+        this.remotes.clear(); if (this.teammate) this.followSelf(true, "Teammate locations are unavailable. Reconnect to find them."); this.publishNavigation(); return;
       }
+      if (this.positionsUnavailable) { this.positionsUnavailable = false; this.notice = ""; }
       const input = movement(this.pressed, own.direction, this.movementInput);
+      if ((input.x || input.y) && this.mode !== "self") this.followSelf();
       this.network!.input(input.x, input.y);
       this.avatar.renderNetwork(own, delta, true);
       for (const [id, player] of snapshot.players) {
         if (id === sessionId) continue;
+        if (!isMapPosition(player, this.mapWidth, this.mapHeight)) { this.remotes.get(id)?.destroy(); this.remotes.delete(id); continue; }
         let avatar = this.remotes.get(id);
         if (!avatar) { avatar = new PlayerAvatar(this, player.x, player.y, player); this.remotes.set(id, avatar); }
         avatar.renderNetwork(player, delta, false);
       }
       for (const [id, avatar] of this.remotes) if (!snapshot.players.has(id)) { avatar.destroy(); this.remotes.delete(id); }
+      if (this.teammate) {
+        const target = findOfficeTeammate(snapshot, this.officeId, sessionId, this.teammate, this.mapWidth, this.mapHeight);
+        const avatar = this.remotes.get(this.teammate);
+        if (!target || !avatar) this.followSelf(false, "Teammate location unavailable. Following your avatar.");
+        else this.highlight?.setPosition(avatar.sprite.x, avatar.sprite.y);
+      }
+      this.publishNavigation();
       return;
     }
+    if (this.pressed.size && this.mode !== "self") this.followSelf();
     this.avatar.update(this.pressed);
+    this.publishNavigation();
   }
 }

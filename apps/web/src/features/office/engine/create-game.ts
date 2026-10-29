@@ -4,12 +4,16 @@ import { OfficeScene, type OfficeCallbacks } from "../scenes/office-scene.ts";
 import { attachMovementInput } from "../input/movement.ts";
 import { defaultAvatar, type AvatarAppearance } from "../../avatars/presets.ts";
 import type { OfficeNetwork } from "../../../../../../packages/shared/src/protocol.ts";
+import type { CameraCommand } from "./camera.ts";
 
-export function createOfficeGame(host: HTMLElement, callbacks: OfficeCallbacks, appearance: AvatarAppearance = { avatarKey: defaultAvatar, displayName: "You" }, multiplayer = false) {
+export function createOfficeGame(host: HTMLElement, callbacks: OfficeCallbacks, appearance: AvatarAppearance = { avatarKey: defaultAvatar, displayName: "You" }, multiplayer = false, officeId?: string) {
   const input = attachMovementInput(host, () => document.activeElement === host, window);
   const focus = () => host.focus({ preventScroll: true });
   host.addEventListener("pointerdown", focus);
-  const scene = new OfficeScene(input.pressed, callbacks, appearance, multiplayer);
+  const scene = new OfficeScene(input.pressed, callbacks, appearance, multiplayer, officeId);
+  const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
+  const updateMotion = () => scene.setReducedMotion(motion.matches);
+  updateMotion();
   let game: Phaser.Game;
   try {
     game = new Phaser.Game({ type: Phaser.AUTO, parent: host, width: Math.max(1, host.clientWidth), height: Math.max(1, host.clientHeight),
@@ -27,6 +31,7 @@ export function createOfficeGame(host: HTMLElement, callbacks: OfficeCallbacks, 
       fps: { target: 60, min: 30 }, scene: [scene],
     });
   } catch (error) { input.destroy(); host.removeEventListener("pointerdown", focus); throw error; }
+  motion.addEventListener("change", updateMotion);
   const observer = new ResizeObserver(([entry]) => {
     if (game.isBooted && game.canvas && entry && entry.contentRect.width > 0 && entry.contentRect.height > 0) game.scale.resize(Math.round(entry.contentRect.width), Math.round(entry.contentRect.height));
   });
@@ -37,9 +42,10 @@ export function createOfficeGame(host: HTMLElement, callbacks: OfficeCallbacks, 
     setAppearance(appearance: AvatarAppearance) { scene.setAppearance(appearance); },
     setNetwork(network: OfficeNetwork) { scene.setNetwork(network); },
     zoomBy(step: number) { scene.zoomBy(step); }, resetZoom() { scene.resetZoom(); },
+    navigate(command: CameraCommand) { return scene.navigate(command); },
     destroy() {
       if (destroyed) return destroyed;
-      observer.disconnect(); input.destroy(); host.removeEventListener("pointerdown", focus);
+      observer.disconnect(); input.destroy(); host.removeEventListener("pointerdown", focus); motion.removeEventListener("change", updateMotion);
       destroyed = new Promise<void>((resolve) => {
         game.events.once(Phaser.Core.Events.DESTROY, resolve);
         game.destroy(true, false);
