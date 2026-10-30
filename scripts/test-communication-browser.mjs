@@ -25,7 +25,9 @@ async function devtools(endpoint) {
   const command=(method,params={})=>new Promise((resolve,reject)=>{const id=++serial;const timer=setTimeout(()=>reject(new Error(`Browser timeout: ${method}`)),10000);pending.set(id,{resolve,reject,timer});socket.send(JSON.stringify({id,method,params}));});
   return {command,errors,close:()=>socket.close(),async evaluate(expression){const result=await command("Runtime.evaluate",{expression,awaitPromise:true,returnByValue:true});if(result.exceptionDetails)throw new Error(result.exceptionDetails.exception?.description||"Evaluation failed");return result.result.value;}};
 }
-test("office communication composition: responsive panels, focus, drafts, engine and voice ownership",{timeout:nativeRendering?90000:120000,skip:!browser},async()=>{
+// Software rendering includes many viewport screenshots and needs more time
+// on a busy development machine; individual state/command deadlines stay bounded.
+test("office communication composition: responsive panels, focus, drafts, engine and voice ownership",{timeout:nativeRendering?90000:180000,skip:!browser},async()=>{
   const built=await build({bundle:true,write:false,platform:"browser",format:"esm",target:"es2022",jsx:"automatic",logLevel:"silent",tsconfig:resolve(web,"tsconfig.json"),define:{"process.env.NODE_ENV":'"development"',"process.env.NEXT_PUBLIC_REALTIME_URL":'"http://fixture.invalid"'},
     stdin:{resolveDir:web,loader:"tsx",contents:`
       import React,{useState,useEffect,Profiler,StrictMode}from'react';import{createRoot}from'react-dom/client';
@@ -316,7 +318,7 @@ test("office communication composition: responsive panels, focus, drafts, engine
     for(const [width,height] of [[1440,900],[1024,900],[820,1180],[390,844],[320,740]]){
       await command("Emulation.setDeviceMetricsOverride",{width,height,deviceScaleFactor:1,mobile:width<640});await delay(100);
       await command("Emulation.setTouchEmulationEnabled",{enabled:width<640,maxTouchPoints:1});
-      if(width===1440||width===390){await button('Voice participants and audio devices');assert.equal(await evaluate("document.querySelector('.voice-details').open"),true);await command('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape'});assert.equal(await evaluate("document.querySelector('.voice-details').open"),false);}
+      if(width===1440||width===390){await button('Voice participants and audio devices');assert.equal(await evaluate("!!document.querySelector('.voice-details [role=dialog]')"),true);await command('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape'});assert.equal(await evaluate("!!document.querySelector('.voice-details [role=dialog]')"),false);}
       await tap("Settings");await until(()=>evaluate("document.activeElement.getAttribute('aria-label')==='Close Settings'"));
       await tap("Office Chat");await until(()=>evaluate("document.activeElement.id==='office-chat-draft'"));
       await tap("Participants (2)");if(width===320){await delay(80);await snapshot("communication-people-320.png");}await button("Avatar settings");await button("Office Chat");await delay(80);

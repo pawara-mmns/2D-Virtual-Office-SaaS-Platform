@@ -75,7 +75,7 @@ test("actual voice UI: no auto capture, explicit join, cancellation, real SDK de
     assert.equal(await evaluate("voiceFixture.captures"),capturesBefore+1,"Strict Mode replay must not request capture twice");assert.equal(await evaluate("voiceFixture.connects"),connectsBefore+1);
     for(let n=0;n<20;n++)await evaluate("voiceFixture.setState(s=>({...s}));voiceFixture.rerender()");
     assert.equal(await evaluate("voiceFixture.connects"),connectsBefore+1,"Equivalent parent props must not reconnect the Room");
-    await evaluate("document.querySelector('.voice-details').open=true");
+    await evaluate("document.querySelector('.voice-details > button').click()");await until(()=>evaluate("!!document.querySelector('.voice-details [role=dialog]')"));
     assert.equal(await evaluate("document.querySelector('.voice-details ul').textContent.includes('Taylor (you)') && document.querySelector('.voice-details ul').textContent.includes('Morgan')"),true,"Voice uses the authorized participant profile names");
     assert.equal(await evaluate("document.querySelector('.voice-details ul').textContent.includes('@')"),false,"Email-like participant names use a private fallback");
     await evaluate("voiceFixture.activeRoom.state='reconnecting';voiceFixture.activeRoom.emit('connectionStateChanged','reconnecting')");
@@ -98,7 +98,7 @@ test("actual voice UI: no auto capture, explicit join, cancellation, real SDK de
       await until(()=>evaluate("!voiceFixture.activeRoom.listeners('disconnected').includes(voiceFixture.disconnectObserver)"));
     }
     await evaluate("voiceFixture.mode='invalid-token';document.querySelector('button').click()");await until(()=>evaluate("document.querySelector('[role=alert]')?.textContent.includes('rejected voice authorization')"));
-    await evaluate("voiceFixture.controls()");await until(()=>evaluate("!!document.querySelector('select[aria-label=\"Microphone input device\"]')"));
+    await evaluate("voiceFixture.controls()");await until(()=>evaluate("!!document.querySelector('.voice-details > button')"));await evaluate("document.querySelector('.voice-details > button').click()");await until(()=>evaluate("!!document.querySelector('select[aria-label=\"Microphone input device\"]')"));
     const enumerations=await evaluate("voiceFixture.enumerations");
     for(let n=0;n<20;n++)await evaluate("voiceFixture.rerender()");
     assert.ok(await evaluate("voiceFixture.enumerations")<=enumerations+2,"Rerenders must not recreate device observers");

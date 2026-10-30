@@ -1,5 +1,6 @@
 import type { AvatarAppearance, AvatarDirection } from "./avatars.ts";
 import type { Availability } from "./chat.ts";
+import type { ProximityState, BubbleRef } from './proximity.ts';
 export const TICK_MS = 50;
 export const ENVIRONMENT_CHANGED_CODE = 4052;
 export const AUTH_CHECK_MS = 10_000;
@@ -14,6 +15,9 @@ export type OfficeSnapshot = { officeId: string; mapVersion: string; players: Ma
 export type Participant = Pick<PlayerSnapshot, "sessionId" | "userId" | "displayName" | "avatarKey" | "connected" | "availability"> & { isSelf?: boolean };
 export type Presence = { status: "connecting" | "online" | "reconnecting" | "offline" | "denied"; count: number; notice: string; reload?: boolean };
 export type OfficeNetwork = {
+  proximity?():ProximityState|null;
+  enableProximity?(enabled:boolean):boolean;
+  lockBubble?(ref:BubbleRef,locked:boolean):boolean;
   snapshot(): OfficeSnapshot | undefined;
   sessionId(): string | undefined;
   input(x: number, y: number): void;
