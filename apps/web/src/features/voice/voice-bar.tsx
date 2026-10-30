@@ -2,9 +2,10 @@
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { VoiceAdmission, VoiceZoneState } from "../../../../../packages/shared/src/voice.ts";
+import type { AudioOwner } from './audio-owner';
 const VoiceSession = dynamic(() => import("./voice-session"),{ ssr: false, loading: () => <p role="status">Preparing voice controls…</p> });
 
-export function VoiceBar({ officeId, state, leave }: { officeId: string; state: VoiceZoneState; leave(): void }) {
+export function VoiceBar({ officeId, state, leave,owner }: { officeId: string; state: VoiceZoneState; leave(): void;owner?:AudioOwner }) {
   const [ready, setReady] = useState(false);
   const [ended, setEnded] = useState(false);
   const [joining,setJoining] = useState(false), [admission,setAdmission] = useState<VoiceAdmission | null>(null), [error,setError] = useState("");
@@ -14,10 +15,10 @@ export function VoiceBar({ officeId, state, leave }: { officeId: string; state: 
     // Only the surviving setup publishes readiness on the next browser frame.
     // Strict Mode cancels the discarded setup before it can enable Join.
     const frame = requestAnimationFrame(() => { if (mounted.current) setReady(true); });
-    return () => { cancelAnimationFrame(frame); mounted.current = false; request.current?.abort(); leave(); };
-  },[leave]);
-  const stop = useCallback((message = "") => { console.info("Voice lifecycle.",{event:"stop_requested",cause:message ? "failure" : "user_leave",at:new Date().toISOString()}); request.current?.abort(); active.current = false; leave(); setAdmission(null); setJoining(false); setEnded(true); setError(message); },[leave]);
-  const leaveSession = useCallback(() => stop(),[stop]);
+    return () => { cancelAnimationFrame(frame); mounted.current = false; request.current?.abort(); owner?.stop(); leave(); };
+  },[leave,owner]);
+  const stop = useCallback((message = "") => { console.info("Voice lifecycle.",{event:"stop_requested",cause:message ? "failure" : "user_leave",at:new Date().toISOString()}); request.current?.abort(); active.current = false; owner?.stop(); leave(); setAdmission(null); setJoining(false); setEnded(true); setError(message); },[leave,owner]);
+  const leaveSession = useCallback(() => {owner?.stop();stop();},[stop,owner]);
   const join = async () => {
     if (!mounted.current || active.current) return;
     active.current = true; setJoining(true); setEnded(false); setError("");
@@ -40,6 +41,6 @@ export function VoiceBar({ officeId, state, leave }: { officeId: string; state: 
       {!admission && <div className="flex gap-2"><button className="office-control" disabled={!ready || !state.configured || joining} onClick={() => void join()}>{joining ? "Authorizing voice…" : "Join Voice"}</button>{joining && <button className="office-control" onClick={() => stop()}>Cancel</button>}</div>}
     </div>
     {error && <p role="alert" className="ui-notice ui-notice-error mt-2">{error}</p>}
-    {admission && <VoiceSession admission={admission} leave={leaveSession} failed={stop} />}
+    {admission && <VoiceSession admission={admission} leave={leaveSession} failed={stop} owner={owner} />}
   </section>;
 }

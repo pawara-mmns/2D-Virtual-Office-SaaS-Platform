@@ -1,12 +1,19 @@
 "use client";
 import { HudIcon } from "@/components/hud-icon";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Room, RoomEvent, Track, createLocalAudioTrack, supportsAudioOutputSelection, setLogLevel, LogLevel, type LocalAudioTrack, type Participant } from "livekit-client";
-import { RoomContext, RoomAudioRenderer, StartAudio, TrackToggle, useConnectionState, useParticipants, useMediaDeviceSelect, useIsSpeaking, useParticipantInfo, useLocalParticipant } from "@livekit/components-react";
+import { RoomContext, RoomAudioRenderer, StartAudio, TrackToggle, useConnectionState, useParticipants, useMediaDeviceSelect, useIsSpeaking, useParticipantInfo, useLocalParticipant, useStartAudio } from "@livekit/components-react";
 import type { VoiceAdmission } from "../../../../../packages/shared/src/voice.ts";
 import { avatarBaseFrame, safeAvatarKey, avatarDisplayName } from "../avatars/presets";
 import { createVoiceMount, startVoice, voiceError, type VoiceStage } from "./lifecycle";
 import { voiceDisconnect } from "./disconnect";
+import type { AudioOwner } from "./audio-owner";
+import { VoicePopover } from './voice-popover';
+
+function ProximityPlayback() {
+  const { mergedProps } = useStartAudio({ props: { className:'office-control', title:'Enable audio playback', 'aria-label':'Enable audio playback' } });
+  return <button {...mergedProps}><HudIcon name="audio"/></button>;
+}
 
 function Devices({ kind, error }: { kind: "audioinput" | "audiooutput"; error(message: string): void }) {
   const onError = useCallback(() => error("Device selection failed. Check browser permissions and reconnect the device."),[error]);
@@ -26,45 +33,49 @@ function VoicePerson({ person, reconnecting }: { person: Participant; reconnecti
     <div className="min-w-0"><p className="truncate text-xs font-medium">{displayName}{person.isLocal ? " (you)" : ""}</p><p className="text-xs text-muted">{reconnecting ? "Reconnecting" : "Connected"} · {publication && !publication.isMuted ? "Mic on" : "Mic muted"}{speaking ? " · Speaking" : ""}</p></div>
   </li>;
 }
-export function Controls({ leave, error }: { leave(): void; error(message: string): void }) {
+export function Controls({ leave, error, owner, conversation=false, options }: { leave(): void; error(message: string): void; owner?: AudioOwner; conversation?:boolean; options?:ReactNode }) {
   const connection = useConnectionState();
   const { isMicrophoneEnabled } = useLocalParticipant();
   const onDeviceError = useCallback((failure: Error) => error(voiceError(failure)),[error]);
   const people = useParticipants({ updateOnlyOn:[RoomEvent.TrackMuted,RoomEvent.TrackUnmuted,RoomEvent.TrackPublished,RoomEvent.TrackUnpublished,RoomEvent.ParticipantMetadataChanged] });
   return <>
-    <div className="voice-session-controls">
+    <div className="voice-session-controls" data-conversation={conversation}>
       <div className="voice-session-summary" title={connection === "connected" ? "Voice connected" : connection === "disconnected" ? "Voice disconnected" : "Voice connecting or reconnecting"}>
-      <span role="status" data-connection={connection} className="mr-2 text-xs">{connection === "connected" ? "Voice connected" : connection === "disconnected" ? "Voice disconnected" : connection === "reconnecting" || connection === "signalReconnecting" ? "Voice reconnecting…" : "Voice connecting…"}</span>
+      <span role="status" data-connection={connection} className="voice-connection-label">{conversation ? <><span className="sr-only">Voice </span>{connection==='connected'?'Connected':connection==='disconnected'?'Disconnected':'Reconnecting'}</> : connection === "connected" ? "Voice connected" : connection === "disconnected" ? "Voice disconnected" : connection === "reconnecting" || connection === "signalReconnecting" ? "Voice reconnecting…" : "Voice connecting…"}</span>
       <span className="text-xs text-muted">{isMicrophoneEnabled ? "Mic on" : "Mic muted"}</span>
       </div>
       <div className="voice-session-actions">
       {/* This SDK version replaces the button's disabled prop with its own
           pending state. A native fieldset also enforces connection readiness. */}
-      <fieldset disabled={connection !== "connected"} className="m-0 min-w-0 border-0 p-0"><legend className="sr-only">Microphone control</legend><TrackToggle source={Track.Source.Microphone} showIcon={false} className="office-control" title={isMicrophoneEnabled ? "Mute microphone" : "Unmute microphone"} aria-label={isMicrophoneEnabled ? "Mute microphone" : "Unmute microphone"} onDeviceError={onDeviceError}><HudIcon name={isMicrophoneEnabled ? "microphone" : "muted"} /><span className="sr-only">{isMicrophoneEnabled ? "Mute microphone" : "Unmute microphone"}</span></TrackToggle></fieldset>
-      <button className="office-control" aria-label="Leave Voice" title="Leave Voice" onClick={leave}><HudIcon name="exit" /><span className="sr-only">Leave Voice</span></button>
-      <StartAudio className="office-control" label="Enable audio playback" />
+      {!conversation&&<fieldset disabled={connection !== "connected"} className="m-0 min-w-0 border-0 p-0"><legend className="sr-only">Microphone control</legend>{owner?<button className="office-control voice-mic-control" data-muted={!isMicrophoneEnabled} aria-label={isMicrophoneEnabled?'Mute microphone':'Unmute microphone'} title={isMicrophoneEnabled?'Mute microphone':'Unmute microphone'} onClick={()=>{void owner.setMuted(isMicrophoneEnabled).catch(()=>error('Microphone change failed. Leave and enable voice again.'));}}><HudIcon name={isMicrophoneEnabled?'microphone':'muted'}/><span className="sr-only">{isMicrophoneEnabled?'Mute microphone':'Unmute microphone'}</span></button>:<TrackToggle source={Track.Source.Microphone} showIcon={false} className="office-control" title={isMicrophoneEnabled ? "Mute microphone" : "Unmute microphone"} aria-label={isMicrophoneEnabled ? "Mute microphone" : "Unmute microphone"} onDeviceError={onDeviceError}><HudIcon name={isMicrophoneEnabled ? "microphone" : "muted"} /><span className="sr-only">{isMicrophoneEnabled ? "Mute microphone" : "Unmute microphone"}</span></TrackToggle>}</fieldset>}
+      {!conversation&&<button className="office-control" aria-label="Leave Voice" title="Leave Voice" onClick={leave}><HudIcon name="exit" /><span className="sr-only">Leave Voice</span></button>}
+      {conversation ? <ProximityPlayback/> : <StartAudio className="office-control" label="Enable audio playback" />}
       </div>
     </div>
-    <details className="voice-details mt-2" onKeyDown={event => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus(); } }}><summary className="cursor-pointer text-xs font-medium" aria-label="Voice participants and audio devices" title="Voice participants and audio devices"><HudIcon name="audio" /><span className="sr-only">Voice participants ({people.length}) and audio devices</span></summary>
-      <ul className="my-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{people.map((person) => <VoicePerson key={person.identity} person={person} reconnecting={connection !== "connected"} />)}</ul>
+    <VoicePopover label={conversation?'Voice settings':'Voice participants and audio devices'} icon={conversation?'settings':'audio'} className="voice-details">
+      {options}
+      <h3 className="voice-section-label">Participants · {people.length}</h3>
+      <ul className="voice-people">{people.map((person) => <VoicePerson key={person.identity} person={person} reconnecting={connection !== "connected"} />)}</ul>
       <div className="flex flex-wrap gap-3"><Devices kind="audioinput" error={error} />{supportsAudioOutputSelection() ? <Devices kind="audiooutput" error={error} /> : <p className="text-xs text-muted">Output device selection is managed by this browser or operating system.</p>}</div>
-    </details>
+    </VoicePopover>
   </>;
 }
-export default function VoiceSession({ admission,leave,failed }: { admission: VoiceAdmission; leave(): void; failed(message: string): void }) {
-  const [room] = useState(() => new Room({ disconnectOnPageLeave:true,stopLocalTrackOnUnpublish:true }));
-  const [mount] = useState(createVoiceMount);
+export default function VoiceSession({ admission,leave,failed,owner,ready,conversation=false,options }: { admission: VoiceAdmission; leave(): void; failed(message: string): void;owner?:AudioOwner;ready?():void;conversation?:boolean;options?:ReactNode }) {
+  const [room] = useState(() => new Room({ disconnectOnPageLeave:true,stopLocalTrackOnUnpublish:!owner }));
+  const [mount] = useState(()=>owner?.mount??createVoiceMount());
   const [connected,setConnected] = useState(false), [notice,setNotice] = useState("");
   const [stage,setStage] = useState<VoiceStage>("microphone");
   const { url,token } = admission;
-  const callbacks = useRef({ leave,failed });
-  useEffect(() => { callbacks.current = { leave,failed }; },[leave,failed]);
+  const callbacks = useRef({ leave,failed,ready });
+  useEffect(() => { callbacks.current = { leave,failed,ready }; },[leave,failed,ready]);
   useEffect(() => {
     // SDK error objects can include signaling details. Use fixed UI categories.
     setLogLevel(LogLevel.silent);
     let active = true, established = false;
     const began = performance.now();
     let participantId: string | undefined;
+    let captured: LocalAudioTrack | undefined;
+    const onTrackEnded=()=>{if(active)setNotice('Microphone disconnected. Select another input, or leave and rejoin.');};
     const diagnostic = (event: string, detail: { reason?: string; state?: string } = {}) => {
       console.info("Voice lifecycle.",{ event,at:new Date().toISOString(),elapsedMs:Math.round(performance.now()-began),participantId,...detail });
     };
@@ -84,10 +95,11 @@ export default function VoiceSession({ admission,leave,failed }: { admission: Vo
     room.on(RoomEvent.Disconnected,onDisconnect); room.on(RoomEvent.MediaDevicesError,onDevicesError);
     room.on(RoomEvent.TrackSubscriptionFailed,onSubscriptionError);
     room.on(RoomEvent.ConnectionStateChanged,onConnectionState);
-    const mounting = mount(() => startVoice({
+    const mounting = mount(() => {const scope=owner?.scope();return startVoice({
       async capture() {
+        if(scope){if(!conversation)await scope.capture();return {stop:()=>scope.pause()};}
         const track = await createLocalAudioTrack({ echoCancellation:true,noiseSuppression:true,autoGainControl:true });
-        track.mediaStreamTrack.addEventListener("ended",() => { if (active) setNotice("Microphone disconnected. Select another input, or leave and rejoin."); },{ once:true });
+        captured=track;track.mediaStreamTrack.addEventListener('ended',onTrackEnded,{once:true});
         return track;
       },
       async connect(signalConnected) {
@@ -95,20 +107,23 @@ export default function VoiceSession({ admission,leave,failed }: { admission: Vo
         try { await room.connect(url,token,{ autoSubscribe:true,websocketTimeout:8000,peerConnectionTimeout:8000 }); }
         finally { room.off(RoomEvent.SignalConnected,signalConnected); }
       },
-      async publish(track) { await room.localParticipant.publishTrack(track as LocalAudioTrack,{ source:Track.Source.Microphone }); },
-      disconnect: () => room.disconnect(true),
+      async publish(track) {
+        if(scope){await scope.attach({async publish(active){return room.localParticipant.publishTrack(active,{source:Track.Source.Microphone});},async unpublish(active){return room.localParticipant.unpublishTrack(active,false);}});}
+        else await room.localParticipant.publishTrack(track as LocalAudioTrack,{ source:Track.Source.Microphone });
+      },
+      disconnect: () => room.disconnect(!owner),
     },() => {
       established = true;
       // The server mints a random UUID identity, unrelated to a user's ID/email.
       const identity = room.localParticipant.identity;
       if (/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(identity)) participantId = identity;
-      if (active) { diagnostic("connected"); setConnected(true); }
-    },(message) => { if (active) callbacks.current.failed(message); },{onStage(next) { if (active) { setStage(next); console.info("Voice connection stage.",{stage:next,at:new Date().toISOString()}); } }}));
-    return () => { diagnostic("client_cleanup"); active = false; room.off(RoomEvent.Disconnected,onDisconnect); room.off(RoomEvent.MediaDevicesError,onDevicesError); room.off(RoomEvent.TrackSubscriptionFailed,onSubscriptionError); room.off(RoomEvent.ConnectionStateChanged,onConnectionState); void mounting.dispose(); };
-  },[room,url,token,mount]);
+      if (active) { diagnostic("connected"); setConnected(true);callbacks.current.ready?.(); }
+    },(message) => { if (active) callbacks.current.failed(message); },{onStage(next) { if (active) { setStage(next); console.info("Voice connection stage.",{stage:next,at:new Date().toISOString()}); } }});});
+    return () => { diagnostic("client_cleanup"); active = false; captured?.mediaStreamTrack.removeEventListener('ended',onTrackEnded);room.off(RoomEvent.Disconnected,onDisconnect); room.off(RoomEvent.MediaDevicesError,onDevicesError); room.off(RoomEvent.TrackSubscriptionFailed,onSubscriptionError); room.off(RoomEvent.ConnectionStateChanged,onConnectionState); void mounting.dispose(); };
+  },[room,url,token,mount,owner,conversation]);
   return <RoomContext.Provider value={room}>
     <RoomAudioRenderer />
-    {connected ? <Controls leave={leave} error={setNotice} /> : <div className="mt-3 flex flex-wrap items-center gap-3"><p role="status" className="text-xs">{stage === "microphone" ? "Waiting for microphone permission…" : stage === "signaling" ? "Connecting to the voice service…" : stage === "media" ? "Establishing the audio connection…" : "Starting your microphone…"}</p><button className="office-control" onClick={leave}>Cancel voice</button></div>}
+    {connected ? <Controls leave={leave} error={setNotice} owner={owner} conversation={conversation} options={options} /> : conversation ? <p role="status" className="sr-only">{stage === 'microphone' ? 'Waiting for microphone permission.' : 'Connecting proximity voice automatically.'}</p> : <div className="mt-3 flex flex-wrap items-center gap-3"><p role="status" className="text-xs">{stage === "microphone" ? "Waiting for microphone permission…" : stage === "signaling" ? "Connecting to the voice service…" : stage === "media" ? "Establishing the audio connection…" : "Starting your microphone…"}</p><button className="office-control" onClick={leave}>Cancel voice</button></div>}
     {notice && <p role="alert" className="ui-notice ui-notice-error mt-2">{notice}</p>}
   </RoomContext.Provider>;
 }
