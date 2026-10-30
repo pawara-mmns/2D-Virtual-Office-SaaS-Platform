@@ -94,6 +94,10 @@ test("office communication composition: responsive panels, focus, drafts, engine
       await command("Input.dispatchMouseEvent",{type:"mouseWheel",...point,deltaX:0,deltaY,modifiers});
     };
     console.info(JSON.stringify({scope:"initial browser media and resource hints",hints:await evaluate("({cores:navigator.hardwareConcurrency,memory:navigator.deviceMemory,forced:matchMedia('(forced-colors: active)').matches,transparency:matchMedia('(prefers-reduced-transparency: reduce)').matches,slow:matchMedia('(update: slow)').matches,glass:document.querySelector('.office-hud').dataset.glass})")}));
+    // Optical checks exercise the explicit user preference. Auto may correctly
+    // choose Solid on Brave's resource hints; do not spoof device capabilities.
+    const selectMaterial=async(value,close='Office Chat')=>{await button('Settings');await evaluate(`(()=>{const s=document.getElementById('office-hud-material');s.value=${JSON.stringify(value)};s.dispatchEvent(new Event('change',{bubbles:true}))})()`);await button(close);};
+    await selectMaterial('glass','Close Settings');
     await until(()=>evaluate("document.querySelector('.office-hud').dataset.glass==='enhanced'"));
     assert.equal(await evaluate("communicationFixture.listenerCount('wheel')"),1,"One native wheel owner after Strict Mode replay");
     assert.equal(await evaluate("communicationFixture.listenerCount('pointermove')"),1,"One delegated reflection owner");
@@ -281,14 +285,13 @@ test("office communication composition: responsive panels, focus, drafts, engine
     await button("Office Chat");
     const measure=label=>evaluate(`(async()=>{const g=communicationFixture.engine.game,times=[];let previous=performance.now();const count=()=>{const now=performance.now();times.push(now-previous);previous=now};g.events.on('poststep',count);const start=performance.now();await new Promise(r=>setTimeout(r,1200));g.events.off('poststep',count);const seconds=(performance.now()-start)/1000;return{label:${JSON.stringify(label)},frames:times.length,seconds,fps:Math.round(times.length/seconds*10)/10,p95FrameMs:times.toSorted((a,b)=>a-b)[Math.floor(times.length*.95)]}})()`);
     const glassPerformance=await measure(nativeRendering?"glass with browser-selected renderer + chat + simulated voice":"forced glass on SwiftShader + chat + simulated voice");assert.ok(glassPerformance.frames>0);
-    const toggleSolid=async()=>{await button("Settings");await evaluate("(()=>{const s=document.getElementById('office-hud-material');s.value=s.value==='solid'?'auto':'solid';s.dispatchEvent(new Event('change',{bubbles:true}))})()");await button("Office Chat");};
-    await toggleSolid();await until(()=>evaluate("document.querySelector('.office-hud').dataset.glass==='solid'"));
+    await selectMaterial('solid');await until(()=>evaluate("document.querySelector('.office-hud').dataset.glass==='solid'"));
     assert.equal(await evaluate("getComputedStyle(document.querySelector('.office-chat')).backdropFilter"),"none");
     assert.equal(await evaluate("communicationFixture.listenerCount('pointermove')"),0);
     await snapshot("glass-solid-desktop.png");const solidPerformance=await measure("solid HUD + chat + simulated voice");
-    await toggleSolid();await until(()=>evaluate("document.querySelector('.office-hud').dataset.glass==='enhanced'"));
+    await selectMaterial('glass');await until(()=>evaluate("document.querySelector('.office-hud').dataset.glass==='enhanced'"));
     if(!nativeRendering)assert.equal(await evaluate("communicationFixture.detectedReducedEffects"),true,"Actual SwiftShader renderer requests reduced effects");
-    await evaluate(`communicationFixture.applyRendererPolicy(${nativeRendering?"true":"communicationFixture.detectedReducedEffects"})`);
+    await selectMaterial('auto');await evaluate(`communicationFixture.applyRendererPolicy(${nativeRendering?"true":"communicationFixture.detectedReducedEffects"})`);
     await until(()=>evaluate("document.querySelector('.office-hud').dataset.glass==='solid' && communicationFixture.listenerCount('pointermove')===0"));
     await snapshot("glass-auto-software-desktop.png");
     const automaticFallbackPerformance=await measure(nativeRendering?"reduced-effects policy + chat + simulated voice":"automatic software-renderer fallback + chat + simulated voice");
@@ -300,7 +303,8 @@ test("office communication composition: responsive panels, focus, drafts, engine
     await media();await until(()=>evaluate("document.querySelector('.office-hud').dataset.glass==='enhanced'"));
     await button("Settings");await evaluate("(()=>{const s=document.getElementById('office-hud-material');s.value='auto';s.dispatchEvent(new Event('change',{bubbles:true}))})()");await button("Office Chat");
     await until(()=>evaluate("document.querySelector('.office-hud').dataset.glass==='solid'"));
-    await evaluate("communicationFixture.applyRendererPolicy(false)");await until(()=>evaluate("document.querySelector('.office-hud').dataset.glass==='enhanced'"));
+    const resourceLimited=await evaluate("(navigator.hardwareConcurrency>0&&navigator.hardwareConcurrency<=4)||(typeof navigator.deviceMemory==='number'&&navigator.deviceMemory<=4)");
+    await evaluate("communicationFixture.applyRendererPolicy(false)");await until(()=>evaluate("document.querySelector('.office-hud').dataset.glass==="+JSON.stringify(resourceLimited?'solid':'enhanced')));
     await evaluate(`${scene}.navigate({type:'overview'});${scene}.zoomBy(1)`);await delay(80);
     const cameraSmoothness=await evaluate(`(async()=>{const s=${scene},g=communicationFixture.engine.game,samples=[],before={x:s.cameras.main.midPoint.x,y:s.cameras.main.midPoint.y};const sample=()=>samples.push(s.cameras.main.zoom);g.events.on('poststep',sample);const events=communicationFixture.navigationEvents;document.querySelector('.office-stage').dispatchEvent(new WheelEvent('wheel',{deltaY:-100,bubbles:true,cancelable:true}));const began=performance.now();for(let i=0;i<60&&s.wheelZoomTarget!==null;i++)await new Promise(r=>setTimeout(r,50));g.events.off('poststep',sample);return{samples,durationMs:performance.now()-began,before,after:{x:s.cameras.main.midPoint.x,y:s.cameras.main.midPoint.y},navigationEvents:communicationFixture.navigationEvents-events}})()`);
     assert.ok(new Set(cameraSmoothness.samples).size>3,"Normal wheel zoom interpolates over multiple frames");

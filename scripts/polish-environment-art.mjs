@@ -1,4 +1,5 @@
-﻿// Original, deterministic pixel drawing. Every asset keeps the shared 32px scale.
+import { drawArchitectureAtlas } from './architecture-art.mjs';
+// Original, deterministic pixel drawing. Every asset keeps the shared 32px scale.
 export function polishEnvironmentAtlas(art,theme) {
   const rgb=h=>h.match(/../g).map(v=>parseInt(v,16));
   const shade=(hex,d)=>rgb(hex).map(v=>Math.min(255,Math.max(0,v+d))).map(v=>v.toString(16).padStart(2,'0')).join('');
@@ -65,4 +66,5 @@ export function polishEnvironmentAtlas(art,theme) {
   // Credenza shelving stays waist-height: volumes, binders and discreet handles.
   clear(0,160,96,32);r(3,163,90,26,edge);r(6,164,84,20,shade(wood,-26));
   for(let i=0;i<19;i++){const xx=9+i*4,color=[fabric,shade(wood,22),wall,shade(fabric,-17)][i%4];r(xx,166+i%2,3,15-i%2,color);l(xx,170,3,shade(color,18));}l(5,184,86,shade(wood,21));r(8,189,4,3,edge);r(84,189,4,3,edge);
+  drawArchitectureAtlas(art,theme);
 }

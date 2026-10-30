@@ -1,6 +1,7 @@
+import { environmentAtlas } from './environment/assets.ts';
 export type TileLayer = { type: "tilelayer"; name: string; width: number; height: number; data: number[] };
 export type Marker = { name: string; type: string; x: number; y: number; width?: number; height?: number };
-export type OfficeMap = { width: number; height: number; tilewidth: number; tileheight: number; layers: (TileLayer | { type: "objectgroup"; name: string; objects: Marker[] })[] };
+export type OfficeMap = { width: number; height: number; tilewidth: number; tileheight: number; tilesets?: {firstgid:number;tilecount:number;columns:number;tilewidth:number;tileheight:number;imagewidth:number;imageheight:number}[]; layers: (TileLayer | { type: "objectgroup"; name: string; objects: Marker[] })[] };
 export const TILE_SIZE = 32;
 export const PLAYER_SPEED = 120;
 
@@ -21,9 +22,17 @@ export function validateOfficeMap(value: unknown): OfficeMap {
   if (!value || typeof value !== "object") throw new Error("Invalid office map");
   const map = value as OfficeMap;
   if (!Number.isInteger(map.width) || !Number.isInteger(map.height) || map.width < 4 || map.height < 4 || map.width > 128 || map.height > 128 || map.tilewidth !== TILE_SIZE || map.tileheight !== TILE_SIZE || !Array.isArray(map.layers)) throw new Error("Invalid office dimensions");
-  for (const name of ["Floor", "Architecture", "Furniture", "Collision"]) {
+  let tileLimit=128;
+  if(map.tilesets){
+    const atlas=map.tilesets[0];
+    if(map.tilesets.length!==1||!atlas||atlas.firstgid!==1||atlas.columns!==16||atlas.tilewidth!==32||atlas.tileheight!==32||atlas.imagewidth!==512||!((atlas.tilecount===128&&atlas.imageheight===256)||(atlas.tilecount===environmentAtlas.tileCount&&atlas.imageheight===environmentAtlas.height)))throw Error('Invalid office atlas');
+    tileLimit=atlas.tilecount;
+  }
+  const names=["Floor", "Architecture", "Furniture", "Collision"];
+  if(map.layers.some(layer=>layer.name==='Details'))names.push('Details');
+  for (const name of names) {
     const layer = tileLayer(map, name);
-    if (layer.width !== map.width || layer.height !== map.height || !Array.isArray(layer.data) || layer.data.length !== map.width * map.height || layer.data.some((tile) => !Number.isInteger(tile) || tile < 0 || tile > 128)) throw new Error("Invalid office tiles");
+    if (layer.width !== map.width || layer.height !== map.height || !Array.isArray(layer.data) || layer.data.length !== map.width * map.height || layer.data.some((tile) => !Number.isInteger(tile) || tile < 0 || tile > tileLimit)) throw new Error("Invalid office tiles");
     if (name === "Collision" && layer.data.some((tile) => tile !== 0 && tile !== 1)) throw new Error("Collision tiles must be binary");
   }
   for (let x = 0; x < map.width; x++) if (!blocked(map, x, 0) || !blocked(map, x, map.height - 1)) throw new Error("Open office boundary");

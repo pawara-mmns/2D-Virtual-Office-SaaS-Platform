@@ -39,7 +39,7 @@ test('10,800 finite combinations have distinct visual recipes without materializ
     const map=composeEnvironment(config),paint=environmentPaint(map,config);versions.add(mapVersion(map));
     // Exclude the configuration metadata; uniqueness must come from visible
     // atlas selection, actual tile placement, rug geometry and branding accent.
-    const visible={theme:config.theme,layers:map.layers.filter(l=>['Floor','Architecture','Furniture','Branding'].includes(l.name)),rugs:paint.rugs,accent:paint.accent};
+    const visible={theme:config.theme,layers:map.layers.filter(l=>['Floor','Architecture','Furniture','Details','Branding'].includes(l.name)),rugs:paint.rugs,accent:paint.accent};
     recipes.add(createHash('sha256').update(JSON.stringify(visible)).digest('hex'));
   }
   assert.equal(environmentCombinations,10800);assert.equal(recipes.size,10800);assert.equal(versions.size,10800);console.info(JSON.stringify({environmentCombinations:recipes.size,totalValidationMs:Math.round(performance.now()-began),scope:'deterministic composition and visual recipes, not frame-rate benchmarking'}));

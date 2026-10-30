@@ -1,4 +1,6 @@
 import { polishEnvironmentAtlas } from './polish-environment-art.mjs';
+import { drawExpandedOfficeAssets } from './expanded-office-art.mjs';
+import { environmentAtlas } from '../packages/shared/src/environment/assets.ts';
 // Build five small shared atlases, not a map image per combination.
 import { mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -8,7 +10,7 @@ export function generateEnvironmentAtlases(base) {
   mkdirSync(fileURLToPath(new URL('../apps/web/public/office/environments/', import.meta.url)),{recursive:true});
   const rgb=h=>h.match(/../g).map(v=>parseInt(v,16));
   for(const theme of themes){
-    const art=picture(512,256);base.pixels.copy(art.pixels);
+    const art=picture(environmentAtlas.width,environmentAtlas.height);base.pixels.copy(art.pixels);
     const wood=rgb(theme.wood),fabric=rgb(theme.fabric),wall=rgb(theme.wall);
     for(let y=0;y<256;y++)for(let x=0;x<512;x++){
       const i=(y*512+x)*4,[r,g,b,a]=art.pixels.subarray(i,i+4);if(!a)continue;
@@ -34,6 +36,7 @@ export function generateEnvironmentAtlases(base) {
     art.rect(480,169,23,11,'5f737b');art.rect(483,171,17,6,'b4c5c8');art.rect(491,166,3,7,'d3e0df');
     art.rect(454,191,23,12,shift(theme.wood,-18));art.rect(480,191,25,12,shift(theme.wood,-18));art.rect(474,194,2,5,'e9e7dd');art.rect(482,194,2,5,'e9e7dd');
     polishEnvironmentAtlas(art,theme);
+    drawExpandedOfficeAssets(art,theme);
     art.png('environments/'+theme.id+'.png');
   }
 }
