@@ -51,7 +51,7 @@ test("actual voice UI: no auto capture, explicit join, cancellation, real SDK de
   const child=spawn(browser,["--headless=new","--remote-debugging-port=0",`--user-data-dir=${profile}`,"--no-first-run","--no-default-browser-check","--window-size=1280,900","about:blank"],{stdio:"ignore",windowsHide:true});
   let tools;
   try{
-    await until(()=>existsSync(resolve(profile,"DevToolsActivePort")));const port=readFileSync(resolve(profile,"DevToolsActivePort"),"utf8").split("\n")[0];
+    let port;await until(()=>{try{port=readFileSync(resolve(profile,"DevToolsActivePort"),"utf8").split("\n")[0];return /^\d+$/.test(port)}catch{return false}});
     const tabs=await(await fetch(`http://127.0.0.1:${port}/json`)).json();tools=await devtools(tabs.find((tab)=>tab.type==="page").webSocketDebuggerUrl);
     await tools.command("Runtime.enable");await tools.command("Page.enable");await tools.command("Page.navigate",{url:`http://127.0.0.1:${server.address().port}`});
     const evaluate=tools.evaluate;await until(()=>evaluate("!!window.voiceFixture?.setState && !!document.querySelector('button')"));

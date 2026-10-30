@@ -69,8 +69,7 @@ test("actual Chromium chat component: history, plain text, retries, drafts, scro
   const child = spawn(browser, ["--headless=new", "--remote-debugging-port=0", `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check", "--enable-unsafe-swiftshader", "--use-angle=swiftshader", "--window-size=1280,1024", "about:blank"], { stdio: "ignore", windowsHide: true });
   let browserTools;
   try {
-    await until(() => existsSync(resolve(profile, "DevToolsActivePort")));
-    const port = readFileSync(resolve(profile, "DevToolsActivePort"), "utf8").split("\n")[0];
+    let port;await until(()=>{try{port=readFileSync(resolve(profile,"DevToolsActivePort"),"utf8").split("\n")[0];return /^\d+$/.test(port)}catch{return false}});
     const tabs = await (await fetch(`http://127.0.0.1:${port}/json`)).json(); browserTools = await devtools(tabs.find((tab) => tab.type === "page").webSocketDebuggerUrl);
     const { command, evaluate } = browserTools;
     await command("Page.enable"); await command("Runtime.enable"); await command("Page.navigate", { url: `http://127.0.0.1:${server.address().port}` });

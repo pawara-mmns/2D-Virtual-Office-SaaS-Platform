@@ -35,7 +35,7 @@ function serve(request, response) {
     const pathname = new URL(request.url, "http://localhost").pathname;
     if (pathname === "/") { response.setHeader("Content-Type", "text/html"); response.end(html); return; }
     if (pathname === "/phaser.js") { response.setHeader("Content-Type", "text/javascript"); response.end(readFileSync(resolve(web, "node_modules/phaser/dist/phaser.esm.js"))); return; }
-    if (["/packages/shared/src/avatars.ts", "/packages/shared/src/map.ts", "/packages/shared/src/protocol.ts", "/packages/shared/src/socket-transport.ts", "/packages/shared/src/environment/catalog.ts", "/packages/shared/src/environment/compose.ts", "/packages/shared/src/environment/visuals.ts"].includes(pathname)) {
+    if (["/packages/shared/src/avatars.ts", "/packages/shared/src/map.ts", "/packages/shared/src/protocol.ts", "/packages/shared/src/socket-transport.ts", "/packages/shared/src/environment/catalog.ts", "/packages/shared/src/environment/compose.ts", "/packages/shared/src/environment/visuals.ts", "/packages/shared/src/environment/plans.ts"].includes(pathname)) {
       const source = ts.transpileModule(readFileSync(resolve(root, pathname.slice(1)), "utf8"), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } });
       response.setHeader("Content-Type", "text/javascript"); response.end(source.outputText); return;
     }
@@ -92,8 +92,7 @@ test("real Chromium validates Phaser rendering, input, collisions, camera, resiz
   const child = spawn(browser, ["--headless=new", "--remote-debugging-port=0", `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check", "--enable-unsafe-swiftshader", "--use-angle=swiftshader", "--window-size=1280,1024", "about:blank"], { windowsHide: true, stdio: "ignore" });
   let devtools;
   try {
-    await waitFor(() => existsSync(resolve(profile, "DevToolsActivePort")), "browser launch");
-    const port = readFileSync(resolve(profile, "DevToolsActivePort"), "utf8").split("\n")[0];
+    let port;await waitFor(()=>{try{port=readFileSync(resolve(profile,"DevToolsActivePort"),"utf8").split("\n")[0];return /^\d+$/.test(port)}catch{return false}},"browser launch");
     const tabs = await (await fetch(`http://127.0.0.1:${port}/json`)).json();
     devtools = await connect(tabs.find((tab) => tab.type === "page").webSocketDebuggerUrl);
     const { command, evaluate } = devtools;
@@ -124,7 +123,9 @@ test("real Chromium validates Phaser rendering, input, collisions, camera, resiz
     await press("ArrowLeft", "ArrowLeft", 500); const wall = await snapshot();
     assert.ok(wall.left >= 32 && wall.x < 48, "Physical wall collision stops arrow-key movement");
     await evaluate("office.game.scene.getScene('Office').player.body.reset(512,272)");
-    await press("KeyW", "w", 1100); const desk = await snapshot();
+    await command("Input.dispatchKeyEvent", { type:"keyDown",code:"KeyW",key:"w" });
+    let desk;await waitFor(async()=>{desk=await snapshot();return desk.top>=192&&desk.top<196&&!desk.walking;},"furniture contact and idle animation");
+    await command("Input.dispatchKeyEvent", { type:"keyUp",code:"KeyW",key:"w" });
     assert.ok(desk.top >= 192 && desk.top < 196, "Physical furniture collision stops movement");
     await command("Input.dispatchKeyEvent", { type: "keyDown", code: "KeyW", key: "w" }); await delay(150);
     assert.equal((await snapshot()).walking, false, "Holding a key against furniture remains idle");
@@ -164,6 +165,7 @@ test("real Chromium validates Phaser rendering, input, collisions, camera, resiz
     assert.equal(await evaluate("office.navigate({type:'area',id:'another-company-area'})"),false);
     assert.equal((await snapshot()).x,cameraPosition.x);assert.equal((await snapshot()).y,cameraPosition.y,"Camera commands never teleport the local body");
     await command("Emulation.setEmulatedMedia",{features:[{name:"prefers-reduced-motion",value:"reduce"}]});await delay(80);
+    await waitFor(()=>evaluate("office.game.scene.getScene('Office').reducedMotion===true"),"reduced-motion preference delivery");
     await evaluate("office.navigate({type:'self'})");assert.equal(await evaluate("office.game.scene.getScene('Office').cameras.main.lerp.x"),1,"Reduced motion removes camera glide");
     await evaluate("office.navigate({type:'area',id:'RECEPTION'});document.getElementById('world').focus()");
     await press("ArrowDown","ArrowDown",80);assert.equal(await evaluate("navigation.mode"),"self","Manual movement predictably returns camera ownership to self");
