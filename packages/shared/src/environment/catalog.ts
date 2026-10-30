@@ -1,9 +1,9 @@
 export const layouts = [
-  { id: "open-office", name: "Open Office", description: "Open work neighborhoods around a shared meeting room.", rooms: ["lounge", "work", "meeting", "pantry", "reception", "collaboration"], enclosed: false },
-  { id: "corporate-hq", name: "Corporate HQ", description: "Distinct departments, reception and private meeting space.", rooms: ["work", "meeting", "collaboration", "lounge", "reception", "pantry"], enclosed: true },
-  { id: "startup-office", name: "Startup Office", description: "A social work floor with coffee and collaboration nearby.", rooms: ["pantry", "work", "lounge", "meeting", "reception", "collaboration"], enclosed: false },
-  { id: "coworking-space", name: "Co-working Space", description: "Independent work, shared amenities and a welcoming lounge.", rooms: ["collaboration", "lounge", "meeting", "work", "pantry", "reception"], enclosed: true },
-  { id: "training-hub", name: "Training Hub", description: "Learning tables and whiteboards, with breakout and meeting rooms.", rooms: ["collaboration", "meeting", "work", "reception", "lounge", "pantry"], enclosed: true },
+  { id: "open-office", name: "Open Office", description: "Open work neighborhoods around a shared meeting room." },
+  { id: "corporate-hq", name: "Corporate HQ", description: "Distinct departments, reception and private meeting space." },
+  { id: "startup-office", name: "Startup Office", description: "A social work floor with coffee and collaboration nearby." },
+  { id: "coworking-space", name: "Co-working Space", description: "Independent work, shared amenities and a welcoming lounge." },
+  { id: "training-hub", name: "Training Hub", description: "Learning tables and whiteboards, with breakout and meeting rooms." },
 ] as const;
 export const themes = [
   { id: "warm-wood", name: "Warm Wood Corporate", description: "Oak, warm cream and muted blue upholstery.", floor: "c9a875", wood: "c4a275", wall: "ede9d7", fabric: "627f87", background: "344c48" },

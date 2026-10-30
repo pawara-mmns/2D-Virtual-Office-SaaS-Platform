@@ -55,6 +55,7 @@ export class OfficeScene extends Phaser.Scene {
         this.cameras.main.setBackgroundColor("#" + paint.theme.background);
       }
       for (const name of ["Architecture", "Furniture"]) if (!map.createLayer(name, tiles, 0, 0)) throw new Error("Office layer unavailable");
+      if(data.layers.some(layer=>layer.name==='Details')&&!map.createLayer('Details',tiles,0,0))throw Error('Office detail layer unavailable');
       if (this.environment) {
         const paint = environmentPaint(data, this.environment), graphics = this.add.graphics();
         for (const sign of paint.signs) {
