@@ -307,8 +307,11 @@
 .office-hud .proximity-voice-minimal [data-conversation="true"] .voice-session-summary { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .office-hud .proximity-mic-toggle { position: relative; }
 .office-hud .proximity-mic-toggle[data-mic-state="on"] { color: var(--voice-on); background: var(--glass-control-pressed); }
+.office-hud .proximity-mic-toggle:is([data-mic-state="active"],[data-mic-state="paused"]) { color: var(--voice-on); background: var(--glass-control-pressed); }
 .office-hud .proximity-mic-toggle[data-mic-state="muted"] { color: var(--voice-muted); background: var(--glass-control-pressed); }
 .proximity-mic-toggle[data-mic-state="on"]::after, .proximity-mic-toggle[data-mic-state="muted"]::after, .proximity-mic-toggle[data-mic-state="pending"]::after, .proximity-mic-toggle[data-error="true"]::after { content: ""; position: absolute; right: 7px; bottom: 7px; width: 6px; height: 6px; border-radius: 50%; background: currentColor; box-shadow: 0 0 0 2px var(--glass-solid); }
+.proximity-mic-toggle:is([data-mic-state="active"],[data-mic-state="paused"])::after { content: ""; position: absolute; right: 7px; bottom: 7px; width: 6px; height: 6px; border-radius: 50%; background: currentColor; box-shadow: 0 0 0 2px var(--glass-solid); }
+.proximity-mic-toggle[data-mic-state="paused"]::after { background: transparent; border: 1px solid currentColor; }
 .proximity-mic-toggle[data-mic-state="pending"]::after { background: transparent; border: 1px solid currentColor; }
 .proximity-mic-toggle[data-error="true"]::after { background: #c25151; }
 .office-hud .proximity-voice-minimal > .ui-notice { left: 50%; transform: translateX(-50%); width: min(260px, calc(100vw - 24px)); padding: 10px 12px; font-size: 12px; line-height: 18px; }
