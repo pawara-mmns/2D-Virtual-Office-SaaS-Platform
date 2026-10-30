@@ -9,8 +9,9 @@ import { PlayerAvatar } from "../engine/player-avatar.ts";
 import type { AvatarAppearance } from "../../avatars/presets.ts";
 import { mapVersion, type OfficeNetwork } from "../../../../../../packages/shared/src/protocol.ts";
 import { movement } from "../input/movement.ts";
+import { VoiceBubbles, type BubbleAnchor } from '../engine/voice-bubbles.ts';
 
-export type OfficeCallbacks = { onReady(mapVersion?: string): void; onError(): void; onNavigation?(state: NavigationState): void; onReducedEffects?(reduced: boolean): void };
+export type OfficeCallbacks = { onReady(mapVersion?: string): void; onError(): void; onNavigation?(state: NavigationState): void; onReducedEffects?(reduced: boolean): void; onBubbleAnchors?(anchors: BubbleAnchor[]): void };
 export class OfficeScene extends Phaser.Scene {
   player!: Phaser.Physics.Arcade.Sprite;
   avatar!: PlayerAvatar;
@@ -19,6 +20,7 @@ export class OfficeScene extends Phaser.Scene {
   private mapHeight = 0;
   private network?: OfficeNetwork;
   private remotes = new Map<string, PlayerAvatar>();
+  private bubbles?: VoiceBubbles;
   private areas: (OfficeArea & { x: number; y: number })[] = [];
   private mode: NavigationState["mode"] = "self";
   private areaId: string | null = null;
@@ -83,6 +85,8 @@ export class OfficeScene extends Phaser.Scene {
         this.add.text(marker.x, marker.y, marker.name, { fontFamily: "Courier New, monospace", fontSize: "10px", color: "#344c48", backgroundColor: "#e9e5d2", padding: { x: 5, y: 3 } }).setOrigin(.5).setDepth(1);
       }
       const camera = this.cameras.main;
+      this.bubbles = new VoiceBubbles(this, values=>this.callbacks.onBubbleAnchors?.(values));
+      this.events.once(Phaser.Scenes.Events.SHUTDOWN,()=>this.bubbles?.destroy());
       camera.roundPixels = true;
       this.highlight = this.add.graphics().setDepth(2).lineStyle(3, 0xf8f9f5).strokeRect(-20, -24, 40, 48).lineStyle(1, 0x245743).strokeRect(-20, -24, 40, 48).setVisible(false);
       this.resetZoom();
@@ -215,6 +219,7 @@ export class OfficeScene extends Phaser.Scene {
       const own = sessionId ? snapshot?.players.get(sessionId) : undefined;
       this.player.setVisible(isMapPosition(own, this.mapWidth, this.mapHeight)); this.avatar.label.setVisible(isMapPosition(own, this.mapWidth, this.mapHeight));
       if (!snapshot || !own || !isMapPosition(own, this.mapWidth, this.mapHeight)) {
+        this.bubbles?.update(null,()=>undefined,delta,true);
         this.positionsUnavailable = true;
         for (const avatar of this.remotes.values()) avatar.destroy();
         this.remotes.clear(); if (this.teammate) this.followSelf(true, "Teammate locations are unavailable. Reconnect to find them."); this.publishNavigation(); return;
@@ -238,6 +243,7 @@ export class OfficeScene extends Phaser.Scene {
         if (!target || !avatar) this.followSelf(false, "Teammate location unavailable. Following your avatar.");
         else this.highlight?.setPosition(avatar.sprite.x, avatar.sprite.y);
       }
+      this.bubbles?.update(this.network?.proximity?.(),id=>id===sessionId?this.avatar.bubblePosition():this.remotes.get(id)?.bubblePosition(),delta,this.reducedMotion);
       this.publishNavigation();
       return;
     }
