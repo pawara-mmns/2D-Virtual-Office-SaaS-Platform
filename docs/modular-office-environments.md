@@ -6,13 +6,17 @@ Implemented 29 October 2026. Working-tree changes only: no branch creation, comm
 
 The previous renderer loaded one 36 x 26 Tiled map (`studio.json`), a 512 x 256 atlas and the avatar sheet. Floor, Architecture and Furniture supplied visual tiles; a binary Collision layer supplied both Phaser and Colyseus movement geometry. Markers supplied spawn/camera areas and VoiceZones supplied the Meeting Room voice boundary. The server previously shared that one map across all offices.
 
-The environment system composes a map from reusable room modules, a layout, a theme, decor and furniture rules, and bounded owner overrides. Phase 2 adds five distinct floor plans, ranging from 42 x 34 to 48 x 36 tiles (Open Office is 44 x 32), with different room proportions and enclosure rules. The original map, atlas and avatars remain unchanged for migration compatibility. Phaser movement, camera and avatar code are reused. No dependency was added. See the [Phase 2 validation and screenshot report](office-environment-phase2-validation.md) for current acceptance status.
+The environment system composes a map from reusable room modules, a layout, a theme, decor and furniture rules, and bounded owner overrides. The architectural upgrade provides seven or eight bounded room modules per layout, stepped building footprints, corridors and explicit doorways. Plans occupy grids from 51 x 40 to 55 x 45, with Corporate HQ and Co-working Space using 47 rows. Asset expansion adds original themed content; the corridor pass adds six further assets and protected passage decoration recipes, for 118 registered fixtures/structural entries in total. The original legacy map, atlas and avatars remain unchanged for migration compatibility. Phaser movement, camera and avatar code are reused. No dependency was added. See the [corridor decoration report and current gallery](office-passage-decoration.md); the [asset expansion](office-asset-expansion.md), [architectural report](office-architecture-upgrade.md) and [Phase 2 report](office-environment-phase2-validation.md) record earlier stages.
 
 | Structure | Location and responsibility |
 | --- | --- |
 | Versioned catalog and `EnvironmentConfig` | `packages/shared/src/environment/catalog.ts`; allowlisted IDs and canonical validation |
 | Shared composer | `packages/shared/src/environment/compose.ts`; Tiled layers, props, collisions, markers, voice zone and configuration metadata |
 | Floor plans | `packages/shared/src/environment/plans.ts`; dimensions, room footprints and enclosures for each layout |
+| Architectural kit | `packages/shared/src/environment/architecture.ts`; room boundaries, wall/corner materials, thresholds, jamb vestibules and protected approaches |
+| Room programs and fixtures | `packages/shared/src/environment/rooms.ts`; reusable furniture/prop programs and non-overlapping atlas regions |
+| Expanded asset registry | `packages/shared/src/environment/assets.ts`; categories, drawing families, support/collision modes, deterministic atlas packing and bounded atlas metadata |
+| Passage recipes | `packages/shared/src/environment/passages.ts`; clear lanes, doorway/spawn buffers, connected passage components, context-aware wall/edge props and runners |
 | Shared visual rules | `packages/shared/src/environment/visuals.ts`; nonblocking rugs and company wall |
 | Typed database contract | `packages/shared/src/environment/database.ts`; narrow table/RPC types |
 | Saved settings | `public.office_environment_settings`; one row per office with JSON configuration, revision, timestamp and author |
@@ -40,7 +44,7 @@ Catalogs are code-owned content registries, rather than mutable catalog tables. 
 
 There are **5 x 5 x 3 x 3 = 225 base combinations**. Independent accent, rug and planter choices produce **225 x 8 x 3 x 2 = 10,800 configurations**. Custom company text is additional and is not counted in that total. An exhaustive test hashes visible recipes, excluding the configuration metadata, and confirms all 10,800 are distinct. All 10,800 runtime consistency fingerprints are also distinct in this catalog. No map file is generated for each combination.
 
-Every layout contains reception, workstations, a meeting room, lounge, pantry/coffee corner and a collaboration/training area. Boards, bookshelves, storage, plants, lamps, rugs and a company wall add office detail. Phase 2 gives themes distinct oak, stone, herringbone, raised-panel and bamboo floor patterns and architectural details. Standard desks, executive return desks and collaborative benches have different footprints and artwork. The existing asset generator calls `scripts/polish-environment-art.mjs` to draw restrained integer-pixel furniture details and materials. Placement rules reject overlapping furniture and retain clear circulation routes. Rugs and signage are nonblocking paint.
+Every layout contains reception, workstations, a meeting room, lounge, pantry/coffee corner, a collaboration/training area and an enclosed print/storage room. Corporate HQ and Co-working Space also include a private office. Full walls, low screens, glazing, rotated corner pieces and explicit thresholds define the rooms; nonrectangular wings provide reading/waiting alcoves. Themes retain distinct oak, stone, herringbone, raised-panel and bamboo floors and add architectural treatments such as planted screens and technical glazing. Standard desks, executive return desks and collaborative benches have different footprints and artwork. The asset pipeline calls `scripts/polish-environment-art.mjs` and `scripts/architecture-art.mjs` for original integer-pixel artwork, including printers, filing cabinets, water dispensers and espresso counters. Placement rules reject overlaps and protect doorway approaches. Rugs and signage remain nonblocking paint.
 
 ## Owner flow
 
@@ -70,29 +74,29 @@ No backfill of thousands of maps or rows is needed. Once the migration exists, a
 
 ## Performance and extension points
 
-Composition is deterministic, linear in a small bounded grid, and runs on entry or configuration checks rather than animation frames. Phaser still renders three tile layers, with small static rug/sign graphics. Only the selected 512 x 256 themed atlas and existing avatar sheet are needed in the game; the five PNG atlases total 25,465 bytes compressed after Phase 2 polish. The preview caches at most the five theme images. Realtime retains at most 128 short-lived cached office maps and polls only occupied rooms. Equivalent React configuration objects keep the existing renderer/network owner rather than remounting it.
+Composition is deterministic and runs on entry or configuration checks rather than animation frames. Structural arrays are cached privately for the finite 25 layout/theme pairs and copied before furnishing; returned maps cannot mutate that cache. Passage recipes are cached per shell/layout/theme/decor/planter combination; they protect central lanes and reject props that disconnect remaining passage tiles. Phaser renders four visible tile layers, including Details for nonblocking mounted/desktop props, with small static rug/sign graphics. Only the selected 512 x 1024 themed atlas and existing avatar sheet are needed in-game; the five PNG atlases total 105,707 bytes after the corridor pass. The preview caches at most the five theme images. Realtime retains at most 128 short-lived cached office maps and polls only occupied rooms. Equivalent React configuration objects keep the existing renderer/network owner rather than remounting it.
 
-The exhaustive 10,800-recipe/fingerprint validation took about 3.5 seconds locally including composition and hashing; that is not an FPS or hosted load benchmark.
+Exhaustive validation still checks all 10,800 visible recipes and consistency fingerprints. Its runtime varies with concurrent builds and browser work; it is not an FPS or hosted load benchmark.
 
-Initial layouts use a six-module floor-plan grid and predefined placement slots. This is not a drag-and-drop map editor or uploaded-asset system. Add layouts and content by extending the registry, placement modules and atlas generator. Expand the SQL allowlists in a versioned migration and extend tests alongside catalog changes. Future versions can add new prop modules, room shapes, palettes or a content-authoring pipeline. Hot-applying visual-only changes without reconnecting is a future extension; the initial implementation deliberately uses safe room replacement for every applied setup.
+Layouts compose bounded room cores, optional rectangular wings and explicit hall rectangles; furniture uses predefined slots. This is not a drag-and-drop map editor or uploaded-asset system. Add content through the room programs, floor-plan definitions and atlas generator, retaining the perimeter, door and connectivity tests. New owner-selectable catalog IDs require matching SQL allowlists in a versioned migration. The current upgrade reuses all existing saved IDs and requires no schema migration. Hot-applying visual-only changes without reconnecting remains a future extension; applying a setup uses safe room replacement.
 
 ## Validation
 
 - Web production build and realtime TypeScript build: passed.
 - Recursive ESLint and TypeScript checks: passed.
-- Web tests: 110 passed. Realtime tests: 30 passed, including real local HTTP/WebSocket tenant selection, collision, room rotation, active-room apply polling and outage behavior.
+- Web tests: 122 passed. Realtime tests: 32 passed, including real local HTTP/WebSocket tenant selection, collision, room rotation, active-room apply polling and outage behavior, plus authoritative doorway traversal, clear passage routes and corridor-prop collisions across all 225 layout/theme/decor/furniture recipes.
 - All 225 base configurations: sealed boundaries, every walkable tile connected to spawn, reachable approaches to placed furniture, valid markers and Meeting Room voice-zone checks.
 - All 10,800 configurations: distinct visible recipes and distinct consistency fingerprints.
 - Local in-memory PostgreSQL migration/policy test: passed for persistence, owner enforcement, direct-write denial, tenant isolation, suspended access, malformed settings and stale revisions.
 - Production auth/readiness/voice routes: 13 passed, including anonymous denial on the new owner route.
 - Browser suites: editor/environment, chat, HUD composition, Phaser movement/collision/camera and voice each passed. The standalone engine fixture's allowlist was extended for the three new shared modules; its original assertions remain intact.
-- New editor browser coverage: five layout/theme previews, saved setup/revision, conflict and denial feedback, 390px layout, two actual configured Phaser maps, wheel/fit controls, equivalent-prop stability, one active transport, no legacy map fetch for a configured office, and zero runtime errors.
+- Editor browser coverage: five layout/theme previews, saved setup/revision, conflict and denial feedback, 390px layout, five actual configured Phaser maps, 44 bidirectional doorway probes, 30 decorated passage route traversals, corridor prop and solid/glass/low wall collisions, wheel/fit controls, equivalent-prop stability, one active transport, no legacy map fetch for a configured office, and zero runtime errors.
 
 Browser fixtures use actual UI/Phaser components with synthetic persistence, identity and transport. SQL uses isolated in-memory PostgreSQL; transport tests use real local HTTP/WebSockets with synthetic authorization. These are not hosted Supabase/LiveKit or physical-phone acceptance tests. No remote database or real user data was changed.
 
 ## Screenshots
 
-Current five-layout gallery and responsive screenshots: [Phase 2 report](office-environment-phase2-validation.md#screenshot-gallery). The following are historical Phase 1 captures.
+Current five-layout gallery, corridor close-up and responsive screenshots: [corridor decoration](office-passage-decoration.md#screenshots). Earlier captures are preserved in the [asset expansion](office-asset-expansion.md#screenshots), [architectural upgrade](office-architecture-upgrade.md#screenshots), [Phase 2 report](office-environment-phase2-validation.md#screenshot-gallery) and historical Phase 1 links below.
 
 - [Owner editor, desktop](assets/modular-office/owner-desktop.png)
 - [Owner editor, mobile](assets/modular-office/owner-mobile.png)
