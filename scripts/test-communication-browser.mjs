@@ -93,6 +93,7 @@ test("office communication composition: responsive panels, focus, drafts, engine
       const point=await evaluate(`(()=>{const n=document.querySelector(${JSON.stringify(selector)}),r=n.getBoundingClientRect();return{x:r.left+r.width/2,y:r.top+r.height/2}})()`);
       await command("Input.dispatchMouseEvent",{type:"mouseWheel",...point,deltaX:0,deltaY,modifiers});
     };
+    console.info(JSON.stringify({scope:"initial browser media and resource hints",hints:await evaluate("({cores:navigator.hardwareConcurrency,memory:navigator.deviceMemory,forced:matchMedia('(forced-colors: active)').matches,transparency:matchMedia('(prefers-reduced-transparency: reduce)').matches,slow:matchMedia('(update: slow)').matches,glass:document.querySelector('.office-hud').dataset.glass})")}));
     await until(()=>evaluate("document.querySelector('.office-hud').dataset.glass==='enhanced'"));
     assert.equal(await evaluate("communicationFixture.listenerCount('wheel')"),1,"One native wheel owner after Strict Mode replay");
     assert.equal(await evaluate("communicationFixture.listenerCount('pointermove')"),1,"One delegated reflection owner");

@@ -1,3 +1,4 @@
+import { polishEnvironmentAtlas } from './polish-environment-art.mjs';
 // Build five small shared atlases, not a map image per combination.
 import { mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -32,6 +33,7 @@ export function generateEnvironmentAtlases(base) {
     art.rect(455,145+19,20,23,'344553');art.rect(458,167,14,9,'798d98');art.rect(462,178,6,6,'f6f1e5');art.line(458,184,14,'bdcad1');
     art.rect(480,169,23,11,'5f737b');art.rect(483,171,17,6,'b4c5c8');art.rect(491,166,3,7,'d3e0df');
     art.rect(454,191,23,12,shift(theme.wood,-18));art.rect(480,191,25,12,shift(theme.wood,-18));art.rect(474,194,2,5,'e9e7dd');art.rect(482,194,2,5,'e9e7dd');
+    polishEnvironmentAtlas(art,theme);
     art.png('environments/'+theme.id+'.png');
   }
 }

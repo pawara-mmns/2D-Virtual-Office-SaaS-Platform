@@ -21,6 +21,11 @@ test('all 225 core compositions have sealed bounds, connected room markers, a va
     const queue=[[Math.floor(spawn.x/32),Math.floor(spawn.y/32)]],seen=new Set<string>();
     while(queue.length){const [x,y]=queue.pop()!,key=x+','+y;if(seen.has(key)||blocked(map,x!,y!))continue;seen.add(key);queue.push([x!+1,y!],[x!-1,y!],[x!,y!+1],[x!,y!-1]);}
     for(const marker of markers)assert.ok(seen.has(Math.floor(marker.x/32)+','+Math.floor(marker.y/32)),layout.id+' '+decor.id+' '+furniture.id+' '+marker.name);
+    let walkable=0;for(let y=0;y<map.height;y++)for(let x=0;x<map.width;x++)if(!blocked(map,x,y))walkable++;
+    assert.equal(seen.size,walkable,layout.id+' '+decor.id+' '+furniture.id+' has no isolated walkable pockets');
+    const placed=map.layers.find(l=>l.name==='Placements');
+    if(placed?.type==='objectgroup')for(const p of placed.objects){const x=p.x/32,y=p.y/32,w=p.width!/32,h=p.height!/32;const neighbors:number[][]=[];for(let i=0;i<w;i++)neighbors.push([x+i,y-1],[x+i,y+h]);for(let j=0;j<h;j++)neighbors.push([x-1,y+j],[x+w,y+j]);assert.ok(neighbors.some(([a,b])=>seen.has(a+','+b)),p.name+' has a reachable approach');}
+
     const meeting=markers.find(m=>m.name==='MEETING ROOM')!;assert.equal(meetingZone(map,meeting.x,meeting.y),'Meeting Room');assert.equal(meetingZone(map,spawn.x,spawn.y),null);
     assert.equal(mapVersion(map),mapVersion(composeEnvironment(structuredClone(config))));fingerprints.add(mapVersion(map));
     assert.ok(tileLayer(map,'Furniture').data.filter(Boolean).length>=80,'Richness comes from usable room modules');
