@@ -61,6 +61,12 @@ export class PlayerAvatar {
     this.label.setVisible(local || this.scene.cameras.main.worldView.contains(this.sprite.x, this.sprite.y));
   }
   destroy() { this.sprite.destroy(); this.label.destroy(); }
+  bubblePosition() {
+    const bounds=this.sprite.getBounds();
+    const footX=bounds.left+(avatarBody.offsetX+avatarBody.width/2)*this.sprite.scaleX;
+    const footY=bounds.top+(avatarBody.offsetY+avatarBody.height/2)*this.sprite.scaleY;
+    return{x:bounds.centerX,y:bounds.centerY,left:bounds.left,right:bounds.right,top:bounds.top,bottom:bounds.bottom,footX,footY};
+  }
   update(pressed: ReadonlySet<string>) {
     const direction = movement(pressed, this.facing, this.direction);
     // Body deltas include attempted movement before tile separation. Compare

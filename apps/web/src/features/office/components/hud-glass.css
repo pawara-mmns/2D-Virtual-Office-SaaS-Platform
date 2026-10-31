@@ -253,8 +253,13 @@
 .office-hud .office-voice-dock > .office-voice { background: transparent; border: 0; box-shadow: none; width: fit-content; max-width: 100%; padding: 4px 8px; font-size: 12px; }
 .office-hud .office-voice-idle { display: flex; gap: 7px; align-items: center; min-height: 44px; color: var(--glass-muted); }
 .office-voice-idle > .hud-icon { width: 16px; height: 16px; }
+.voice-bubble-anchors { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 5; }
+.voice-bubble-anchors .voice-bubble-lock { position: absolute; left: 0; top: 0; visibility: hidden; pointer-events: auto; min-width: 44px; min-height: 44px; padding: 8px; border-radius: 50%; color: #1a556b; background: rgba(231,250,255,.9); border: 1px solid rgba(94,188,216,.7); box-shadow: 0 2px 8px #16273522; }
+.voice-bubble-anchors .voice-bubble-lock[data-private="true"] { color: #624387; background: rgba(242,235,255,.93); border-color: #bda4ff; }
+.voice-bubble-anchors .voice-bubble-lock:disabled { opacity: .85; cursor: default; }
+.voice-bubble-count { font-size: 10px; margin-left: 2px; }
 .office-hud .office-voice:has(.voice-session-controls) { display: flex; flex-wrap: wrap; gap: 2px; align-items: center; }
-.office-hud .office-voice:has(.voice-session-controls) > div:first-child { display: none; }
+.office-hud .office-voice:not(.proximity-voice):has(.voice-session-controls) > div:first-child { display: none; }
 .office-hud .voice-session-controls { margin: 0; gap: 2px; flex-wrap: nowrap; }
 .office-hud .voice-session-actions { gap: 2px; flex-wrap: nowrap; }
 .office-hud .voice-session-actions .office-control { min-width: 44px; min-height: 44px; padding: 8px; border-radius: 50%; background: transparent; }
@@ -262,10 +267,60 @@
 .office-hud .voice-session-summary > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .office-hud .voice-session-summary::after { content: ""; width: 6px; height: 6px; background: #34764f; border-radius: 50%; }
 .office-hud .voice-session-summary:has([data-connection]:not([data-connection="connected"]))::after { background: #ad681f; }
-.office-hud .voice-details { display: contents; }
-.office-hud .voice-details > summary { width: 44px; height: 44px; min-height: 44px; display: inline-flex; justify-content: center; align-items: center; padding: 0; border-radius: 50%; cursor: pointer; list-style: none; }
-.office-hud .voice-details[open] { display: block; width: 100%; max-height: 250px; overflow-y: auto; padding: 4px; }
-.office-hud .voice-details > summary::-webkit-details-marker { display: none; }
+/* Voice disclosures float independently: opening options never grows the dock. */
+.office-hud .office-voice.proximity-voice { display: inline-flex; flex-wrap: nowrap; align-items: center; gap: 2px; min-height: 52px; padding: 4px; color: var(--glass-ink); }
+.office-hud .office-voice.proximity-voice > .proximity-context { display: contents; }
+.office-hud .proximity-context > p { padding-inline: 6px; max-width: 110px; font-size: 12px; line-height: 16px; }
+.office-hud .proximity-context > .hud-icon { width: 16px; height: 16px; margin-left: 6px; }
+.office-hud .proximity-context > button:has(.hud-icon), .office-hud .voice-popover-trigger { width: 44px; height: 44px; padding: 8px; border-radius: 50%; justify-content: center; }
+.office-hud .voice-session-controls[data-conversation="true"] { display: contents; }
+.office-hud [data-conversation="true"] .voice-session-summary { width: auto; height: 44px; gap: 5px; padding-inline: 4px; flex-wrap: nowrap; }
+.office-hud [data-conversation="true"] .voice-session-summary::after { order: -1; flex-shrink: 0; }
+.office-hud [data-conversation="true"] .voice-session-summary > .voice-connection-label { position: static; width: auto; height: auto; overflow: visible; clip-path: none; font-size: 11px; white-space: nowrap; }
+.office-hud .voice-session-actions .voice-mic-control { width: auto; gap: 4px; padding: 8px; }
+.voice-mic-label { font-size: 11px; }
+.office-hud .voice-waiting-mic { gap: 4px; font-size: 11px; padding-inline: 8px; border-radius: 999px; }
+.office-hud .voice-popover { display: inline-flex; position: relative; flex-shrink: 0; padding: 0; max-height: none; overflow: visible; }
+.office-hud .voice-popover-panel { position: absolute; top: calc(100% + 10px); right: 0; transform: translateX(var(--voice-popover-shift, 0px)); z-index: 10; width: min(300px, calc(100vw - 24px)); max-height: min(460px, calc(100dvh - 160px)); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; color: var(--glass-ink); border-radius: 20px; text-align: left; }
+.office-hud .office-voice-dock:has(.voice-popover[data-open="true"]) { z-index: 5; }
+.voice-popover-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 8px 6px 16px; border-bottom: 1px solid var(--glass-lower-edge); }
+.voice-popover-header h2 { font-size: 13px; font-weight: 600; }
+.office-hud .voice-popover-header .office-control { width: 44px; height: 44px; padding: 8px; border-radius: 50%; }
+.voice-popover-body { padding: 8px 16px 16px; font-size: 12px; line-height: 18px; }
+.voice-sound-options { display: grid; gap: 10px; }
+.voice-sound-mute { display: flex; align-items: center; gap: 10px; min-height: 44px; cursor: pointer; }
+.voice-sound-mute input { width: 18px; height: 18px; flex-shrink: 0; accent-color: var(--glass-accent); }
+.voice-sound-volume { display: block; }
+.voice-sound-volume > span { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.voice-sound-volume input { display: block; width: 100%; min-height: 44px; accent-color: var(--glass-accent); }
+.voice-help { color: var(--glass-muted); font-size: 12px; line-height: 18px; margin-top: 8px; }
+.voice-section-label { font-size: 12px; font-weight: 600; border-top: 1px solid var(--glass-lower-edge); margin-top: 16px; padding-top: 12px; }
+.voice-people { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; margin-block: 12px; }
+.office-hud .voice-popover select { width: 100%; }
+.office-hud .voice-popover label:has(select) { width: 100%; }
+.office-hud .voice-progress { font-size: 11px; line-height: 16px; max-width: 130px; }
+.office-hud .proximity-voice > .ui-notice { position: absolute; top: calc(100% + 8px); left: 0; width: min(320px, calc(100vw - 24px)); max-height: 140px; overflow-y: auto; padding: 12px; color: var(--glass-ink); background: var(--glass-solid); box-shadow: var(--glass-shadow); }
+/* Proximity is automatic after opt-in: one toggle and one disclosure, with
+   connection details and mute preferences available without permanent labels. */
+.office-hud .office-voice.proximity-voice-minimal { gap: 0; padding: 3px; min-height: 50px; --voice-on: #155341; --voice-muted: #6a3c00; }
+.office-hud .proximity-voice-minimal .proximity-context > p { padding: 0; }
+.office-hud .proximity-voice-minimal [data-conversation="true"] .voice-session-summary { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.office-hud .proximity-mic-toggle { position: relative; }
+.office-hud .proximity-mic-toggle[data-mic-state="on"] { color: var(--voice-on); background: var(--glass-control-pressed); }
+.office-hud .proximity-mic-toggle:is([data-mic-state="active"],[data-mic-state="paused"]) { color: var(--voice-on); background: var(--glass-control-pressed); }
+.office-hud .proximity-mic-toggle[data-mic-state="muted"] { color: var(--voice-muted); background: var(--glass-control-pressed); }
+.proximity-mic-toggle[data-mic-state="on"]::after, .proximity-mic-toggle[data-mic-state="muted"]::after, .proximity-mic-toggle[data-mic-state="pending"]::after, .proximity-mic-toggle[data-error="true"]::after { content: ""; position: absolute; right: 7px; bottom: 7px; width: 6px; height: 6px; border-radius: 50%; background: currentColor; box-shadow: 0 0 0 2px var(--glass-solid); }
+.proximity-mic-toggle:is([data-mic-state="active"],[data-mic-state="paused"])::after { content: ""; position: absolute; right: 7px; bottom: 7px; width: 6px; height: 6px; border-radius: 50%; background: currentColor; box-shadow: 0 0 0 2px var(--glass-solid); }
+.proximity-mic-toggle[data-mic-state="paused"]::after { background: transparent; border: 1px solid currentColor; }
+.proximity-mic-toggle[data-mic-state="pending"]::after { background: transparent; border: 1px solid currentColor; }
+.proximity-mic-toggle[data-error="true"]::after { background: #c25151; }
+.office-hud .proximity-voice-minimal > .ui-notice { left: 50%; transform: translateX(-50%); width: min(260px, calc(100vw - 24px)); padding: 10px 12px; font-size: 12px; line-height: 18px; }
+@media (prefers-color-scheme: dark) { .office-hud .office-voice.proximity-voice-minimal { --voice-on: #83e0c2; --voice-muted: #ffd18a; } }
+@media(max-width:639px) {
+  .office-hud .proximity-context > p { max-width: 100px; font-size: 11px; padding-inline: 4px; }
+  .office-hud .office-voice.proximity-voice { max-width: calc(100vw - 18px); flex-wrap: wrap; justify-content: center; }
+  .office-hud [data-conversation="true"] .voice-session-summary { padding-inline: 2px; }
+}
 .office-hud .auth-button:active:not(:disabled) { background: var(--glass-action); color: var(--glass-action-ink); box-shadow: inset 0 2px 4px rgb(0 0 0 / .15); }
 .office-hud :is(button, a, summary, select):focus-visible { outline: 3px solid var(--glass-focus); outline-offset: 2px; }
 .office-hud .office-toolbar button[title]:focus-visible::after { content: attr(title); position: absolute; top: calc(100% + 10px); left: 0; color: var(--glass-ink); background: var(--glass-solid); border-radius: 8px; box-shadow: var(--glass-shadow); font-size: 12px; padding: 6px 9px; white-space: nowrap; pointer-events: none; }

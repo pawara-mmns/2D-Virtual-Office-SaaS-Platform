@@ -1,10 +1,10 @@
-import { validVoiceRequest } from "../../../../../packages/shared/src/voice.ts";
+import { validVoiceRequest, type VoiceRequest } from "../../../../../packages/shared/src/voice.ts";
 import type { UserLookup } from "../auth/service.ts";
 
 export async function issueVoiceToken(input: unknown, dependencies: {
   user(): Promise<UserLookup>;
   session(): Promise<{ userId: string; token: string } | null>;
-  forward(token: string, input: { officeId: string; sessionId: string }): Promise<{ status: number; data: unknown }>;
+  forward(token: string, input: VoiceRequest): Promise<{ status: number; data: unknown }>;
 }) {
   if (!validVoiceRequest(input)) return { status: 400, data: { error: "Invalid voice request." } };
   const user = await dependencies.user();

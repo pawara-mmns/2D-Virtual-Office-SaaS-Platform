@@ -17,7 +17,8 @@ import { ChatPanel } from "@/features/chat/chat-panel";
 import { Participants } from "@/features/chat/participants";
 import { createChatEvents } from "@/features/chat/events";
 import { isAvailability } from "../../../../../../packages/shared/src/chat.ts";
-import { VoiceBar } from "@/features/voice/voice-bar";
+import { OfficeVoice } from "@/features/voice/office-voice";
+import type { ProximityState, VoiceBubble } from '../../../../../../packages/shared/src/proximity.ts';
 import { sameVoiceState, type VoiceZoneState } from "../../../../../../packages/shared/src/voice.ts";
 import type { CameraCommand, NavigationState } from "../engine/camera.ts";
 
@@ -45,6 +46,10 @@ export default function OfficeCanvas({ appearance, profileWarning, officeId, use
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [availabilityError, setAvailabilityError] = useState("");
   const [voice,setVoice] = useState<VoiceZoneState | null>(null);
+  const [proximity,setProximity] = useState<ProximityState | null>(null);
+  const [proximityError,setProximityError] = useState('');
+  const bubbleButtons=useRef(new Map<string,HTMLButtonElement>());
+  const lockBubble=useCallback((bubble:VoiceBubble,locked:boolean)=>network.current?.lockBubble?.(bubble,locked)??false,[]);
   const leaveVoice = useCallback(() => network.current?.leaveVoice?.(),[]);
   const profileToggle = useRef<HTMLButtonElement>(null);
   const restoreProfileFocus = () => profileToggle.current?.focus({ preventScroll: true });
@@ -103,6 +108,11 @@ export default function OfficeCanvas({ appearance, profileWarning, officeId, use
     const controller = mountOffice(async () => {
       const { createOfficeGame } = await import("../engine/create-game");
       return () => createOfficeGame(element, {
+        onBubbleAnchors(values) {
+          const visible=new Set<string>();
+          for(const value of values){const button=bubbleButtons.current.get(value.bubbleId);if(!button)continue;visible.add(value.bubbleId);button.style.transform=`translate(${value.x}px, ${value.y}px) translate(-50%, -50%)`;button.style.visibility=value.visible?'visible':'hidden';}
+          for(const [id,button] of bubbleButtons.current)if(!visible.has(id))button.style.visibility='hidden';
+        },
         onNavigation(value) { if (active) setNavigation(value); },
         onReducedEffects(value) { if (active) setReducedEffects(value); },
         onReady(version) {
@@ -115,6 +125,8 @@ export default function OfficeCanvas({ appearance, profileWarning, officeId, use
             const connected = connectOffice({ url, officeId, mapVersion: version!, onPresence: (value) => { if (active) setPresence(value); },
               onChat: chatEvents.emit,
               onVoice: (value) => { if (active) setVoice((previous) => sameVoiceState(previous,value) ? previous : value); },
+              onProximity: value=>{if(active)setProximity(value);},
+              onProximityError: message=>{if(active)setProximityError(message);},
               onParticipants: (value) => { if (active) setParticipants(value); },
               onAvailabilityError: (message) => { if (active) setAvailabilityError(message); },
               async getToken() { const { data, error } = await client.auth.getSession(); return error ? null : data.session?.access_token ?? null; },
@@ -138,6 +150,17 @@ export default function OfficeCanvas({ appearance, profileWarning, officeId, use
       <div ref={host} tabIndex={0} role="region" aria-label="Pixel-art office. Keyboard movement area" aria-describedby="office-camera-hint office-instructions"
         onKeyDown={(event) => { if (event.key === "Escape" && navigation?.mode !== "self") { event.preventDefault(); navigateCamera({ type: "self" }, true); } }}
         className="office-stage outline-offset-[-4px] focus-visible:outline-4 focus-visible:outline-forest" />
+      <div className="voice-bubble-anchors" aria-label="Conversation bubbles">
+        {proximity?.bubbles.filter(bubble=>bubble.lifecycleState!=='DISSOLVED').map(bubble=>{
+          const controller=bubble.controllerId===proximity.sessionId;
+          const label=controller?(bubble.locked?'Unlock conversation':'Lock conversation'):(bubble.locked?'Private conversation':'Open conversation');
+          return <button key={bubble.bubbleId} ref={element=>{if(element)bubbleButtons.current.set(bubble.bubbleId,element);else bubbleButtons.current.delete(bubble.bubbleId);}}
+            className="office-control voice-bubble-lock" data-private={bubble.locked} disabled={!controller||!['CONNECTING','ACTIVE','STRETCHING'].includes(bubble.lifecycleState)}
+            aria-label={`${label} · ${bubble.memberIds.length} people`} title={`${label} · ${bubble.memberIds.length} people${controller?'':' · Controller manages privacy'}`} onClick={()=>lockBubble(bubble,!bubble.locked)}>
+            <HudIcon name={bubble.locked?'lock':'unlock'}/><span className="voice-bubble-count">{bubble.memberIds.length}</span>
+          </button>;
+        })}
+      </div>
       {status !== "ready" && <div className="absolute inset-0 flex items-center justify-center bg-surface p-8 text-center">
         {status === "loading" ? <p role="status" className="text-sm text-muted">Preparing your office…</p> : <div><h2 className="font-semibold">Office unavailable</h2><p role="alert" className="mt-3 max-w-sm text-sm leading-7 text-muted">The office engine or artwork could not load. Check your connection and browser graphics support, then try again.</p><button className="auth-button mt-5" onClick={() => { setNavigation(null); setStatus("loading"); setAttempt((value) => value + 1); }}>Try again</button></div>}
       </div>}
@@ -149,7 +172,7 @@ export default function OfficeCanvas({ appearance, profileWarning, officeId, use
         <div className="space-y-4"><div><label htmlFor="office-availability" className="mb-2 block text-sm font-medium">Your availability</label>
           <select id="office-availability" className="office-control" value={own?.availability ?? "AVAILABLE"} disabled={presence.status !== "online" || !own?.connected} onChange={(event) => { setAvailabilityError(""); const value = event.target.value; if (isAvailability(value) && !network.current?.setAvailability?.(value)) setAvailabilityError("Reconnect before changing availability."); }}><option value="AVAILABLE">Available</option><option value="BUSY">Busy</option><option value="DO_NOT_DISTURB">Do not disturb</option></select>
         </div><HudGlassControl /><p id="office-instructions" className="text-sm leading-6 text-muted">Keyboard required: click or Tab into the office, then use WASD or arrows. Tab to leave. Map navigation changes your view, not your position. Scroll over the map to zoom; Ctrl/Cmd+scroll keeps browser zoom.</p>
-        <p className="text-sm leading-6 text-muted">Voice is available in the Meeting Room. Join Voice requests microphone access only when you choose it.</p></div>
+        <p className="text-sm leading-6 text-muted">Enable proximity voice to talk with nearby teammates. The Meeting Room takes precedence and uses its own explicit Join Voice action.</p></div>
       </OfficeDisclosure>}
       avatar={<AvatarSettings currentKey={avatarKey} displayName={displayName} icon={<HudIcon name="avatar" />} panel={{ open: panel === "avatar", onOpenChange: avatarPanel, container: panelHost, returnFocus: restoreProfileFocus }} onSaved={(key, name) => { setSavedKey(key); if (name) setSavedName(name); network.current?.appearanceChanged(); }} />}
       controls={<>
@@ -175,7 +198,7 @@ export default function OfficeCanvas({ appearance, profileWarning, officeId, use
         <ChatPanel key={officeId} officeId={officeId} open={chatOpen} onClose={closeChat} events={chatEvents} userId={userId ?? own?.userId} names={names} send={sendChat} />
         <div ref={setPanelHost} className="office-panels" />
       </>}
-      voice={voice?.zone ? <VoiceBar key={voice.sessionId} officeId={officeId} state={voice} leave={leaveVoice} /> : <section aria-label="Office voice" className="office-voice office-voice-idle" title={presence.status === "online" ? "Enter the Meeting Room to join voice" : "Reconnect to the office to use voice"}><HudIcon name="microphone" /><p role="status">{presence.status === "denied" ? "Voice authorization ended" : presence.status === "online" ? "Outside voice zone" : "Voice offline"}</p></section>}
+      voice={<OfficeVoice key={officeId+':'+(voice?.sessionId??'pending')} officeId={officeId} state={voice} proximity={proximity} online={presence.status==='online'} denied={presence.status==='denied'} lock={lockBubble} leave={leaveVoice} error={proximityError}/>}
       notices={<>
         {availabilityError && <p role="alert" className="ui-notice ui-notice-error" data-glass-surface="" data-glass-variant="elevated">{availabilityError}</p>}
         {profileWarning && <p role="alert" className="ui-notice ui-notice-warning" data-glass-surface="" data-glass-variant="elevated">{profileWarning}</p>}

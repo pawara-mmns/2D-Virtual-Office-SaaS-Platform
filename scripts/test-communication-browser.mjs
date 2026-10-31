@@ -25,7 +25,9 @@ async function devtools(endpoint) {
   const command=(method,params={})=>new Promise((resolve,reject)=>{const id=++serial;const timer=setTimeout(()=>reject(new Error(`Browser timeout: ${method}`)),10000);pending.set(id,{resolve,reject,timer});socket.send(JSON.stringify({id,method,params}));});
   return {command,errors,close:()=>socket.close(),async evaluate(expression){const result=await command("Runtime.evaluate",{expression,awaitPromise:true,returnByValue:true});if(result.exceptionDetails)throw new Error(result.exceptionDetails.exception?.description||"Evaluation failed");return result.result.value;}};
 }
-test("office communication composition: responsive panels, focus, drafts, engine and voice ownership",{timeout:nativeRendering?90000:120000,skip:!browser},async()=>{
+// Software rendering includes many viewport screenshots and needs more time
+// on a busy development machine; individual state/command deadlines stay bounded.
+test("office communication composition: responsive panels, focus, drafts, engine and voice ownership",{timeout:nativeRendering?90000:180000,skip:!browser},async()=>{
   const built=await build({bundle:true,write:false,platform:"browser",format:"esm",target:"es2022",jsx:"automatic",logLevel:"silent",tsconfig:resolve(web,"tsconfig.json"),define:{"process.env.NODE_ENV":'"development"',"process.env.NEXT_PUBLIC_REALTIME_URL":'"http://fixture.invalid"'},
     stdin:{resolveDir:web,loader:"tsx",contents:`
       import React,{useState,useEffect,Profiler,StrictMode}from'react';import{createRoot}from'react-dom/client';
@@ -67,7 +69,9 @@ test("office communication composition: responsive panels, focus, drafts, engine
   await new Promise(done=>server.listen(0,"127.0.0.1",done));const cache=resolve(root,".cache");mkdirSync(cache,{recursive:true});const profile=mkdtempSync(resolve(cache,"communication-browser-"));
   const child=spawn(browser,["--headless=new","--remote-debugging-port=0",`--user-data-dir=${profile}`,"--no-first-run","--no-default-browser-check",...(nativeRendering?[]:["--enable-unsafe-swiftshader","--use-angle=swiftshader"]),"--window-size=1440,900","about:blank"],{stdio:"ignore",windowsHide:true});let tools;
   try{
-    let port;await until(()=>{try{port=readFileSync(resolve(profile,"DevToolsActivePort"),"utf8").split("\n")[0];return /^\d+$/.test(port)}catch{return false}});const tabs=await(await fetch(`http://127.0.0.1:${port}/json`)).json();tools=await devtools(tabs.find(t=>t.type==="page").webSocketDebuggerUrl);
+    let port;await until(()=>{try{port=readFileSync(resolve(profile,"DevToolsActivePort"),"utf8").split("\n")[0];return /^\d+$/.test(port)}catch{return false}});
+    // Brave can expose its debugging port before the initial page exists.
+    let page;await until(async()=>{const tabs=await(await fetch(`http://127.0.0.1:${port}/json`)).json();page=tabs.find(tab=>tab.type==="page"&&tab.webSocketDebuggerUrl);return !!page;});tools=await devtools(page.webSocketDebuggerUrl);
     const {command,evaluate}=tools;const media=(features=[])=>command("Emulation.setEmulatedMedia",{features:[...(features.some(f=>f.name==="prefers-color-scheme")?[]:[{name:"prefers-color-scheme",value:"light"}]),...features]});await command("Runtime.enable");await command("Page.enable");await command("Page.navigate",{url:`http://127.0.0.1:${server.address().port}`});await until(()=>evaluate("window.communicationFixture?.mounts===1 && !!document.querySelector('canvas')"));
     const revealProfileAction=async text=>{if(['Settings','Avatar settings'].includes(text)&&await evaluate("document.querySelector('.office-profile-menu').hidden")){await evaluate("document.querySelector('.office-profile-trigger').click()");}};
     const button=async text=>{await revealProfileAction(text);return evaluate(`(()=>{const node=[...document.querySelectorAll('button,summary')].find(n=>(n.textContent===${JSON.stringify(text)}||n.getAttribute('aria-label')===${JSON.stringify(text)})&&n.getClientRects().length&&!n.closest('[hidden],[inert]'));if(!node)throw new Error('Visible control missing');node.focus();node.click()})()`);};
@@ -316,7 +320,7 @@ test("office communication composition: responsive panels, focus, drafts, engine
     for(const [width,height] of [[1440,900],[1024,900],[820,1180],[390,844],[320,740]]){
       await command("Emulation.setDeviceMetricsOverride",{width,height,deviceScaleFactor:1,mobile:width<640});await delay(100);
       await command("Emulation.setTouchEmulationEnabled",{enabled:width<640,maxTouchPoints:1});
-      if(width===1440||width===390){await button('Voice participants and audio devices');assert.equal(await evaluate("document.querySelector('.voice-details').open"),true);await command('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape'});assert.equal(await evaluate("document.querySelector('.voice-details').open"),false);}
+      if(width===1440||width===390){await button('Voice participants and audio devices');assert.equal(await evaluate("!!document.querySelector('.voice-details [role=dialog]')"),true);await command('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape'});assert.equal(await evaluate("!!document.querySelector('.voice-details [role=dialog]')"),false);}
       await tap("Settings");await until(()=>evaluate("document.activeElement.getAttribute('aria-label')==='Close Settings'"));
       await tap("Office Chat");await until(()=>evaluate("document.activeElement.id==='office-chat-draft'"));
       await tap("Participants (2)");if(width===320){await delay(80);await snapshot("communication-people-320.png");}await button("Avatar settings");await button("Office Chat");await delay(80);
