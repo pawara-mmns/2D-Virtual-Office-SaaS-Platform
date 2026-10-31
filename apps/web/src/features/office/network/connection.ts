@@ -1,9 +1,11 @@
+import { ENVIRONMENT_CHANGED_CODE } from "../../../../../../packages/shared/src/protocol.ts";
 import { Client, type Room, type SeatReservation } from "@colyseus/sdk";
 import type { OfficeNetwork, OfficeSnapshot, Presence } from "../../../../../../packages/shared/src/protocol.ts";
 import { protectReconnectUrl } from "../../../../../../packages/shared/src/socket-transport.ts";
 import { decodeMessage, isAvailability, parseChatSend, type ChatEvent } from "../../../../../../packages/shared/src/chat.ts";
 import type { Participant } from "../../../../../../packages/shared/src/protocol.ts";
 import { sameVoiceState, type VoiceZoneState } from "../../../../../../packages/shared/src/voice.ts";
+import { decodeProximity, validBubbleRef, type ProximityState } from '../../../../../../packages/shared/src/proximity.ts';
 
 type OfficeRoom = Room<object, OfficeSnapshot>;
 export function realtimeUrl(value: string | undefined, production = process.env.NODE_ENV === "production") {
@@ -19,6 +21,8 @@ export function connectOffice(options: {
   onParticipants?(participants: Participant[]): void;
   onAvailabilityError?(message: string): void;
   onVoice?(state: VoiceZoneState | null): void;
+  onProximity?(state:ProximityState|null):void;
+  onProximityError?(message:string):void;
 }): OfficeNetwork {
   let room: OfficeRoom | undefined, state: OfficeSnapshot | undefined;
   let closed = false, denied = false, online = false, seq = 0, previousCount = 0;
@@ -26,12 +30,13 @@ export function connectOffice(options: {
   let disposeTransport: (() => void) | undefined;
   let participantKey = "", chatReady = false;
   let voiceState: VoiceZoneState | null = null;
+  let proximity:ProximityState|null=null;
   const publishVoice = (value: VoiceZoneState | null) => {
     if (sameVoiceState(voiceState,value)) return;
-    voiceState = value ? { sessionId:value.sessionId,zone:value.zone,configured:value.configured,participants:value.participants } : null;
+    voiceState = value ? { sessionId:value.sessionId,zone:value.zone,configured:value.configured,participants:value.participants,...(value.bubble?{bubble:{...value.bubble}}:{}) } : null;
     options.onVoice?.(voiceState);
   };
-  const disconnected = () => { chatReady = false; options.onChat?.({ type: "connection", online: false }); options.onParticipants?.([]); publishVoice(null); participantKey = ""; };
+  const disconnected = () => { chatReady = false; options.onChat?.({ type: "connection", online: false }); options.onParticipants?.([]); publishVoice(null);proximity=null;options.onProximity?.(null); participantKey = ""; };
   const controller = new AbortController();
   const presence = (status: Presence["status"], notice: string) => {
     if (!closed) options.onPresence({ status, notice, count: online && state ? [...state.players.values()].filter((p) => p.connected).length : 0 });
@@ -55,6 +60,8 @@ export function connectOffice(options: {
         body: JSON.stringify({ officeId: options.officeId, mapVersion: options.mapVersion }), signal: AbortSignal.any([controller.signal, AbortSignal.timeout(8000)]),
       });
       if (!response.ok) {
+        const failure: unknown = await response.json().catch(() => null);
+        if (response.status === 409 && failure && typeof failure === "object" && "code" in failure && failure.code === "MAP_CHANGED") { close(); options.onPresence({ status: "offline", count: 0, notice: "Office setup changed. Reload to enter the updated office.", reload: true }); return; }
         denied = response.status === 401 || response.status === 403;
         clearInterval(refresh);
         const notice = denied ? "Office access denied. Sign in and check your active membership." : response.status === 429 ? "Too many connection attempts. Wait a minute and retry." : "Unable to enter. Close other office tabs, wait ten seconds and retry. If it continues, contact your workspace administrator.";
@@ -98,12 +105,14 @@ export function connectOffice(options: {
       });
       room.onMessage("availability.error", () => options.onAvailabilityError?.("Availability could not change. Wait a moment, check access and retry."));
       room.onMessage("voice.state", (value: VoiceZoneState) => {
-        if (!closed && online && value?.sessionId === room?.sessionId && (value.zone === null || value.zone === "Meeting Room") && typeof value.configured === "boolean" &&
+        if (!closed && online && value?.sessionId === room?.sessionId && (value.zone === null || value.zone === "Meeting Room" || value.zone==='Proximity conversation'&&validBubbleRef(value.bubble)) && typeof value.configured === "boolean" &&
           (value.participants === null || Number.isInteger(value.participants) && value.participants >= 0 && value.participants <= 10)) publishVoice(value);
       });
+      room.onMessage('proximity.state',(value:unknown)=>{if(closed||!online||!room)return;const decoded=decodeProximity(value,options.officeId,room.sessionId);if(decoded){proximity=decoded;options.onProximity?.(decoded);}});
+      room.onMessage('proximity.error',()=>{if(!closed&&online)options.onProximityError?.('Conversation change denied. Check current membership or wait a moment and retry.');});
       room.onDrop(() => { if (closed || denied) return; online = false; disconnected(); presence("reconnecting", "Connection lost. Reconnecting…"); });
       room.onReconnect(() => { if (closed || denied) return; online = true; lastSent = 0; presence("online", "Reconnected."); void credential(); });
-      room.onLeave((code) => { if (closed) return; denied ||= code === 4000; online = false; state = undefined; disconnected(); clearInterval(refresh); if (denied && room) room.reconnection.enabled = false; presence(denied ? "denied" : "offline", denied ? "Office access ended. Return to the workspace and check your membership." : "Disconnected. Verify your session and membership, then retry."); });
+      room.onLeave((code) => { if (closed) return; if (code === ENVIRONMENT_CHANGED_CODE) { close(); options.onPresence({ status: "offline", count: 0, notice: "Your owner applied a new office setup. Reload to enter it.", reload: true }); return; } denied ||= code === 4000; online = false; state = undefined; disconnected(); clearInterval(refresh); if (denied && room) room.reconnection.enabled = false; presence(denied ? "denied" : "offline", denied ? "Office access ended. Return to the workspace and check your membership." : "Disconnected. Verify your session and membership, then retry."); });
       room.onError((code) => { if (closed) return; denied ||= code === 401 || code === 403; online = false; disconnected(); if (denied) { clearInterval(refresh); if (room) room.reconnection.enabled = false; } presence(denied ? "denied" : "offline", denied ? "Office access denied. Return to the workspace and check your membership." : "Office connection failed. Check access and retry."); });
       presence("online", "Connected.");
     } catch { if (!closed) presence("offline", "Could not connect to the office. Check your network connection and retry."); }
@@ -118,6 +127,9 @@ export function connectOffice(options: {
   const refresh = setInterval(() => { void credential().catch(() => {}); }, 10_000);
   void open();
   return {
+    proximity:()=>proximity,
+    enableProximity(enabled){if(closed||!online||!room)return false;room.send('proximity.set',{enabled});return true;},
+    lockBubble(ref,locked){if(closed||!online||!room||!validBubbleRef(ref))return false;room.send('proximity.lock',{bubbleId:ref.bubbleId,generation:ref.generation,revision:ref.revision,locked});return true;},
     snapshot: () => online ? state : undefined,
     sessionId: () => room?.sessionId,
     input(x, y) {

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "../features/office/components/hud-glass.css";
 
 export const metadata: Metadata = {
   title: "Virtual Office — A little closer, wherever you work",

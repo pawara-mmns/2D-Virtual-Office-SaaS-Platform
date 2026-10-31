@@ -32,6 +32,16 @@ export function officeZoom(requested: number, viewWidth: number, viewHeight: num
   const value = Number.isFinite(requested) ? requested : 2;
   return levels.reduce((best, level) => Math.abs(level - value) < Math.abs(best - value) ? level : best);
 }
+// Wheel zoom is continuous; buttons still select the original discrete levels.
+export function clampOfficeZoom(requested: number, viewWidth: number, viewHeight: number, mapWidth: number, mapHeight: number) {
+  const levels = zoomLevels(viewWidth, viewHeight, mapWidth, mapHeight);
+  return Math.max(levels[0]!, Math.min(levels.at(-1)!, Number.isFinite(requested) ? requested : 2));
+}
+export function nextOfficeZoom(current: number, step: number, levels: readonly number[]) {
+  if (!Number.isFinite(step) || !Math.trunc(step)) return current;
+  const choices = step > 0 ? levels.filter((value) => value > current) : levels.filter((value) => value < current).toReversed();
+  return choices[Math.min(choices.length, Math.abs(Math.trunc(step))) - 1] ?? current;
+}
 export function isMapPosition(value: { x: unknown; y: unknown } | undefined, width: number, height: number): value is { x: number; y: number } {
   return !!value && typeof value.x === "number" && typeof value.y === "number" && Number.isFinite(value.x) && Number.isFinite(value.y) && value.x >= 0 && value.y >= 0 && value.x <= width && value.y <= height;
 }

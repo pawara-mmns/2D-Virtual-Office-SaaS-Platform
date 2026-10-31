@@ -16,6 +16,7 @@
     "test:chat:browser": "node --test scripts/test-chat-browser.mjs",
     "test:chat:anonymous": "pnpm --filter @virtual-office/web test:chat:anonymous",
     "test:voice:browser": "node --test scripts/test-voice-browser.mjs",
+    "test:proximity:browser": "node --test scripts/test-proximity-browser.mjs",
     "test:voice:routes": "pnpm --filter @virtual-office/web test:voice:routes",
     "test:realtime:live": "node --experimental-strip-types --test scripts/test-realtime-live.mjs",
     "test:deployment": "node --test scripts/deployment-config.test.mjs",
@@ -36,7 +37,9 @@
     "assets:office": "node --experimental-strip-types scripts/generate-office-assets.mjs",
     "assets:avatars": "node --experimental-strip-types scripts/generate-avatar-assets.mjs",
     "test:office:browser": "node --test scripts/test-office-browser.mjs",
-    "test:communication:browser": "node --test scripts/test-communication-browser.mjs"
+    "test:communication:browser": "node --test scripts/test-communication-browser.mjs",
+    "test:environment:browser": "node --test scripts/test-environment-browser.mjs",
+    "test:environment:database": "node --test scripts/environment-database.test.mjs"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.10",

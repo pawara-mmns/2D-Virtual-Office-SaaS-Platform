@@ -1,6 +1,7 @@
 // Original pixel drawings and editable Tiled map. No downloaded art or libraries.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { picture } from "./office-pixel-art.mjs";
+import { generateEnvironmentAtlases } from "./generate-environment-assets.mjs";
 import { generateAvatars } from "./generate-avatar-assets.mjs";
 import { fileURLToPath } from "node:url";
 
@@ -60,6 +61,7 @@ r(259, 164, 57, 25, "7b887b"); r(260, 161, 55, 24, "dadcc7"); r(286, 164, 1, 19,
 e(324, 213, 24, 8, "273e3830"); r(335, 176, 2, 38, "5b6c59"); r(327, 169, 18, 13, "d6ca9c"); l(328, 169, 16, "f2e4b8"); r(329, 214, 14, 3, "62715b");
 r(354, 163, 60, 26, "926f4d"); r(356, 165, 56, 22, "c5af81"); for (let i = 0; i < 4; i++) r(361 + i * 12, 169 + i % 2 * 3, 9, 11, ["ece6c9", "9fb7a7", "cda48a", "e3dbc0"][i]);
 art.png("office-tiles.png");
+generateEnvironmentAtlases(art);
 
 generateAvatars();
 

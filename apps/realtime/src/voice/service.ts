@@ -2,11 +2,13 @@ import { randomUUID } from "node:crypto";
 import type { Authorization, Authorize } from "../auth/authorize.ts";
 import { VOICE_LEASE_MS, VOICE_TOKEN_SECONDS, type VoiceZoneState } from "../../../../packages/shared/src/voice.ts";
 import type { VoiceProvider } from "./provider.ts";
+import { sameBubbleRef, type BubbleRef } from '../../../../packages/shared/src/proximity.ts';
+import type { VoiceRequest } from '../../../../packages/shared/src/voice.ts';
 
 export class VoiceError extends Error {
   constructor(public readonly status: 403 | 409 | 429 | 503, message: string) { super(message); }
 }
-type Session = { auth: Authorization; zone: string | null; version: number; room?: string; notify(state: VoiceZoneState): void; last?: string };
+type Session = { auth: Authorization; zone: string | null; version: number; room?: string; bubble?:BubbleRef; notify(state: VoiceZoneState): void; last?: string };
 type RemovalReason = "notification_failed" | "authorization_changed" | "authorization_failed" | "lease_expired" | "session_ineligible" | "join_not_observed" | "zone_exit" | "office_left" | "client_leave" | "request_cancelled" | "admission_failed" | "shutdown";
 type Admission = { session: string; auth: Authorization; room: string; identity: string; lease: number; issued: number; seen: boolean; revoked: boolean; refreshing: boolean; removing?: Promise<void>; removalReason?: RemovalReason };
 export type VoiceDiagnostic = { event: string; at: string; authorityId: string; namespace?: string; participantId?: string; reason?: string; elapsedMs?: number; authorizationAgeMs?: number; leaseRemainingMs?: number; refreshing?: boolean };
@@ -28,7 +30,7 @@ export function createVoiceService(authorize: Authorize, provider: VoiceProvider
   const eligible = (record: Admission) => {
     const session = sessions.get(record.session);
     return !!session?.zone && session.auth.userId === record.auth.userId && session.auth.organizationId === record.auth.organizationId &&
-      session.auth.officeId === record.auth.officeId && now() < session.auth.expiresAt;
+      session.auth.officeId === record.auth.officeId && session.room===record.room && now() < session.auth.expiresAt;
   };
   const notify = (only?: string) => {
     if (closed) return;
@@ -36,6 +38,7 @@ export function createVoiceService(authorize: Authorize, provider: VoiceProvider
     for (const [id, session] of selected) {
       const room = session.room;
       const state: VoiceZoneState = { sessionId: id, zone: session.zone, configured: !!provider && ready, participants: room && ready ? counts.get(room) ?? 0 : null };
+      if(session.bubble)state.bubble={...session.bubble};
       const key = JSON.stringify(state);
       if (session.last !== key) {
         session.last = key;
@@ -129,14 +132,15 @@ export function createVoiceService(authorize: Authorize, provider: VoiceProvider
     // A recent successful control-plane sweep is an availability indicator,
     // never proof of working audio, valid client admission or Cloud revocation.
     available: () => !!provider && ready && !closed && now() - lastPoll < 6000,
-    observe(id: string, auth: Authorization, zone: string | null, send: Session["notify"]) {
+    observe(id: string, auth: Authorization, zone: string | null, send: Session["notify"], bubble?:BubbleRef) {
       if (closed) return;
       const old = sessions.get(id);
-      const room = old?.auth.officeId === auth.officeId && old.auth.organizationId === auth.organizationId ? old.room : provider?.room(auth);
-      const version = old && old.zone === zone ? old.version : ++revision;
-      sessions.set(id,{ auth, zone, room, version, notify: send, last: old?.last });
+      const base=provider?.room(auth),room=bubble&&base?`${base}_b_${bubble.bubbleId}_${bubble.generation}`:base;
+      if(old?.room!==room)attempts.delete(id);
+      const version = old && old.zone === zone && old.room===room && sameBubbleRef(old.bubble,bubble) ? old.version : ++revision;
+      sessions.set(id,{ auth, zone, room, bubble:bubble?{...bubble}:undefined, version, notify: send, last: old?.last });
       const record = active.get(auth.userId);
-      if (record?.session === id && !zone) void remove(record,"zone_exit");
+      if (record?.session === id && (!zone||record.room!==room)) void remove(record,"zone_exit");
       notify(id);
     },
     leave(id: string) {
@@ -150,22 +154,26 @@ export function createVoiceService(authorize: Authorize, provider: VoiceProvider
       if (record) await remove(record,"client_leave");
     },
     checkpoint(id: string) { return sessions.get(id)?.version; },
-    async cancel(auth: Authorization, id: string) {
+    settled(ids:readonly string[]) {return ![...active.values()].some(record=>ids.includes(record.session));},
+    connected(id:string) {return [...active.values()].some(record=>record.session===id&&record.seen&&!record.revoked&&eligible(record)&&now()<record.lease);},
+    async cancel(auth: Authorization, id: string, expectedVersion?:number) {
       const session = sessions.get(id);
       if (!session || session.auth.userId !== auth.userId || session.auth.officeId !== auth.officeId || session.auth.organizationId !== auth.organizationId) return;
+      if(expectedVersion!==undefined&&session.version!==expectedVersion)return;
       session.version = ++revision;
       const record = active.get(auth.userId);
       if (record?.session === id) await remove(record,"request_cancelled");
     },
-    async join(auth: Authorization, sessionId: string, expectedVersion = sessions.get(sessionId)?.version) {
+    async join(auth: Authorization, sessionId: string, expectedVersion = sessions.get(sessionId)?.version, request?:VoiceRequest) {
       if (!provider || !ready || closed) throw new VoiceError(503,"Voice is unavailable. Ask an administrator to check LiveKit configuration and connectivity.");
       const session = sessions.get(sessionId);
       if (!session?.zone || session.version !== expectedVersion || session.auth.userId !== auth.userId || session.auth.organizationId !== auth.organizationId || session.auth.officeId !== auth.officeId || now() >= session.auth.expiresAt || now() >= auth.expiresAt) throw new VoiceError(403,"Enter the meeting room with an active office connection before joining voice.");
+      if(session.bubble?!request||!sameBubbleRef(session.bubble,request as BubbleRef):!!request?.bubbleId)throw new VoiceError(403,'Conversation authorization changed. Use its current generation.');
       if (now()-(attempts.get(sessionId) ?? 0) < 2000) throw new VoiceError(429,"Wait a moment before joining voice again.");
       attempts.set(sessionId,now());
       if (active.has(auth.userId)) throw new VoiceError(409,"Leave the existing voice session before joining again.");
       if (now()-auth.checkedAt >= VOICE_LEASE_MS) throw new VoiceError(403,"Voice authorization expired. Retry from the meeting room.");
-      const record: Admission = { session: sessionId, auth, room: provider.room(auth), identity: randomUUID(), lease: auth.checkedAt+VOICE_LEASE_MS, issued: now(), seen: false, revoked: false, refreshing: false };
+      const record: Admission = { session: sessionId, auth, room: session.room!, identity: randomUUID(), lease: auth.checkedAt+VOICE_LEASE_MS, issued: now(), seen: false, revoked: false, refreshing: false };
       active.set(auth.userId,record); // Reserve before signing; concurrent joins fail.
       try {
         const token = await provider.token(auth,record.room,record.identity);

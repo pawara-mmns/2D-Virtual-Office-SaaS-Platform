@@ -16,6 +16,7 @@ import type { ChatMessage } from "../../../../packages/shared/src/chat.ts";
 import { createVoiceService } from "../voice/service.ts";
 import type { VoiceProvider } from "../voice/provider.ts";
 import type { VoiceZoneState } from "../../../../packages/shared/src/voice.ts";
+import type { ProximityState, VoiceBubble } from '../../../../packages/shared/src/proximity.ts';
 
 // Real HTTP/WebSockets and Schema synchronization; synthetic authorization only.
 // Never contacts Supabase or represents live-account validation.
@@ -33,6 +34,71 @@ const origin = "http://localhost:3000";
 async function until(check: () => boolean, message: string, timeout = 6000) {
   const start = Date.now(); while (!check()) { if (Date.now() - start > timeout) throw new Error(`Timed out: ${message}`); await delay(20); }
 }
+
+test('real transport: proximity consent, independent rooms, lock/join races, stale HTTP grants and meeting precedence', {timeout:30_000}, async()=>{
+  const officeId=id(501),otherOffice=id(502),members=new Map<string,Set<string>>(),issued:{room:string;identity:string}[]=[],removed:string[]=[];
+  let holdToken=false,tokenPending=false,finishToken:(()=>void)|undefined,holdAuth=false,finishAuth:(()=>void)|undefined;
+  const authorize:Authorize=async(token,requested)=>{
+    const n=Number(String(token).replace('bubble-',''));
+    if(!n||requested!==(n===6?otherOffice:officeId))throw new AccessDenied();
+    if(holdAuth&&n===5){await new Promise<void>(resolve=>{finishAuth=resolve;});}
+    return {userId:id(n),organizationId:id(n===6?602:601),officeId:requested,token:String(token),checkedAt:Date.now(),expiresAt:Date.now()+60_000,displayName:'Fixture member',avatarKey:'fern'};
+  };
+  const provider:VoiceProvider={url:'wss://fixture.livekit.cloud',prefix:'fixture_',room:a=>'fixture_'+a.organizationId+'_'+a.officeId,
+    async rooms(){return [...members.keys()];},async participants(room){return [...members.get(room)??[]];},
+    async token(_auth,room,identity){issued.push({room,identity});if(holdToken){tokenPending=true;await new Promise<void>(resolve=>{finishToken=resolve;});}const roster=members.get(room)??new Set();roster.add(identity);members.set(room,roster);return 'synthetic-bubble-token';},
+    async remove(room,identity){removed.push(identity);members.get(room)?.delete(identity);}};
+  const voice=createVoiceService(authorize,provider,Date.now,()=>{});await voice.poll();
+  const server=createRealtimeServer({authorize,map,origins:[origin],voice,proximity:{dwellMs:200,graceMs:150}});
+  await server.listen(0,'127.0.0.1');const address=server.transport.server!.address();assert.ok(address&&typeof address==='object');const url=`http://127.0.0.1:${address.port}`;
+  const rooms:SDKRoom[]=[],states=new Map<string,ProximityState>(),zones=new Map<string,VoiceZoneState>(),errors:string[]=[];
+  const join=async(n:number)=>{
+    const office=n===6?otherOffice:officeId;
+    const reservation=await fetch(url+'/office/join',{method:'POST',headers:{Origin:origin,'Content-Type':'application/json',Authorization:`Bearer bubble-${n}`},body:JSON.stringify({officeId:office,mapVersion:mapVersion(map)})});assert.equal(reservation.status,200);
+    const client=new Client(url,{headers:{Origin:origin}}),room=await client.consumeSeatReservation<OfficeState>(await reservation.json());rooms.push(room);
+    room.onMessage('proximity.state',(s:ProximityState)=>states.set(room.sessionId,s));room.onMessage('voice.state',(s:VoiceZoneState)=>zones.set(room.sessionId,s));room.onMessage('proximity.error',()=>errors.push(room.sessionId));
+    await until(()=>states.has(room.sessionId),'proximity initial snapshot');return room;
+  };
+  const grant=(n:number,room:SDKRoom,bubble?:VoiceBubble)=>fetch(url+'/voice/token',{method:'POST',headers:{Origin:origin,'Content-Type':'application/json',Authorization:`Bearer bubble-${n}`},body:JSON.stringify({officeId:n===6?otherOffice:officeId,sessionId:room.sessionId,...(bubble?{bubbleId:bubble.bubbleId,generation:bubble.generation,revision:bubble.revision}:{})})});
+  try{
+    const [a,b,c,d,e,tenant]=await Promise.all([1,2,3,4,5,6].map(join));
+    const local=matchMaker.getLocalRoomById(a!.roomId),geometry=local.state as OfficeState;
+    const place=(room:SDKRoom,x:number,y:number)=>Object.assign(geometry.players.get(room.sessionId)!,{x,y});
+    place(a!,440,450);place(b!,480,450);place(c!,680,600);place(d!,720,600);place(e!,900,650);
+    assert.equal((await grant(1,a!)).status,403,'Authoritative membership is required before a media grant');
+    const groups=()=>states.get(b!.sessionId)?.bubbles.filter(g=>g.lifecycleState!=='DISSOLVED')??[];
+    await until(()=>groups().length===2&&groups().every(g=>['CONNECTING','ACTIVE'].includes(g.lifecycleState)),'two independent groups');
+    const first=groups().find(g=>g.memberIds.includes(a!.sessionId))!,second=groups().find(g=>g.memberIds.includes(c!.sessionId))!;
+    assert.deepEqual(states.get(tenant!.sessionId)!.bubbles,[],'Other organization receives no bubbles');
+    assert.equal((await grant(1,a!,second)).status,403,'Cross-bubble authorization denied');
+    assert.equal((await grant(6,tenant!,first)).status,403,'Cross-tenant bubble denied');
+    for(const [n,room,g] of [[1,a!,first],[2,b!,first],[3,c!,second],[4,d!,second]] as const)assert.equal((await grant(n,room,g)).status,200);
+    assert.notEqual(issued[0]!.room,issued[2]!.room);await voice.poll();
+    await until(()=>groups().every(g=>g.lifecycleState==='ACTIVE'),'provider-observed active groups');
+    const controller=[a!,b!].find(r=>r.sessionId===first.controllerId)!,nonController=[a!,b!].find(r=>r!==controller)!;
+    nonController.send('proximity.lock',{bubbleId:first.bubbleId,generation:first.generation,revision:first.revision,locked:true});await until(()=>errors.includes(nonController.sessionId),'controller-only denial');
+    place(e!,460,450);
+    controller.send('proximity.lock',{bubbleId:first.bubbleId,generation:first.generation,revision:first.revision,locked:true});
+    await until(()=>groups().some(g=>g.bubbleId===first.bubbleId&&g.locked&&g.generation>first.generation),'locked generation');await delay(300);
+    const locked=groups().find(g=>g.bubbleId===first.bubbleId)!;assert.equal(locked.memberIds.length,2,'Join racing lock cannot admit outsider');
+    assert.equal((await grant(5,e!,locked)).status,403);assert.equal((await grant(1,a!,first)).status,403,'Stale generation denied');
+    assert.equal(removed.length,2,'Lock retires only its own media room');
+    // Token signing already in flight must not survive unlock/roster rotation.
+    holdToken=true;const pending=grant(1,a!,locked);await until(()=>tokenPending,'token signing in flight');await delay(260);
+    controller.send('proximity.lock',{bubbleId:locked.bubbleId,generation:locked.generation,revision:locked.revision,locked:false});
+    await until(()=>groups().some(g=>g.bubbleId===first.bubbleId&&!g.locked&&g.generation>locked.generation),'unlock generation');holdToken=false;finishToken?.();assert.equal((await pending).status,403,'Pending old grant rejected');
+    await until(()=>groups().some(g=>g.bubbleId===first.bubbleId&&g.memberIds.length===3),'third participant after unlock');
+    // Microphone toggles are no longer membership/authorization commands.
+    e!.send('proximity.set',{enabled:false});await delay(100);assert.equal(states.get(e!.sessionId)!.eligible,true);assert.equal(groups().find(g=>g.bubbleId===first.bubbleId)!.memberIds.includes(e!.sessionId),true,'Mic off keeps the visual member and receive authorization');
+    place(e!,928,320);await until(()=>zones.get(e!.sessionId)?.zone==='Meeting Room','meeting precedence for a listener');place(e!,900,650);await until(()=>states.get(e!.sessionId)?.eligible===true,'visual eligibility resumes outside meeting');
+    place(a!,928,320);await until(()=>zones.get(a!.sessionId)?.zone==='Meeting Room'&&!states.get(a!.sessionId)?.eligible,'meeting precedence');
+    assert.equal((await grant(1,a!)).status,200,'Meeting keeps explicit legacy admission');
+    await a!.leave();await until(()=>!geometry.players.has(a!.sessionId),'leave cleanup');assert.equal(voice.connected(a!.sessionId),false);
+    const currentController=groups().find(g=>g.bubbleId===second.bubbleId)!.controllerId;const leaving=[c!,d!].find(r=>r.sessionId===currentController)!;await leaving.leave();await until(()=>groups().find(g=>g.bubbleId===second.bubbleId)?.lifecycleState==='DISSOLVED'||!groups().some(g=>g.bubbleId===second.bubbleId),'disband cleanup');
+  }finally{
+    holdAuth=false;holdToken=false;finishAuth?.();finishToken?.();for(const room of rooms){room.reconnection.enabled=false;if(room.connection.isOpen)await room.leave();room.removeAllListeners();}await server.gracefullyShutdown(false);await voice.close();
+  }
+});
 test("real transport: canonical tenants, authority, presence, capacity, reconnect and revocation", { timeout: 45_000 }, async () => {
   const removed = new Set<number>();
   let releaseAuthorization:(()=>void)|undefined, authorizationPending=false;

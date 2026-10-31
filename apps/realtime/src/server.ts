@@ -1,3 +1,4 @@
+import type { EnvironmentMaps } from "./environment/maps.ts";
 import { defineServer, defineRoom, matchMaker } from "colyseus";
 import { OfficeTransport } from "./transport.ts";
 import type { OfficeMap } from "../../../packages/shared/src/map.ts";
@@ -10,10 +11,11 @@ import type { ChatStore } from "./chat/store.ts";
 import { VoiceError, type VoiceService } from "./voice/service.ts";
 import { validVoiceRequest } from "../../../packages/shared/src/voice.ts";
 import type { ReadinessReport } from "../../../packages/shared/src/readiness.ts";
+import type { ProximitySettings } from '../../../packages/shared/src/proximity.ts';
 
-export function createRealtimeServer(options: { authorize: Authorize; map: OfficeMap; origins: string[]; chat?: ChatStore; voice?: VoiceService; readiness?: () => Promise<ReadinessReport> }) {
+export function createRealtimeServer(options: { authorize: Authorize; map: OfficeMap; loadMap?: EnvironmentMaps; origins: string[]; chat?: ChatStore; voice?: VoiceService; proximity?:Partial<ProximitySettings>; readiness?: () => Promise<ReadinessReport> }) {
   const admission = createAdmission();
-  const OfficeRoom = officeRoomClass({ ...admission, authorize: options.authorize, map: options.map, chat: options.chat, voice: options.voice });
+  const OfficeRoom = officeRoomClass({ ...admission, authorize: options.authorize, map: options.map, chat: options.chat, voice: options.voice, proximity:options.proximity, loadMap: options.loadMap });
   const origins = new Set(options.origins);
   matchMaker.controller.exposedMethods = [];
   matchMaker.controller.DEFAULT_CORS_HEADERS = {
@@ -68,7 +70,7 @@ export function createRealtimeServer(options: { authorize: Authorize; map: Offic
         const address = `voice:${req.socket.remoteAddress ?? "unknown"}`, now = Date.now();
         for (const [id,item] of requests) if (now-item.at>=60_000) requests.delete(id);
         const rate = requests.get(address) ?? {count:0,at:now};
-        if (requests.size>=1000 && !requests.has(address) || ++rate.count>30) { res.status(429).json({error:"Wait a minute before retrying voice."}); return; }
+        if (requests.size>=1000 && !requests.has(address) || ++rate.count>300) { res.status(429).json({error:"Wait a minute before retrying voice."}); return; }
         requests.set(address,rate);
         try {
           if (!req.is("application/json")) { res.status(415).json({ error: "JSON required." }); return; }
@@ -79,14 +81,17 @@ export function createRealtimeServer(options: { authorize: Authorize; map: Offic
           const version = options.voice?.checkpoint(body.sessionId);
           const header = req.get("authorization");
           const auth = await options.authorize(header?.startsWith("Bearer ") ? header.slice(7) : undefined,body.officeId);
+          const userKey=`media:${auth.userId}:${auth.officeId}`,userRate=requests.get(userKey)??{count:0,at:now};
+          if(++userRate.count>30){res.status(429).json({error:'Wait before requesting voice again.'});return;}requests.set(userKey,userRate);
           if (res.destroyed) return;
           if (rejectDuringShutdown(res)) return;
           if (!options.voice) throw new VoiceError(503,"Voice is not configured.");
+          if(version===undefined)throw new VoiceError(403,'An active office voice session is required.');
           const voice = options.voice;
-          const cancelled = () => { if (!res.writableEnded) void voice.cancel(auth,body.sessionId); };
+          const cancelled = () => { if (!res.writableEnded) void voice.cancel(auth,body.sessionId,version); };
           res.once("close",cancelled);
-          const admission = await voice.join(auth,body.sessionId,version);
-          if (res.destroyed) { await voice.cancel(auth,body.sessionId); return; }
+          const admission = await voice.join(auth,body.sessionId,version,body);
+          if (res.destroyed) { await voice.cancel(auth,body.sessionId,version); return; }
           res.json(admission);
         } catch (error) {
           if (error instanceof VoiceError) res.status(error.status).json({ error: error.message });
@@ -115,11 +120,12 @@ export function createRealtimeServer(options: { authorize: Authorize; map: Offic
           const body: unknown = JSON.parse(text);
           if (!body || typeof body !== "object" || Array.isArray(body) || Object.keys(body).some((key) => !["officeId", "mapVersion"].includes(key))) { res.status(400).json({ error: "Invalid office request." }); return; }
           const input = body as { officeId?: unknown; mapVersion?: unknown };
-          if (input.mapVersion !== mapVersion(options.map)) { res.status(409).json({ error: "Office map changed. Reload this page." }); return; }
           const header = req.get("authorization");
           const auth = await options.authorize(header?.startsWith("Bearer ") ? header.slice(7) : undefined, input.officeId);
           if (rejectDuringShutdown(res)) return;
-          const seat = await admission.reserve(auth);
+          const map = options.loadMap ? await options.loadMap(auth, true) : options.map;
+          if (input.mapVersion !== mapVersion(map)) { res.status(409).json({ code: "MAP_CHANGED", error: "Office setup changed. Reload this page." }); return; }
+          const seat = await admission.reserve(auth, map);
           if (rejectDuringShutdown(res)) return;
           res.json(seat);
         } catch (error) {
