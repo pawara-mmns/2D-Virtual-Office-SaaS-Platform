@@ -3,14 +3,16 @@ import { test } from 'node:test';
 import { EventEmitter } from 'node:events';
 import type { LocalAudioTrack } from 'livekit-client';
 import { createAudioOwner } from './audio-owner.ts';
-import { bubbleBoundary, bubbleTension } from '../office/engine/bubble-geometry.ts';
+import { bubbleBoundary, bubbleTension,avatarEnvelope,smoothEnvelope,type BubbleAvatar } from '../office/engine/bubble-geometry.ts';
 import { decodeProximity, proximityDefaults, proximitySettings, validBubbleRef } from '../../../../../packages/shared/src/proximity.ts';
 import { validVoiceRequest } from '../../../../../packages/shared/src/voice.ts';
 import { createBubbleSounds } from './bubble-sounds.ts';
+import {authorizationFailure,captureFailure,voiceDiagnostic} from './diagnostics.ts';
 function microphone() {
     const events = new EventEmitter();
-    let stops = 0;
-    const track = Object.assign(events, { mediaStreamTrack: { enabled: true, readyState: 'live' }, async mute() { track.mediaStreamTrack.enabled = false; }, async unmute() { track.mediaStreamTrack.enabled = true; }, stop() { stops++; track.mediaStreamTrack.enabled = false; track.mediaStreamTrack.readyState = 'ended'; } });
+    let stops = 0,muted=false;
+    const track = Object.assign(events, { mediaStreamTrack: { enabled: true, readyState: 'live' }, async mute() { if(!muted){muted=true;track.mediaStreamTrack.enabled = false;}return track; }, async unmute() { if(muted){muted=false;track.mediaStreamTrack.enabled = true;}return track; }, stop() { stops++; track.mediaStreamTrack.enabled = false; track.mediaStreamTrack.readyState = 'ended'; } });
+    Object.defineProperty(track,'isMuted',{get:()=>muted});
     return { track: track as unknown as LocalAudioTrack, stops: () => stops };
 }
 test('first unmuted publication initializes an SDK-idempotent track without a mute checkbox cycle',async()=>{
@@ -21,6 +23,42 @@ test('first unmuted publication initializes an SDK-idempotent track without a mu
     await owner.capture();await owner.publish();
     assert.equal(mic.track.mediaStreamTrack.enabled,true,'First publication must enable the actual raw track, not merely set desired mute=false');
     assert.equal(sdkMuted,false);owner.stop();
+});
+test('receive-only binding never captures, duplicate enable publishes once, and saved mute survives rotation',async()=>{
+    let captures=0,publishes=0;const mic=microphone(),owner=createAudioOwner(async()=>{captures++;return mic.track;},true);
+    const port={async publish(track:LocalAudioTrack){assert.equal(track.mediaStreamTrack.enabled,false,'Attach before enabling actual audio');publishes++;},async unpublish(){}};
+    const first=owner.scope();await first.attach(port);assert.equal(captures,0);assert.equal(owner.snapshot().desired,'off');
+    await Promise.all([owner.enable(),owner.enable()]);assert.equal(captures,1);assert.equal(publishes,1);assert.equal(owner.snapshot().phase,'muted');assert.equal(mic.track.isMuted,true);
+    await owner.setMuted(false);assert.equal(owner.snapshot().phase,'active');assert.equal(mic.track.mediaStreamTrack.enabled,true);assert.equal(mic.track.isMuted,false);
+    first.connected(false);assert.equal(owner.snapshot().phase,'paused');assert.equal(mic.track.mediaStreamTrack.enabled,false);first.connected(true);await new Promise(resolve=>setImmediate(resolve));assert.equal(owner.snapshot().phase,'active');assert.equal(captures,1);assert.equal(publishes,1);
+    await owner.setMuted(true);first.pause();const second=owner.scope();await second.attach(port);assert.equal(owner.snapshot().phase,'muted');assert.equal(captures,1);assert.equal(publishes,2);
+    first.pause();await owner.setMuted(false);assert.equal(owner.snapshot().phase,'active');owner.stop();await new Promise(resolve=>setImmediate(resolve));assert.equal(owner.snapshot().phase,'off');
+});
+test('publication failure has a usable retry and a retired pending attachment cannot replace its successor',async()=>{
+    const mic=microphone();let captures=0,attempts=0,fail=true;
+    const owner=createAudioOwner(async()=>{captures++;return mic.track;});
+    await owner.scope().attach({async publish(){attempts++;if(fail)throw Error('Synthetic private provider failure');},async unpublish(){}});
+    await assert.rejects(owner.enable(),/publication failed/);assert.equal(owner.snapshot().phase,'failed');assert.equal(mic.track.mediaStreamTrack.enabled,false);
+    fail=false;await owner.enable();assert.equal(captures,1);assert.equal(attempts,2);assert.equal(owner.snapshot().phase,'active');owner.stop();
+    const late=microphone(),other=createAudioOwner(async()=>late.track);await other.capture();let release!:()=>void;let retired=0;
+    const first=other.scope(),pending=first.attach({async publish(){await new Promise<void>(r=>release=r);},async unpublish(){retired++;}});
+    await new Promise(resolve=>setImmediate(resolve));first.pause();const second=other.scope(),replacement=second.attach({async publish(){},async unpublish(){}});release();await pending;await replacement;assert.equal(retired,1);assert.equal(other.snapshot().phase,'active');first.pause();assert.equal(late.track.mediaStreamTrack.enabled,true);other.stop();
+});
+test('device failures are categorized and diagnostics omit unknown fields and provider text',()=>{
+    for(const [name,category]of [['NotAllowedError','denied'],['NotFoundError','missing_device'],['NotReadableError','device_busy'],['UnknownSDKError','failed']]){const failure=captureFailure({name,message:'synthetic-private-secret'});assert.equal(failure.category,category);assert.doesNotMatch(failure.message,/private-secret/);}
+    assert.match(authorizationFailure(409).message,/still closing/);assert.match(authorizationFailure(403).message,/authorization failed/);assert.match(authorizationFailure(503).message,/server unavailable/);
+    const previous=process.env.NODE_ENV,info=console.info,logs:unknown[][]=[];
+    try{Reflect.set(process.env,'NODE_ENV','development');console.info=(...args)=>logs.push(args);voiceDiagnostic('microphone','reconciled',{desired:'on',errorName:'synthetic-private-secret',token:'synthetic-private-secret'} as Parameters<typeof voiceDiagnostic>[2]);assert.doesNotMatch(JSON.stringify(logs),/private-secret|token/);Reflect.set(process.env,'NODE_ENV','production');voiceDiagnostic('capture','failed');assert.equal(logs.length,1);}finally{console.info=info;if(previous===undefined)Reflect.deleteProperty(process.env,'NODE_ENV');else Reflect.set(process.env,'NODE_ENV',previous);}
+});
+test('dynamic rounded envelopes contain sprite rectangles and feet during movement and membership changes',()=>{
+    const member=(x:number,y:number):BubbleAvatar=>({x,y,left:x-16,right:x+16,top:y-16,bottom:y+16,footX:x,footY:y+11});
+    let memory:{x:number;y:number}[]=[];
+    for(const members of [[member(100,100),member(150,100)],[member(80,105),member(230,130)],[member(80,105),member(230,130),member(150,190)],[member(80,105),member(230,130)]]){
+      const geometry=smoothEnvelope(memory,avatarEnvelope(members,7),16,false);memory=geometry.memory;
+      for(const p of members)for(const point of [{x:p.left,y:p.top},{x:p.right,y:p.top},{x:p.right,y:p.bottom},{x:p.left,y:p.bottom},{x:p.footX,y:p.footY}])for(let i=0;i<geometry.boundary.length;i++){const a=geometry.boundary[i]!,b=geometry.boundary[(i+1)%geometry.boundary.length]!;assert.ok((b.x-a.x)*(point.y-a.y)-(b.y-a.y)*(point.x-a.x)>=-.001);}
+      assert.ok(memory.length<=48);
+    }
+    assert.deepEqual(smoothEnvelope(memory,avatarEnvelope([member(80,105),member(230,130)]),16,true).boundary,avatarEnvelope([member(80,105),member(230,130)]));
 });
 test('one consent capture is coalesced, paused between generations and never silently unmuted', async () => {
     const mic = microphone();
@@ -63,6 +101,7 @@ test('late permission, permission revocation and a pending unmute cannot revive 
     await assert.rejects(pending);
     assert.equal(mic.stops(), 1);
     assert.equal(owner.granted, false);
+    assert.equal(owner.snapshot().permission,'unknown');
     const second = microphone();
     let ended = 0;
     const active = createAudioOwner(async () => second.track, false, () => ended++);
@@ -83,6 +122,11 @@ test('late permission, permission revocation and a pending unmute cannot revive 
     await assert.rejects(publish);
     assert.equal(third.track.mediaStreamTrack.enabled, false);
     racing.stop();
+});
+test('capture initialization failure releases the acquired track and can be retried',async()=>{
+    const broken=microphone(),working=microphone();broken.track.mute=async()=>{throw Error('Synthetic initialization failure');};let attempts=0;
+    const owner=createAudioOwner(async()=>++attempts===1?broken.track:working.track);
+    await assert.rejects(owner.enable());assert.equal(broken.stops(),1);assert.equal(owner.snapshot().phase,'failed');assert.equal(owner.snapshot().permission,'unknown');await owner.enable();assert.equal(owner.snapshot().phase,'paused');owner.stop();assert.equal(working.stops(),1);
 });
 test('late cleanup of a retired media generation cannot pause its replacement', async () => {
     const mic = microphone(), owner = createAudioOwner(async () => mic.track);

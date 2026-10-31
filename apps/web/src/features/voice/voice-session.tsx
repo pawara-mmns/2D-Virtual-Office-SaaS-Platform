@@ -9,6 +9,7 @@ import { createVoiceMount, startVoice, voiceError, type VoiceStage } from "./lif
 import { voiceDisconnect } from "./disconnect";
 import type { AudioOwner } from "./audio-owner";
 import { VoicePopover } from './voice-popover';
+import { voiceDiagnostic } from './diagnostics';
 
 function ProximityPlayback() {
   const { mergedProps } = useStartAudio({ props: { className:'office-control', title:'Enable audio playback', 'aria-label':'Enable audio playback' } });
@@ -75,6 +76,7 @@ export default function VoiceSession({ admission,leave,failed,owner,ready,conver
     const began = performance.now();
     let participantId: string | undefined;
     let captured: LocalAudioTrack | undefined;
+    let mediaScope:ReturnType<AudioOwner['scope']>|undefined;
     const onTrackEnded=()=>{if(active)setNotice('Microphone disconnected. Select another input, or leave and rejoin.');};
     const diagnostic = (event: string, detail: { reason?: string; state?: string } = {}) => {
       console.info("Voice lifecycle.",{ event,at:new Date().toISOString(),elapsedMs:Math.round(performance.now()-began),participantId,...detail });
@@ -89,13 +91,15 @@ export default function VoiceSession({ admission,leave,failed,owner,ready,conver
     };
     const onConnectionState = (state: string) => {
       if (active && ["connected","connecting","disconnected","reconnecting","signalReconnecting"].includes(state)) diagnostic("connection_state",{state});
+      if(active&&['connected','connecting','disconnected','reconnecting','signalReconnecting'].includes(state))voiceDiagnostic('connection',state==='connected'?'ready':'started',{connectionState:state as 'connected'|'connecting'|'disconnected'|'reconnecting'|'signalReconnecting'});
+      if(active)mediaScope?.connected(state==='connected');
     };
     const onDevicesError = (error: Error) => { if (active) setNotice(voiceError(error)); };
     const onSubscriptionError = () => { if (active) { setNotice("Remote audio subscription failed. Check the connection and retry voice."); console.warn("Voice connection failed.",{stage:"remote_audio_subscription",category:"subscription"}); } };
     room.on(RoomEvent.Disconnected,onDisconnect); room.on(RoomEvent.MediaDevicesError,onDevicesError);
     room.on(RoomEvent.TrackSubscriptionFailed,onSubscriptionError);
     room.on(RoomEvent.ConnectionStateChanged,onConnectionState);
-    const mounting = mount(() => {const scope=owner?.scope();return startVoice({
+    const mounting = mount(() => {const scope=owner?.scope();mediaScope=scope;return startVoice({
       async capture() {
         if(scope){if(!conversation)await scope.capture();return {stop:()=>scope.pause()};}
         const track = await createLocalAudioTrack({ echoCancellation:true,noiseSuppression:true,autoGainControl:true });
@@ -104,7 +108,8 @@ export default function VoiceSession({ admission,leave,failed,owner,ready,conver
       },
       async connect(signalConnected) {
         room.on(RoomEvent.SignalConnected,signalConnected);
-        try { await room.connect(url,token,{ autoSubscribe:true,websocketTimeout:8000,peerConnectionTimeout:8000 }); }
+        try { voiceDiagnostic('connection','started');await room.connect(url,token,{ autoSubscribe:true,websocketTimeout:8000,peerConnectionTimeout:8000 }); }
+        catch(error){voiceDiagnostic('connection','failed',{errorName:error instanceof Error?error.name:'OtherError'});throw error;}
         finally { room.off(RoomEvent.SignalConnected,signalConnected); }
       },
       async publish(track) {

@@ -37,11 +37,11 @@ async function until(check: () => boolean, message: string, timeout = 6000) {
 
 test('real transport: proximity consent, independent rooms, lock/join races, stale HTTP grants and meeting precedence', {timeout:30_000}, async()=>{
   const officeId=id(501),otherOffice=id(502),members=new Map<string,Set<string>>(),issued:{room:string;identity:string}[]=[],removed:string[]=[];
-  let holdToken=false,tokenPending=false,finishToken:(()=>void)|undefined,holdAuth=false,authPending=false,finishAuth:(()=>void)|undefined;
+  let holdToken=false,tokenPending=false,finishToken:(()=>void)|undefined,holdAuth=false,finishAuth:(()=>void)|undefined;
   const authorize:Authorize=async(token,requested)=>{
     const n=Number(String(token).replace('bubble-',''));
     if(!n||requested!==(n===6?otherOffice:officeId))throw new AccessDenied();
-    if(holdAuth&&n===5){authPending=true;await new Promise<void>(resolve=>{finishAuth=resolve;});}
+    if(holdAuth&&n===5){await new Promise<void>(resolve=>{finishAuth=resolve;});}
     return {userId:id(n),organizationId:id(n===6?602:601),officeId:requested,token:String(token),checkedAt:Date.now(),expiresAt:Date.now()+60_000,displayName:'Fixture member',avatarKey:'fern'};
   };
   const provider:VoiceProvider={url:'wss://fixture.livekit.cloud',prefix:'fixture_',room:a=>'fixture_'+a.organizationId+'_'+a.officeId,
@@ -49,7 +49,7 @@ test('real transport: proximity consent, independent rooms, lock/join races, sta
     async token(_auth,room,identity){issued.push({room,identity});if(holdToken){tokenPending=true;await new Promise<void>(resolve=>{finishToken=resolve;});}const roster=members.get(room)??new Set();roster.add(identity);members.set(room,roster);return 'synthetic-bubble-token';},
     async remove(room,identity){removed.push(identity);members.get(room)?.delete(identity);}};
   const voice=createVoiceService(authorize,provider,Date.now,()=>{});await voice.poll();
-  const server=createRealtimeServer({authorize,map,origins:[origin],voice,proximity:{dwellMs:100,graceMs:150}});
+  const server=createRealtimeServer({authorize,map,origins:[origin],voice,proximity:{dwellMs:200,graceMs:150}});
   await server.listen(0,'127.0.0.1');const address=server.transport.server!.address();assert.ok(address&&typeof address==='object');const url=`http://127.0.0.1:${address.port}`;
   const rooms:SDKRoom[]=[],states=new Map<string,ProximityState>(),zones=new Map<string,VoiceZoneState>(),errors:string[]=[];
   const join=async(n:number)=>{
@@ -66,7 +66,6 @@ test('real transport: proximity consent, independent rooms, lock/join races, sta
     const place=(room:SDKRoom,x:number,y:number)=>Object.assign(geometry.players.get(room.sessionId)!,{x,y});
     place(a!,440,450);place(b!,480,450);place(c!,680,600);place(d!,720,600);place(e!,900,650);
     assert.equal((await grant(1,a!)).status,403,'Authoritative membership is required before a media grant');
-    for(const room of[a!,b!,c!,d!])room.send('proximity.set',{enabled:true});
     const groups=()=>states.get(b!.sessionId)?.bubbles.filter(g=>g.lifecycleState!=='DISSOLVED')??[];
     await until(()=>groups().length===2&&groups().every(g=>['CONNECTING','ACTIVE'].includes(g.lifecycleState)),'two independent groups');
     const first=groups().find(g=>g.memberIds.includes(a!.sessionId))!,second=groups().find(g=>g.memberIds.includes(c!.sessionId))!;
@@ -78,7 +77,7 @@ test('real transport: proximity consent, independent rooms, lock/join races, sta
     await until(()=>groups().every(g=>g.lifecycleState==='ACTIVE'),'provider-observed active groups');
     const controller=[a!,b!].find(r=>r.sessionId===first.controllerId)!,nonController=[a!,b!].find(r=>r!==controller)!;
     nonController.send('proximity.lock',{bubbleId:first.bubbleId,generation:first.generation,revision:first.revision,locked:true});await until(()=>errors.includes(nonController.sessionId),'controller-only denial');
-    place(e!,460,450);e!.send('proximity.set',{enabled:true});
+    place(e!,460,450);
     controller.send('proximity.lock',{bubbleId:first.bubbleId,generation:first.generation,revision:first.revision,locked:true});
     await until(()=>groups().some(g=>g.bubbleId===first.bubbleId&&g.locked&&g.generation>first.generation),'locked generation');await delay(300);
     const locked=groups().find(g=>g.bubbleId===first.bubbleId)!;assert.equal(locked.memberIds.length,2,'Join racing lock cannot admit outsider');

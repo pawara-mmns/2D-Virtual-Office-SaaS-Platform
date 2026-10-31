@@ -12,6 +12,7 @@ type Visual = {
     alpha: number;
     points: BubbleAvatar[];
     memory:BubblePoint[];
+    boundary:BubblePoint[];
 };
 export class VoiceBubbles {
     private readonly graphics: Phaser.GameObjects.Graphics;
@@ -28,7 +29,7 @@ export class VoiceBubbles {
             if (points.length < 2)
                 continue;
             live.add(bubble.bubbleId);
-            const visual = this.visuals.get(bubble.bubbleId) ?? { bubble, alpha: reduced ? 1 : 0, points, memory:[] };
+            const visual = this.visuals.get(bubble.bubbleId) ?? { bubble, alpha: reduced ? 1 : 0, points, memory:[], boundary:[] };
             visual.bubble = bubble;
             visual.points = points;
             this.visuals.set(bubble.bubbleId, visual);
@@ -49,6 +50,7 @@ export class VoiceBubbles {
             const geometry=smoothEnvelope(visual.memory,avatarEnvelope(visual.points,padding),delta,reduced);
             visual.memory=geometry.memory;
             const boundary=geometry.boundary,color = visual.bubble.locked ? 0xbda4ff : 0x75dcf4;
+            visual.boundary=boundary;
             const alpha = visual.alpha * (visual.bubble.lifecycleState === 'DISCONNECTING' ? .45 : 1);
             this.graphics.fillStyle(color, .06 * alpha);
             this.graphics.beginPath();

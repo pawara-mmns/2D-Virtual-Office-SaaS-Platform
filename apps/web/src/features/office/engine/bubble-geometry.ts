@@ -41,6 +41,13 @@ export function avatarEnvelope(members:readonly BubbleAvatar[],padding=9):Bubble
     const points:BubblePoint[]=[];
     for(const p of members){
         if(![p.left,p.right,p.top,p.bottom,p.footX,p.footY].every(Number.isFinite))continue;
+        if(members.length===2){
+            // A true capsule for a pair, with end radii derived from the entire
+            // sprite/foot footprint rather than a fixed shrinking center halo.
+            const radius=Math.max(...[[p.left,p.top],[p.right,p.top],[p.right,p.bottom],[p.left,p.bottom],[p.footX,p.footY]].map(([x,y])=>Math.hypot(x!-p.x,y!-p.y)))+padding;
+            for(let i=0;i<24;i++){const angle=i*Math.PI/12;points.push({x:p.x+Math.cos(angle)*radius,y:p.y+Math.sin(angle)*radius});}
+            continue;
+        }
         const left=Math.min(p.left,p.footX),right=Math.max(p.right,p.footX),top=Math.min(p.top,p.footY),bottom=Math.max(p.bottom,p.footY);
         for(const [x,y,start]of [[left,top,Math.PI],[right,top,Math.PI*1.5],[right,bottom,0],[left,bottom,Math.PI*.5]])
             for(let i=0;i<=4;i++){const angle=start!+i*Math.PI/8;points.push({x:x!+Math.cos(angle)*padding,y:y!+Math.sin(angle)*padding});}

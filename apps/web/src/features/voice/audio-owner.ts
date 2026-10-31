@@ -11,15 +11,15 @@ export const initialMicrophoneState:MicrophoneState={desired:'off',muted:false,p
 // attachment is receive-only until an explicit user action requests capture.
 export function createAudioOwner(factory:()=>Promise<LocalAudioTrack>,initialMuted=false,onEnded=()=>{}) {
   let track:LocalAudioTrack|undefined,pending:Promise<LocalAudioTrack>|undefined;
-  let generation=0,lease=0,muted=initialMuted,wanted=false,permission:MicrophoneState['permission']='unknown';
-  let failure:'denied'|'failed'|undefined,port:AudioPublicationPort|undefined,published:LocalAudioTrack|undefined;
+  let generation=0,lease=0,bindingEpoch=0,muted=initialMuted,wanted=false,permission:MicrophoneState['permission']='unknown';
+  let failure:'denied'|'failed'|undefined,port:AudioPublicationPort|undefined,published:LocalAudioTrack|undefined,transportReady=false;
   let queue=Promise.resolve(),state:MicrophoneState={...initialMicrophoneState,muted};
   const listeners=new Set<()=>void>();
   const persist=()=>{try{localStorage.setItem('virtual-office:microphone-muted',String(muted));}catch{/* Optional storage. */}};
   const notify=()=>{
     const captured=!!track&&track.mediaStreamTrack.readyState!=='ended';
     const attached=!!published&&published===track&&!!port;
-    const phase:MicrophonePhase=failure??(pending?'pending':!wanted||!captured?'off':muted?'muted':attached&&track!.mediaStreamTrack.enabled&&!track!.isMuted?'active':'paused');
+    const phase:MicrophonePhase=failure??(pending?'pending':!wanted||!captured?'off':muted?'muted':attached&&transportReady&&track!.mediaStreamTrack.enabled&&!track!.isMuted?'active':'paused');
     const next:MicrophoneState={desired:wanted?(muted?'muted':'on'):'off',muted,permission,phase,captured,published:attached};
     if(JSON.stringify(next)!==JSON.stringify(state)){state=next;voiceDiagnostic('microphone','reconciled',{desired:next.desired,rawEnabled:track?.mediaStreamTrack.enabled,sdkMuted:track?.isMuted,published:attached});listeners.forEach(callback=>callback());}
   };
@@ -30,6 +30,7 @@ export function createAudioOwner(factory:()=>Promise<LocalAudioTrack>,initialMut
     if(published&&(!wanted||published!==active)){
       const old=published;published=undefined;await binding.unpublish(old);
     }
+    if(!transportReady){disableRaw();notify();return;}
     if(!wanted||!active||active.mediaStreamTrack.readyState==='ended'){notify();return;}
     if(published!==active){
       active.mediaStreamTrack.enabled=false;await active.mute();
@@ -42,7 +43,7 @@ export function createAudioOwner(factory:()=>Promise<LocalAudioTrack>,initialMut
     await (muted?active.mute():active.unmute());
     // LiveKit unmute() is idempotent and may not touch a raw disabled track.
     // Reconcile the physical bit as well as SDK mute/publication state.
-    active.mediaStreamTrack.enabled=binding===port&&active===track&&current===generation&&wanted&&!muted&&!active.isMuted;
+    active.mediaStreamTrack.enabled=binding===port&&transportReady&&active===track&&current===generation&&wanted&&!muted&&!active.isMuted;
     if(muted&&active.isMuted===false)await active.mute();
     notify();
   };
@@ -65,14 +66,16 @@ export function createAudioOwner(factory:()=>Promise<LocalAudioTrack>,initialMut
       const current=generation;permission='pending';voiceDiagnostic('capture','started');
       const operation=factory().then(async created=>{
         created.mediaStreamTrack.enabled=false;
-        await created.mute();
-        if(current!==generation||!wanted){created.stop();voiceDiagnostic('capture','cancelled');throw new VoiceFailure('capture','cancelled','Microphone request cancelled.');}
-        track=created;permission='granted';
-        created.once(TrackEvent.Ended,()=>{if(track===created){owner.stop();failure='failed';notify();onEnded();}});
-        return created;
+        try{
+          await created.mute();
+          if(current!==generation||!wanted){voiceDiagnostic('capture','cancelled');throw new VoiceFailure('capture','cancelled','Microphone request cancelled.');}
+          track=created;permission='granted';
+          created.once(TrackEvent.Ended,()=>{if(track===created){owner.stop();failure='failed';notify();onEnded();}});
+          return created;
+        }catch(error){created.stop();throw error;}
       }).catch(error=>{
         const detail=captureFailure(error);
-        if(current===generation){wanted=false;failure=detail.category==='denied'?'denied':'failed';if(failure==='denied')permission='denied';}
+        if(current===generation){wanted=false;failure=detail.category==='denied'?'denied':'failed';permission=failure==='denied'?'denied':'unknown';}
         throw detail;
       });
       pending=operation;notify();
@@ -80,7 +83,7 @@ export function createAudioOwner(factory:()=>Promise<LocalAudioTrack>,initialMut
       return operation;
     },
     async enable(unmute=false){if(unmute){muted=false;persist();}await owner.capture();await schedule();notify();},
-    pause(){lease++;port=undefined;published=undefined;disableRaw();voiceDiagnostic('cleanup','retired');notify();},
+    pause(){lease++;bindingEpoch=0;port=undefined;published=undefined;transportReady=false;disableRaw();voiceDiagnostic('cleanup','retired');notify();},
     async publish(expected=lease){
       if(expected!==lease)throw Error('Media generation retired');
       const current=generation,active=await owner.capture();
@@ -95,8 +98,9 @@ export function createAudioOwner(factory:()=>Promise<LocalAudioTrack>,initialMut
       return{
         async capture(){if(current!==lease)throw Error('Media generation retired');const active=await owner.capture();if(current!==lease)throw Error('Media generation retired');return active;},
         publish:()=>owner.publish(current),
-        async attach(binding:AudioPublicationPort){if(current!==lease)throw Error('Media generation retired');attached=binding;port=binding;published=undefined;await schedule();},
-        pause(){if(attached?port===attached:current===lease)owner.pause();},
+        async attach(binding:AudioPublicationPort){if(current!==lease)throw Error('Media generation retired');attached=binding;bindingEpoch=current;port=binding;published=undefined;transportReady=true;await schedule();},
+        connected(ready:boolean){if(attached&&port===attached&&bindingEpoch===current){transportReady=ready;if(!ready)disableRaw();notify();if(ready)void schedule().catch(()=>{});}},
+        pause(){if(attached?port===attached&&bindingEpoch===current:current===lease)owner.pause();},
       };
     },
     async setMuted(value:boolean){
@@ -105,7 +109,7 @@ export function createAudioOwner(factory:()=>Promise<LocalAudioTrack>,initialMut
       else if(track){await (muted?track.mute():track.unmute());track.mediaStreamTrack.enabled=false;}
       notify();
     },
-    stop(){generation++;lease++;wanted=false;failure=undefined;const old=track;track=undefined;pending=undefined;old?.stop();notify();void schedule().catch(()=>{});},
+    stop(){generation++;lease++;wanted=false;failure=undefined;if(permission==='pending')permission='unknown';const old=track;track=undefined;pending=undefined;old?.stop();notify();void schedule().catch(()=>{});},
   };
   return owner;
 }

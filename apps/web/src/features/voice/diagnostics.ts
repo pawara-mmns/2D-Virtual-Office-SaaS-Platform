@@ -4,10 +4,10 @@ export class VoiceFailure extends Error {
   readonly stage:VoiceStageName;readonly category:VoiceCategory;
   constructor(stage:VoiceStageName,category:VoiceCategory,message:string){super(message);this.stage=stage;this.category=category;}
 }
-export function voiceDiagnostic(stage:VoiceStageName,category:VoiceCategory,detail:{permission?:'granted'|'denied'|'prompt'|'unknown';errorName?:string;desired?:'off'|'muted'|'on';rawEnabled?:boolean;sdkMuted?:boolean;published?:boolean;generation?:number;revision?:number}={}) {
+export function voiceDiagnostic(stage:VoiceStageName,category:VoiceCategory,detail:{permission?:'granted'|'denied'|'prompt'|'unknown';connectionState?:'connected'|'connecting'|'disconnected'|'reconnecting'|'signalReconnecting';errorName?:string;desired?:'off'|'muted'|'on';rawEnabled?:boolean;sdkMuted?:boolean;published?:boolean;generation?:number;revision?:number}={}) {
   if(process.env.NODE_ENV!=='development')return;
   const allowed=['NotAllowedError','PermissionDeniedError','NotFoundError','NotReadableError','OverconstrainedError','AbortError','ConnectionError'];
-  console.info('Voice development.',{stage,category,...detail,errorName:detail.errorName?(allowed.includes(detail.errorName)?detail.errorName:'OtherError'):undefined});
+  console.info('Voice development.',{stage,category,permission:detail.permission,connectionState:detail.connectionState,desired:detail.desired,rawEnabled:detail.rawEnabled,sdkMuted:detail.sdkMuted,published:detail.published,generation:detail.generation,revision:detail.revision,errorName:detail.errorName?(allowed.includes(detail.errorName)?detail.errorName:'OtherError'):undefined});
 }
 export function captureFailure(error:unknown):VoiceFailure {
   if(error instanceof VoiceFailure)return error;

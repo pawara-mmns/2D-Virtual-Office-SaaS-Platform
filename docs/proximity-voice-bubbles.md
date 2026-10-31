@@ -1,6 +1,6 @@
 # Dynamic proximity voice bubbles
 
-See [icon-only proximity voice](proximity-voice-minimal-ux.md) for the latest controls and screenshots, and [Phase 4 acceptance results](proximity-voice-phase4.md) for the earlier real-user testing status.
+See [activation, membership and geometry fixes](proximity-voice-activation-fix.md) for the current behavior, diagnostics, screenshots and user-confirmed activation result. [Icon-only proximity voice](proximity-voice-minimal-ux.md) and [Phase 4](proximity-voice-phase4.md) describe earlier milestones.
 
 Implemented locally in the current working tree. No migration, deployment or tenant-data change is required. Existing architectural maps, collision geometry, camera, owner customization and Liquid Glass HUD remain in use.
 
