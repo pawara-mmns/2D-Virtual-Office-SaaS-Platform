@@ -78,7 +78,7 @@ export function createVoiceService(authorize: Authorize, provider: VoiceProvider
     try {
       const session = sessions.get(record.session);
       const fresh = await authorize(session?.auth.token,record.auth.officeId);
-      if (record.revoked || !eligible(record) || fresh.userId !== record.auth.userId || fresh.organizationId !== record.auth.organizationId || now() >= fresh.expiresAt) { await remove(record,"authorization_changed"); return; }
+      if (fresh.voiceAllowed === false || record.revoked || !eligible(record) || fresh.userId !== record.auth.userId || fresh.organizationId !== record.auth.organizationId || now() >= fresh.expiresAt) { await remove(record,"authorization_changed"); return; }
       record.auth = fresh; record.lease = fresh.checkedAt+VOICE_LEASE_MS;
       diagnostic("authorization_renewed",record,undefined,now()-began);
     } catch { diagnostic("authorization_failed",record,undefined,now()-began); await remove(record,"authorization_failed"); }
@@ -129,6 +129,8 @@ export function createVoiceService(authorize: Authorize, provider: VoiceProvider
   const pollTimer = setInterval(() => { void poll(); },2000); pollTimer.unref();
   void poll();
   return {
+    metrics: () => ({ observedSessions: provider && ready && !closed && now() - lastPoll < 6000 ?
+      [...active.values()].filter(record => record.seen && !record.revoked && eligible(record) && now() < record.lease).length : null }),
     // A recent successful control-plane sweep is an availability indicator,
     // never proof of working audio, valid client admission or Cloud revocation.
     available: () => !!provider && ready && !closed && now() - lastPoll < 6000,
@@ -165,6 +167,7 @@ export function createVoiceService(authorize: Authorize, provider: VoiceProvider
       if (record?.session === id) await remove(record,"request_cancelled");
     },
     async join(auth: Authorization, sessionId: string, expectedVersion = sessions.get(sessionId)?.version, request?:VoiceRequest) {
+      if (auth.voiceAllowed === false) throw new VoiceError(403, 'Voice is disabled for this workspace.');
       if (!provider || !ready || closed) throw new VoiceError(503,"Voice is unavailable. Ask an administrator to check LiveKit configuration and connectivity.");
       const session = sessions.get(sessionId);
       if (!session?.zone || session.version !== expectedVersion || session.auth.userId !== auth.userId || session.auth.organizationId !== auth.organizationId || session.auth.officeId !== auth.officeId || now() >= session.auth.expiresAt || now() >= auth.expiresAt) throw new VoiceError(403,"Enter the meeting room with an active office connection before joining voice.");

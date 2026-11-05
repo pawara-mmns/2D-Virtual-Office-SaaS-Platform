@@ -2,7 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { avatarDisplayName, safeAvatarKey, type AvatarAppearance } from "../../../../packages/shared/src/avatars.ts";
 import { isId } from "../../../../packages/shared/src/protocol.ts";
 export class AccessDenied extends Error { constructor() { super("Office access denied. Sign in and verify active membership."); } }
-export type Authorization = AvatarAppearance & { userId: string; organizationId: string; officeId: string; token: string; expiresAt: number; checkedAt: number };
+export type Authorization = AvatarAppearance & { userId: string; organizationId: string; officeId: string; token: string; expiresAt: number; checkedAt: number; voiceAllowed?: boolean; platformVersion?: number };
 export type Authorize = (token: unknown, officeId: unknown) => Promise<Authorization>;
 export type IdentitySource = {
   user(): Promise<{ id: string; confirmed: boolean; anonymous: boolean } | null>;
@@ -46,7 +46,16 @@ export function supabaseAuthorizer(url: string, key: string): Authorize {
     };
     // Total authorization deadline, including sequential RLS reads.
     let deadline: ReturnType<typeof setTimeout> | undefined;
-    try { return await Promise.race([authorizeIdentity(token, officeId, source), new Promise<never>((_, reject) => { deadline = setTimeout(() => reject(new AccessDenied()), 4500); deadline.unref(); })]); }
+    const authorized = async () => {
+      const identity = await authorizeIdentity(token, officeId, source);
+      const { data, error } = await client.rpc('platform_office_access', { p_office: officeId });
+      // Only a missing additive RPC permits pre-migration compatibility. Once
+      // installed, null/permission/dependency failures deny office admission.
+      if (error && ['PGRST202', '42883'].includes(error.code)) return identity;
+      if (error || !data || typeof data.voice_enabled !== 'boolean' || !Number.isSafeInteger(data.version)) throw new AccessDenied();
+      return { ...identity, voiceAllowed: data.voice_enabled, platformVersion: data.version };
+    };
+    try { return await Promise.race([authorized(), new Promise<never>((_, reject) => { deadline = setTimeout(() => reject(new AccessDenied()), 4500); deadline.unref(); })]); }
     finally { clearTimeout(deadline); }
   };
 }
