@@ -568,3 +568,17 @@ The invitation link captures proof into an HttpOnly cookie, then uses clean
 email acceptance. Token-bearing paths need redaction in deployment access logs.
 See [architecture/configuration/test instructions](docs/team-invitations.md) and
 [actual PASS/NOT TESTED results and approval status](docs/team-invitations-validation.md).
+
+## Platform administrator console
+
+The separate username/password and mandatory MFA console lives at `/superadmin/login`.
+Start with [local setup, architecture, bootstrap and recovery](docs/platform-admin.md)
+and [validation results](docs/platform-admin-validation.md). Its additive migration
+has not been applied remotely. Reconcile the documented environment migration-history
+discrepancy before activation. Normal workspace accounts continue using Supabase Auth.
+
+The [hosted Supabase data integration report](docs/platform-admin-data-integration.md)
+documents the separate administrator/tenant stores, actual observed counts,
+read-only inspection, telemetry, tests and regression screenshots. Use
+`pnpm admin:connect:data` to configure the matching server-only tenant reader and
+`pnpm admin:check:data` for aggregate read-only diagnostics.

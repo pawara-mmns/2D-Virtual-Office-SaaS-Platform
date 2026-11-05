@@ -7,6 +7,13 @@
     "node": ">=22.14.0"
   },
   "scripts": {
+    "admin:setup:local": "node scripts/platform-admin-local.mjs",
+    "admin:connect:data": "node --experimental-strip-types scripts/platform-admin-connect-data.mjs",
+    "admin:check:data": "node --experimental-strip-types scripts/platform-admin-check-data.mjs",
+    "admin:check:auth": "node --experimental-strip-types scripts/platform-admin-check-auth.mjs",
+    "admin:bootstrap": "node --env-file-if-exists=apps/web/.env --env-file-if-exists=apps/web/.env.local --experimental-strip-types scripts/platform-admin-bootstrap.mjs",
+    "test:admin:database": "node --experimental-strip-types --test scripts/platform-admin-database.test.mjs",
+    "test:admin:http": "node --experimental-strip-types --test scripts/platform-admin-http.test.mjs",
     "dev": "pnpm --filter @virtual-office/web dev",
     "dev:realtime": "pnpm --filter @virtual-office/realtime dev",
     "dev:all": "pnpm --parallel --filter @virtual-office/web --filter @virtual-office/realtime dev",
