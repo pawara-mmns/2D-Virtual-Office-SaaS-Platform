@@ -12,6 +12,29 @@ export function createAdmission() {
   const claims = new Map<string, { sessionId?: string; until: number }>();
   const key = (officeId: string, userId: string) => `${officeId}/${userId}`;
   return {
+    retireOffice(officeId: string) {
+      const previous = queues.get(officeId) ?? Promise.resolve();
+      const operation = previous.catch(() => {}).then(async () => {
+        const roomId = rooms.get(officeId), local = roomId ? matchMaker.getLocalRoomById(roomId) : undefined;
+        if (!local) return false;
+        await local.disconnect(ENVIRONMENT_CHANGED_CODE);
+        for (const id of claims.keys()) if (id.startsWith(officeId + '/')) claims.delete(id);
+        return true;
+      });
+      queues.set(officeId, operation);
+      void operation.finally(() => { if (queues.get(officeId) === operation) queues.delete(officeId); }).catch(() => {});
+      return operation;
+    },
+    metrics() {
+      let connectedUsers = 0, realtimeRooms = 0;
+      for (const roomId of rooms.values()) {
+        const room = matchMaker.getLocalRoomById(roomId);
+        if (!room) continue;
+        realtimeRooms++;
+        connectedUsers += [...(room.state as OfficeState).players.values()].filter(p => p.connected).length;
+      }
+      return { connectedUsers, realtimeRooms };
+    },
     claimed(officeId: string, userId: string, sessionId: string) { return claims.get(key(officeId, userId))?.sessionId === sessionId; },
     release(officeId: string, userId: string, sessionId: string) { if (claims.get(key(officeId, userId))?.sessionId === sessionId) claims.delete(key(officeId, userId)); },
     disposed(officeId: string, roomId: string) { if (rooms.get(officeId) === roomId) rooms.delete(officeId); },

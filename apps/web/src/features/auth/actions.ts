@@ -8,6 +8,7 @@ import { authSetupMessage, getSupabaseConfig } from "@/lib/supabase/config";
 import { recoveryCookieName, recoveryCookieOptions } from "./links";
 import { applyRecoveryPassword, lookupVerifiedUser, requestPasswordRecovery } from "./service";
 import { validateAuthForm, type AuthMode, type AuthState } from "./validation";
+import { registrationAvailable } from '@/features/platform-admin/platform-gates';
 
 const verificationMessage =
   "If this address can be registered, you’ll receive a verification email. Open its link to verify your address before signing in. Check your spam folder too.";
@@ -49,6 +50,7 @@ async function submit(mode: AuthMode, form: FormData): Promise<AuthState> {
     }
 
     if (mode === "register") {
+      if (!await registrationAvailable()) return errorState('Registration is temporarily unavailable.');
       const { data, error } = await supabase.auth.signUp({ email: input.email, password: input.password });
       if (error && error.code !== "user_already_exists") {
         if (error.code === "weak_password") return errorState("Choose a stronger password and try again.");
