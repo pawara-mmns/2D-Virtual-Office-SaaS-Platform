@@ -5,6 +5,11 @@ supports direct furniture editing, immediate multiplayer updates, Save without r
 versioned recovery drafts and protected interactive seating. Its additive live-commit
 migration is prepared locally; see the report for activation and validation.
 
+The [pixel-art visual overhaul](docs/premium-office-visuals.md) adds detailed original
+sprites, seven editable assets, warm baked lighting and an offline artwork import
+pipeline. The report includes actual Phaser comparisons, performance measurements
+and the local catalog migration required before saving new assets to hosted Supabase.
+
 A multi-tenant 2D virtual office SaaS platform for distributed teams, with private
 pixel-art offices, realtime movement, chat and meeting-zone voice. **Phase 5
 Step 3A prepares Vercel frontend and Railway realtime hosting, preserving Step 3's

@@ -46,6 +46,8 @@
     "test:team:live": "node scripts/test-organizations.mjs --team",
     "test:team:anonymous": "pnpm --filter @virtual-office/web test:team:anonymous",
     "assets:office": "node --experimental-strip-types scripts/generate-office-assets.mjs",
+    "assets:editor-catalog": "node --experimental-strip-types scripts/generate-editor-catalog.mjs",
+    "test:office:art": "node --experimental-strip-types --test scripts/office-art.test.mjs",
     "assets:avatars": "node --experimental-strip-types scripts/generate-avatar-assets.mjs",
     "test:office:browser": "node --test scripts/test-office-browser.mjs",
     "test:communication:browser": "node --test scripts/test-communication-browser.mjs",
