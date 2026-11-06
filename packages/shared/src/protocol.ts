@@ -2,6 +2,7 @@ import type { AvatarAppearance, AvatarDirection } from "./avatars.ts";
 import type { Availability } from "./chat.ts";
 import type { ProximityState, BubbleRef } from './proximity.ts';
 import type { InteractionRequest } from './interactions.ts';
+import type {LiveSnapshot,LiveRequest} from './environment/live-decoration.ts';
 export const TICK_MS = 50;
 export const ENVIRONMENT_CHANGED_CODE = 4052;
 export const AUTH_CHECK_MS = 10_000;
@@ -13,10 +14,13 @@ export type PlayerSnapshot = AvatarAppearance & {
   direction: AvatarDirection; isMoving: boolean; connected: boolean; availability?: Availability;
   isRunning?: boolean; motionState?: 'IDLE'|'WALKING'|'RUNNING'|'SITTING'|'STANDING'; seatId?: string;
 };
-export type OfficeSnapshot = { officeId: string; mapVersion: string; players: Map<string, PlayerSnapshot>; seats?: Map<string,string> };
+export type OfficeSnapshot = { officeId: string; mapVersion: string;structureVersion?:string;environmentRevision?:number;environmentEpoch?:string; players: Map<string, PlayerSnapshot>; seats?: Map<string,string> };
 export type Participant = Pick<PlayerSnapshot, "sessionId" | "userId" | "displayName" | "avatarKey" | "connected" | "availability"> & { isSelf?: boolean };
 export type Presence = { status: "connecting" | "online" | "reconnecting" | "offline" | "denied"; count: number; notice: string; reload?: boolean };
 export type OfficeNetwork = {
+  environment?():LiveSnapshot|undefined;
+  editEnvironment?(request:LiveRequest):Promise<LiveSnapshot>;
+  syncEnvironment?():void;
   proximity?():ProximityState|null;
   enableProximity?(enabled:boolean):boolean;
   lockBubble?(ref:BubbleRef,locked:boolean):boolean;

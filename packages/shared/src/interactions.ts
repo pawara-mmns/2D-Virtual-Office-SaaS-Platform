@@ -42,7 +42,7 @@ export function registerSeating(map:OfficeMap, placement:Marker & {instanceId?:s
   if(!seatingCatalog[placement.name as Fixture]||![placement.x,placement.y,placement.width,placement.height].every(Number.isFinite))return null;
   const {x,y}=placement,width=placement.width!,height=placement.height!;
   if(width<=0||height<=0||x<0||y<0||x+width>map.width*32||y+height>map.height*32)return null;
-  const instanceId=placement.instanceId??`${placement.type}/${placement.name}/${x}:${y}`;
+  const instanceId=placement.instanceId??`${map.layers.some(l=>l.name==='Environment')?'base/':''}${placement.type}/${placement.name}/${x}:${y}`;
   const definitions=catalogSeats(placement.name,width,height,placement.facing);
   const slots=definitions.map(seat=>{
     const anchor={x:x+seat.anchor.x,y:y+seat.anchor.y,direction:seat.facing},r={...seat.footprint,x:x+seat.footprint.x,y:y+seat.footprint.y};

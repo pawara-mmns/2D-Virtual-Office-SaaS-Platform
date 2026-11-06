@@ -8,6 +8,7 @@ export function createSeating(map:OfficeMap,occupied:Occupancy) {
   const transitions=new Map<string,number>();
   return {
     objects,
+    updateMap(next:OfficeMap){map=next;objects.splice(0,objects.length,...interactionRegistry(next));byId.clear();for(const o of objects)byId.set(o.instanceId,o);},
     act(session:string,player:MovingPosition,request:InteractionRequest,now=Date.now()):'OK'|'OCCUPIED'|'OUT_OF_RANGE'|'INVALID' {
       const object=byId.get(request.objectId),slot=object?.slots.find(s=>s.id===request.slotId);
       if(!object||!slot)return 'INVALID';
