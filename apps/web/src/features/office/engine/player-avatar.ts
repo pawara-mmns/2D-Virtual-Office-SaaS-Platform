@@ -1,8 +1,6 @@
 import Phaser from "phaser";
-import { avatarAnimationKey, avatarBody, avatarDirections, avatarDisplayName, avatarIdleFrame, avatarPresets, safeAvatarKey, type AvatarAppearance, type AvatarKey } from "../../avatars/presets.ts";
-import { animationDirection, avatarIsWalking } from "../../avatars/animation.ts";
-import { movement, type Direction, type Movement } from "../input/movement.ts";
-import { PLAYER_SPEED } from "../maps/map-data.ts";
+import { avatarAnimationKey, avatarBody, avatarDirections, avatarDisplayName, avatarIdleFrame, avatarPresets, safeAvatarKey, avatarSittingFrame, avatarMotion, type AvatarAppearance, type AvatarKey } from "../../avatars/presets.ts";
+import type { Direction } from "../input/movement.ts";
 import type { PlayerSnapshot } from "../../../../../../packages/shared/src/protocol.ts";
 
 export class PlayerAvatar {
@@ -11,16 +9,13 @@ export class PlayerAvatar {
   private key: AvatarKey;
   private fullName: string;
   private facing: Direction = "down";
-  private readonly direction: Movement = { x: 0, y: 0, facing: "down" };
   private walkingDirection: Direction | null = null;
   private idleDirection: Direction | null = null;
   private labelWidth = -1;
-  private previousX: number;
-  private previousY: number;
   private networkAppearance = "";
+  private seated=false;
   constructor(private readonly scene: Phaser.Scene, x: number, y: number, appearance: AvatarAppearance) {
     this.key = safeAvatarKey(appearance.avatarKey); this.fullName = avatarDisplayName(appearance.displayName);
-    this.previousX = x; this.previousY = y;
     for (const preset of avatarPresets) for (const direction of avatarDirections) {
       const key = avatarAnimationKey(preset.key, direction);
       if (!scene.anims.exists(key)) {
@@ -48,14 +43,20 @@ export class PlayerAvatar {
     this.sprite.setVelocity(0, 0);
     if (this.sprite.body) this.sprite.body.enable = false;
     const distance = Phaser.Math.Distance.Between(this.sprite.x, this.sprite.y, state.x, state.y);
-    const factor = distance > 96 ? 1 : Math.min(1, delta / 50);
+    const factor = distance > 96 || distance < .01 || this.seated!==!!state.seatId ? 1 : 1-Math.exp(-Math.min(delta,100)/32);
     this.sprite.setPosition(Phaser.Math.Linear(this.sprite.x, state.x, factor), Phaser.Math.Linear(this.sprite.y, state.y, factor));
     this.facing = state.direction;
-    if (state.isMoving && state.connected) {
+    const pose=avatarMotion(state);this.seated=!!state.seatId;
+    if(pose==='SITTING') {
+      this.sprite.anims.stop();this.sprite.setFrame(avatarSittingFrame(this.key,this.facing));this.walkingDirection=null;this.idleDirection=null;
+    } else if (state.isMoving && state.connected) {
       if (this.walkingDirection !== this.facing) { this.sprite.play(avatarAnimationKey(this.key, this.facing)); this.walkingDirection = this.facing; this.idleDirection = null; }
     } else if (this.idleDirection !== this.facing || this.walkingDirection) {
       this.sprite.anims.stop(); this.sprite.setFrame(avatarIdleFrame(this.key, this.facing)); this.idleDirection = this.facing; this.walkingDirection = null;
     }
+    this.sprite.anims.timeScale=pose==='RUNNING'?1.6:1;
+    // Tile furniture stays below avatars. A seated pose rests visibly on its cushion.
+    this.sprite.setDepth(3+state.y/100000);this.label.setDepth(4+state.y/100000);
     this.sprite.setAlpha(state.connected ? 1 : .5);
     this.positionLabel();
     this.label.setVisible(local || this.scene.cameras.main.worldView.contains(this.sprite.x, this.sprite.y));
@@ -66,21 +67,6 @@ export class PlayerAvatar {
     const footX=bounds.left+(avatarBody.offsetX+avatarBody.width/2)*this.sprite.scaleX;
     const footY=bounds.top+(avatarBody.offsetY+avatarBody.height/2)*this.sprite.scaleY;
     return{x:bounds.centerX,y:bounds.centerY,left:bounds.left,right:bounds.right,top:bounds.top,bottom:bounds.bottom,footX,footY};
-  }
-  update(pressed: ReadonlySet<string>) {
-    const direction = movement(pressed, this.facing, this.direction);
-    // Body deltas include attempted movement before tile separation. Compare
-    // resolved sprite positions so walking stops when furniture blocks movement.
-    const dx = this.sprite.x - this.previousX, dy = this.sprite.y - this.previousY;
-    this.previousX = this.sprite.x; this.previousY = this.sprite.y;
-    this.facing = animationDirection(direction.facing, direction.x, direction.y, dx, dy);
-    this.sprite.setVelocity(direction.x * PLAYER_SPEED, direction.y * PLAYER_SPEED);
-    if (avatarIsWalking(direction.x, direction.y, dx, dy)) {
-      if (this.walkingDirection !== this.facing) { this.sprite.play(avatarAnimationKey(this.key, this.facing)); this.walkingDirection = this.facing; this.idleDirection = null; }
-    } else {
-      if (this.idleDirection !== this.facing || this.walkingDirection) { this.sprite.anims.stop(); this.sprite.setFrame(avatarIdleFrame(this.key, this.facing)); this.idleDirection = this.facing; this.walkingDirection = null; }
-    }
-    this.positionLabel();
   }
   private positionLabel() {
     const camera = this.scene.cameras.main;
@@ -94,7 +80,7 @@ export class PlayerAvatar {
     const view = camera.worldView, halfWidth = this.label.width / 2, halfHeight = this.label.height / 2;
     // At the top edge there is not enough space above the artwork: put the
     // label below, rather than clipping it or covering the character's head.
-    const y = this.sprite.y - 26 - halfHeight < view.top + 2 ? this.sprite.y + 26 : this.sprite.y - 26;
+    const y = this.seated&&this.facing==='up'||this.sprite.y - 26 - halfHeight < view.top + 2 ? this.sprite.y + 26 : this.sprite.y - 26;
     this.label.setPosition(Math.round(Phaser.Math.Clamp(this.sprite.x, view.left + halfWidth + 2, view.right - halfWidth - 2)), Math.round(Phaser.Math.Clamp(y, view.top + halfHeight + 2, view.bottom - halfHeight - 2)));
   }
 }
