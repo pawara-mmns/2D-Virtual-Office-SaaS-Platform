@@ -61,7 +61,7 @@ test("actual Chromium chat component: history, plain text, retries, drafts, scro
   const server = createServer((req, res) => {
     const path = new URL(req.url, "http://localhost").pathname;
     if (path === "/fixture.js") { res.setHeader("Content-Type", "text/javascript"); res.end(js); }
-    else if (path.startsWith("/office/") && ["studio.json", "avatar.png", "office-tiles.png"].includes(path.slice(8))) { res.setHeader("Content-Type", path.endsWith("png") ? "image/png" : "application/json"); res.end(readFileSync(resolve(web, "public", path.slice(1)))); }
+    else if (path.startsWith("/office/") && ["studio.json", "avatar.png", "office-tiles.png", "environments/warm-wood.png"].includes(path.slice(8))) { res.setHeader("Content-Type", path.endsWith("png") ? "image/png" : "application/json"); res.end(readFileSync(resolve(web, "public", path.slice(1)))); }
     else { res.setHeader("Content-Type", "text/html"); res.end(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Isolated chat component test</title><style>${css}</style><div id="root"></div><script type="module" src="/fixture.js"></script></html>`); }
   });
   await new Promise((done) => server.listen(0, "127.0.0.1", done));
@@ -150,7 +150,11 @@ test("actual Chromium chat component: history, plain text, retries, drafts, scro
   } finally {
     const exited = child.exitCode !== null ? Promise.resolve() : new Promise((done) => child.once("exit", done));
     if (browserTools) try { await Promise.race([browserTools.command("Browser.close"), delay(1500)]); } catch { /* own isolated browser may already have exited */ }
-    browserTools?.close(); if (child.exitCode === null) child.kill(); await Promise.race([exited, delay(2000)]); server.close(); await delay(400);
-    if (resolve(profile).startsWith(cache+sep+"chat-browser-")) rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+    browserTools?.close();
+    // Let Brave flush/close its profile before forcing the test-owned process down.
+    await Promise.race([exited, delay(5000)]);
+    if (child.exitCode === null) { child.kill(); await Promise.race([exited, delay(2000)]); }
+    server.close(); await delay(1000);
+    if (resolve(profile).startsWith(cache+sep+"chat-browser-")) rmSync(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 });
   }
 });

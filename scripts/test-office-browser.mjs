@@ -29,24 +29,27 @@ window.startOffice=()=>{window.ready=false;window.failure=false;window.slot=moun
 },()=>{window.failure=true})};
 window.remount=async()=>{await window.slot.dispose();window.startOffice()};
 window.startOffice();
+// Local preview now shares the authoritative solver. Reset its source position
+// along with the sprite, rather than treating a disabled render body as authority.
+window.placePreview=(x,y)=>{const s=office.game.scene.getScene('Office');Object.assign(s.preview,{x,y});s.player.body.reset(x,y);};
 </script></html>`;
 function serve(request, response) {
   try {
     const pathname = new URL(request.url, "http://localhost").pathname;
     if (pathname === "/") { response.setHeader("Content-Type", "text/html"); response.end(html); return; }
     if (pathname === "/phaser.js") { response.setHeader("Content-Type", "text/javascript"); response.end(readFileSync(resolve(web, "node_modules/phaser/dist/phaser.esm.js"))); return; }
-    if (["/packages/shared/src/avatars.ts", "/packages/shared/src/map.ts", "/packages/shared/src/protocol.ts", "/packages/shared/src/socket-transport.ts", "/packages/shared/src/environment/catalog.ts", "/packages/shared/src/environment/compose.ts", "/packages/shared/src/environment/visuals.ts", "/packages/shared/src/environment/plans.ts", "/packages/shared/src/environment/architecture.ts", "/packages/shared/src/environment/rooms.ts", "/packages/shared/src/environment/assets.ts", "/packages/shared/src/environment/passages.ts"].includes(pathname)) {
+    if (["/packages/shared/src/environment/decoration.ts","/packages/shared/src/environment/seating-metadata.ts","/packages/shared/src/movement.ts","/packages/shared/src/interactions.ts","/packages/shared/src/seating.ts","/packages/shared/src/avatars.ts", "/packages/shared/src/map.ts", "/packages/shared/src/protocol.ts", "/packages/shared/src/socket-transport.ts", "/packages/shared/src/environment/catalog.ts", "/packages/shared/src/environment/compose.ts", "/packages/shared/src/environment/visuals.ts", "/packages/shared/src/environment/plans.ts", "/packages/shared/src/environment/architecture.ts", "/packages/shared/src/environment/rooms.ts", "/packages/shared/src/environment/assets.ts", "/packages/shared/src/environment/passages.ts"].includes(pathname)) {
       const source = ts.transpileModule(readFileSync(resolve(root, pathname.slice(1)), "utf8"), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } });
       response.setHeader("Content-Type", "text/javascript"); response.end(source.outputText); return;
     }
     if (pathname.startsWith("/office/")) {
       const name = pathname.slice(8);
-      if (!["studio.json", "office-tiles.png", "avatar.png"].includes(name)) throw new Error("Unknown asset");
+      if (!["studio.json", "office-tiles.png", "avatar.png",'environments/warm-wood.png'].includes(name)) throw new Error("Unknown asset");
       response.setHeader("Content-Type", name.endsWith("png") ? "image/png" : "application/json"); response.end(readFileSync(resolve(web, "public/office", name))); return;
     }
     if (pathname.startsWith("/modules/")) {
       const base = resolve(web, "src/features"); const file = resolve(base, pathname.slice(9));
-      const allowed = file.startsWith(resolve(base, "office") + sep) || [resolve(base, "avatars/presets.ts"), resolve(base, "avatars/animation.ts")].includes(file);
+      const allowed = file.startsWith(resolve(base, "office") + sep) || [resolve(base, "decoration/overlay.ts"), resolve(base, "avatars/presets.ts"), resolve(base, "avatars/animation.ts")].includes(file);
       if (!allowed || !file.endsWith(".ts")) throw new Error("Invalid module");
       const source = ts.transpileModule(readFileSync(file, "utf8"), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } });
       response.setHeader("Content-Type", "text/javascript"); response.end(source.outputText); return;
@@ -100,7 +103,7 @@ test("real Chromium validates Phaser rendering, input, collisions, camera, resiz
     await command("Page.navigate", { url: `http://127.0.0.1:${server.address().port}/` });
     await waitFor(() => evaluate("window.ready === true || window.failure === true"), "scene initialization");
     assert.equal(await evaluate("window.failure"), false, "Actual scene must load all assets without error");
-    const snapshot = () => evaluate(`(()=>{const s=office.game.scene.getScene('Office'),p=s.player,c=s.cameras.main;return {x:p.x,y:p.y,left:p.body.left,top:p.body.top,zoom:c.zoom,scrollX:c.scrollX,scrollY:c.scrollY,viewLeft:c.worldView.left,viewTop:c.worldView.top,right:c.worldView.right,bottom:c.worldView.bottom,canvases:document.querySelectorAll('canvas').length,walking:p.anims.isPlaying,width:office.game.scale.width,height:office.game.scale.height}})()`);
+    const snapshot = () => evaluate(`(()=>{const s=office.game.scene.getScene('Office'),p=s.player,c=s.cameras.main;return {x:p.x,y:p.y,left:p.x-7,top:p.y+6,zoom:c.zoom,scrollX:c.scrollX,scrollY:c.scrollY,viewLeft:c.worldView.left,viewTop:c.worldView.top,right:c.worldView.right,bottom:c.worldView.bottom,canvases:document.querySelectorAll('canvas').length,walking:p.anims.isPlaying,width:office.game.scale.width,height:office.game.scale.height}})()`);
     const press = async (code, key, milliseconds) => { await command("Input.dispatchKeyEvent", { type: "keyDown", code, key }); await delay(milliseconds); await command("Input.dispatchKeyEvent", { type: "keyUp", code, key }); await delay(80); };
     await evaluate("document.getElementById('world').focus()"); const initial = await snapshot();
     await command("Input.dispatchKeyEvent", { type: "keyDown", code: "KeyW", key: "w" });
@@ -113,16 +116,16 @@ test("real Chromium validates Phaser rendering, input, collisions, camera, resiz
     assert.ok((await snapshot()).y < initial.y - 10, "WASD moves the player");
     assert.equal((await snapshot()).walking, false, "Release enters idle");
     for (const [code, key, direction] of [["KeyW", "w", "up"], ["KeyA", "a", "left"], ["KeyS", "s", "down"], ["KeyD", "d", "right"]]) {
-      await evaluate("office.game.scene.getScene('Office').player.body.reset(600,450)");
+      await evaluate("placePreview(600,450)");
       await command("Input.dispatchKeyEvent", { type: "keyDown", code, key }); await delay(170);
       assert.equal(await evaluate("office.game.scene.getScene('Office').player.anims.currentAnim.key"), `avatar-fern-${direction}-walk`);
       await command("Input.dispatchKeyEvent", { type: "keyUp", code, key }); await delay(70);
       assert.equal((await snapshot()).walking, false);
     }
-    await evaluate("office.game.scene.getScene('Office').player.body.reset(48,496)");
+    await evaluate("placePreview(48,496)");
     await press("ArrowLeft", "ArrowLeft", 500); const wall = await snapshot();
     assert.ok(wall.left >= 32 && wall.x < 48, "Physical wall collision stops arrow-key movement");
-    await evaluate("office.game.scene.getScene('Office').player.body.reset(512,272)");
+    await evaluate("placePreview(512,272)");
     await command("Input.dispatchKeyEvent", { type:"keyDown",code:"KeyW",key:"w" });
     let desk;await waitFor(async()=>{desk=await snapshot();return desk.top>=192&&desk.top<196&&!desk.walking;},"furniture contact and idle animation");
     await command("Input.dispatchKeyEvent", { type:"keyUp",code:"KeyW",key:"w" });
@@ -141,7 +144,7 @@ test("real Chromium validates Phaser rendering, input, collisions, camera, resiz
     assert.equal(await evaluate("office.game.anims.anims.size"), 24, "Animation definitions are registered once per game");
     await evaluate("office.setAppearance({avatarKey:'fern',displayName:'private@example.invalid'})"); await delay(70);
     assert.equal(await evaluate("office.game.scene.getScene('Office').avatar.label.text"), "Member", "Account emails never appear as player labels");
-    await evaluate("office.setAppearance({avatarKey:'slate',displayName:'Alexandria Long Profile Name'});office.game.scene.getScene('Office').player.body.reset(800,40)");
+    await evaluate("office.setAppearance({avatarKey:'slate',displayName:'Alexandria Long Profile Name'});placePreview(800,40)");
     await press("KeyW", "w", 300);
     assert.equal(await evaluate("(()=>{const s=office.game.scene.getScene('Office');return s.avatar.label.getBounds().top>=s.cameras.main.worldView.top})()"), true, "Name label stays inside the top camera boundary");
     assert.equal(await evaluate("(()=>{const s=office.game.scene.getScene('Office'),p=s.player.getBounds(),l=s.avatar.label.getBounds();return l.bottom<=p.top||l.top>=p.bottom})()"), true, "Boundary-safe name label does not overlap character artwork");

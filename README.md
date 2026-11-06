@@ -29,6 +29,10 @@ invitation email and authenticated team workflows remain unverified; see
 
 ## Technology stack
 
+Phase 01 adds Shift-to-run, authoritative chair/sofa/bench seating, contextual E/touch interactions, mobile movement controls, and shared object metadata. See the [implementation, screenshots, validation, and Phase 02 editor guidance](docs/phase01-movement-seating.md). No database migration or production deployment is required.
+
+The [workstation/four-direction seating fix](docs/workstation-directional-seating.md) registers chairs embedded in desk artwork, faces chairs toward their tables, preserves safe access, and supplies directional screenshots and regression results.
+
 - Next.js 16 App Router and React 19
 - TypeScript in strict mode, with unchecked indexed access enabled
 - Tailwind CSS 4 and ESLint 9 with Next.js Core Web Vitals and TypeScript rules

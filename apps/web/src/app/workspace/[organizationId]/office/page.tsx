@@ -11,6 +11,8 @@ import { loadAvatarProfile } from "@/features/avatars/service";
 import { defaultAvatar, type AvatarAppearance } from "@/features/avatars/presets";
 import { loadEnvironment } from "@/features/environment/service";
 import type { EnvironmentDatabase } from "../../../../../../../packages/shared/src/environment/database";
+import type {DecorationDatabase} from '../../../../../../../packages/shared/src/environment/decoration-database';
+import {loadPublishedDecoration} from '@/features/decoration/service';
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Office | Virtual Office", robots: { index: false, follow: false } };
@@ -22,8 +24,10 @@ export default async function OfficePage({ params }: { params: Promise<{ organiz
   catch { return <main className="mx-auto max-w-xl px-6 py-16"><h1 className="text-2xl font-semibold">Office unavailable</h1><p role="alert" className="mt-4 text-sm leading-7 text-muted">We could not verify office access. Try again shortly.</p><Link href="/dashboard" className="auth-text-link mt-6 inline-block">Back to workspaces</Link></main>; }
   if (access.status === "denied") notFound();
   if (access.status === "unavailable") return <main className="mx-auto max-w-xl px-6 py-16"><h1 className="text-2xl font-semibold">Office unavailable</h1><p role="alert" className="mt-4 text-sm leading-7 text-muted">This workspace has no available office record. Ask your administrator to check workspace setup.</p><Link href={`/workspace/${id}`} className="auth-text-link mt-6 inline-block">Back to workspace</Link></main>;
-  let environment;
-  try { environment = (await loadEnvironment(await createClient<EnvironmentDatabase>(), access.office.id)).config; }
+  let environment,decoration;
+  try { const base=await loadEnvironment(await createClient<EnvironmentDatabase>(), access.office.id);environment=base.config;
+    if(environment)decoration=await loadPublishedDecoration(await createClient<DecorationDatabase>(),access.office.id,base.revision);
+  }
   catch { return <main className="mx-auto max-w-xl px-6 py-16"><h1 className="text-2xl font-semibold">Office environment unavailable</h1><p role="alert" className="mt-4 text-sm text-muted">The saved office setup could not be verified. Reload shortly.</p><Link href={`/workspace/${id}`} className="auth-text-link mt-6 inline-block">Back to workspace</Link></main>; }
   let appearance: AvatarAppearance = { avatarKey: defaultAvatar, displayName: "Member" };
   let profileWarning: string | undefined;
@@ -31,7 +35,7 @@ export default async function OfficePage({ params }: { params: Promise<{ organiz
   catch { profileWarning = "Your saved avatar could not be loaded. A default is shown; try saving your preference again shortly."; }
   return <main id="office-main" className="office-page">
     <a className="skip-link" href="#office-controls">Skip to office controls</a>
-    <OfficeExperience key={`${user.id}/${access.office.id}`} appearance={appearance} environment={environment} profileWarning={profileWarning} officeId={access.office.id} userId={user.id}
+    <OfficeExperience key={`${user.id}/${access.office.id}`} appearance={appearance} environment={environment} decoration={decoration} isOwner={access.isOwner} profileWarning={profileWarning} officeId={access.office.id} userId={user.id}
       context={{ workspaceName: access.organization.name, officeName: access.office.name, workspaceHref: `/workspace/${id}` }} />
   </main>;
 }

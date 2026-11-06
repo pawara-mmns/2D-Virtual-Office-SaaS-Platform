@@ -1,6 +1,7 @@
 import { layouts, themes, type EnvironmentConfig } from './catalog.ts';
 import type { RoomSpec } from './plans.ts';
 import { expandedFixtures } from './assets.ts';
+import type {AvatarDirection} from '../avatars.ts';
 
 export const fixtures = {
   desk:[0,64,64,64],executiveDesk:[0,192,96,64],bench:[128,128,128,32],divider:[0,128,64,32],chair:[64,64,32,32],plant:[96,64,32,64],ceramic:[448,64,32,64],sofa:[128,64,96,64],coffee:[224,64,64,32],armchair:[288,64,32,32],meeting:[320,64,128,64],books:[0,160,96,32],board:[96,160,64,32],reception:[160,160,96,64],cabinet:[256,160,64,32],lamp:[320,160,32,64],notice:[352,160,64,32],pantry:[448,160,64,64],
@@ -8,7 +9,7 @@ export const fixtures = {
   ...expandedFixtures,
 } as const;
 export type Fixture = keyof typeof fixtures;
-export type PlaceFixture = (name: Fixture, dx: number, dy: number) => boolean;
+export type PlaceFixture = (name: Fixture, dx: number, dy: number, options?:{facing:AvatarDirection}) => boolean;
 export const roomModules = {
   reception:{label:'RECEPTION',floor:6},meeting:{label:'MEETING ROOM',floor:5},pantry:{label:'COFFEE & PANTRY',floor:7},lounge:{label:'LOUNGE',floor:4},work:{label:'WORKSTATIONS',floor:0},collaboration:{label:'COLLABORATION',floor:8},training:{label:'TRAINING',floor:8},'private-office':{label:'PRIVATE OFFICE',floor:5},utility:{label:'PRINT & STORAGE',floor:7},
 } as const;
@@ -38,12 +39,12 @@ export function furnishRoom(room: RoomSpec, config: EnvironmentConfig, density: 
       at('chairVisitor',2,h-5);at('bookcase',w-5,1);
     } else if(config.furniture==='collaborative') {
       if(kind==='collaboration'&&w>=14&&seed%3===0) {
-        const tx=center-1,ty=4;at('collaborationRound',tx,ty);for(const [a,b]of[[tx-1,ty+1],[tx+3,ty+1],[tx,ty+2],[tx+2,ty+2]])at('chairVisitor',a!,b!);
+        const tx=center-1,ty=4;at('collaborationRound',tx,ty);at('chairVisitor',tx-1,ty+1,{facing:'right'});at('chairVisitor',tx+3,ty+1,{facing:'left'});at('chairVisitor',tx,ty+2,{facing:'up'});at('chairVisitor',tx+2,ty+2,{facing:'up'});
         at('mobileBoard',1,1);
       } else {
         const columns=w>=20?[2,center-2,w-6]:w>=14?[2,w-6]:[center-2];
         const rows=kind==='training'&&h>=16?[3,7,11]:[3,h>=13?7:6];
-        for(const [index,row]of rows.entries())for(const col of columns){const bench=pick(['benchShared','benchLaptop'],index+col);if(at(bench,col,row))for(const dx of[0,2])at(kind==='training'?'chairClassroom':chair,col+dx,row+1);}
+        for(const [index,row]of rows.entries())for(const col of columns){const bench=pick(['benchShared','benchLaptop'],index+col);if(at(bench,col,row))for(const dx of[0,2])at(kind==='training'?'chairClassroom':chair,col+dx,row+1,{facing:'up'});}
       }
     } else {
       const columns=w>=14?[2,center-1,w-4]:[1,w-3];
@@ -60,7 +61,7 @@ export function furnishRoom(room: RoomSpec, config: EnvironmentConfig, density: 
     if(at(table,tx,ty))at('conferenceDevice',tx+Math.floor(tw/2),ty);
     at(pick(tech?['wallDisplay','glassBoard']:['whiteboard','glassBoard','wallDisplay']),center-1,0);
     const seat=pick(['chairMeeting','chairVisitor']);
-    for(const dx of[0,tw-1]){at(seat,tx+dx,ty-1);at(seat,tx+dx,ty+2);}at(seat,tx-1,ty+1);at(seat,tx+tw,ty+1);
+    for(const dx of[0,tw-1]){at(seat,tx+dx,ty-1,{facing:'down'});at(seat,tx+dx,ty+2,{facing:'up'});}at(seat,tx-1,ty+1,{facing:'right'});at(seat,tx+tw,ty+1,{facing:'left'});
     if(density>0)at('waterDispenser',w-2,1);
     if(density>1)at('presentationDesk',1,h-3);
   } else if(kind==='lounge') {
@@ -72,7 +73,7 @@ export function furnishRoom(room: RoomSpec, config: EnvironmentConfig, density: 
     const counter=pick(['pantryCounter','pantry']);if(at(counter,1,2)||(counter!=='pantry'&&at('pantry',1,2)))at('microwave',2,2);
     const service=pick(['coffeeStation','espressoMachine','snackShelf']);at(service,w-1-fixtures[service][2]/32,2);
     at('pinboard',center-1,0);at('fridgeMini',1,h-4);
-    const table=pick(['diningTable','barTable']),tw=fixtures[table][2]/32,tx=Math.floor((w-tw)/2);at(table,tx,h-5);at(table==='barTable'?'stool':'chairVisitor',tx-1,h-5);at(table==='barTable'?'stool':'chairVisitor',tx+tw,h-5);
+    const table=pick(['diningTable','barTable']),tw=fixtures[table][2]/32,tx=Math.floor((w-tw)/2);at(table,tx,h-5);at(table==='barTable'?'stool':'chairVisitor',tx-1,h-5,{facing:'right'});at(table==='barTable'?'stool':'chairVisitor',tx+tw,h-5,{facing:'left'});
     if(density>0)at('waterDispenser',w-2,h-4);
   } else if(kind==='reception') {
     const counter=formal?'receptionFormal':pick(['receptionCurve','receptionFormal','reception']);

@@ -3,6 +3,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { picture } from "./office-pixel-art.mjs";
 import { generateEnvironmentAtlases } from "./generate-environment-assets.mjs";
 import { generateAvatars } from "./generate-avatar-assets.mjs";
+import {drawDirectionalChair} from './seating-art.mjs';
+import {themes} from '../packages/shared/src/environment/catalog.ts';
 import { fileURLToPath } from "node:url";
 
 const output = fileURLToPath(new URL("../apps/web/public/office/", import.meta.url));
@@ -34,7 +36,7 @@ r(8, 97, 4, 10, "4e5c57"); r(51, 97, 4, 10, "4e5c57"); r(19, 67, 27, 17, "243c41
 l(23, 71, 10, "95bfba"); l(23, 74, 15, "689c9c"); l(23, 77, 8, "b3c8a2"); r(30, 84, 4, 3, "344d4b"); r(26, 87, 13, 2, "61736a");
 r(21, 89, 25, 5, "8c9b94"); l(23, 90, 20, "dde0ce"); r(49, 88, 4, 5, "f7f0dc"); r(53, 89, 2, 3, "c4b79b");
 function chair(x, y) { e(x + 5, y + 24, 23, 6, "243c3730"); r(x + 14, y + 18, 4, 10, "3b504e"); r(x + 7, y + 26, 18, 2, "304844"); r(x + 5, y + 8, 23, 14, "2c454c"); r(x + 7, y + 7, 19, 13, "627f87"); l(x + 8, y + 8, 17, "8da1a2"); r(x + 6, y + 3, 21, 6, "3b5961"); l(x + 8, y + 3, 17, "7e999a"); }
-chair(16, 100); chair(64, 64);
+drawDirectionalChair(art,themes.find(t=>t.id==='warm-wood'),16,96,'task','up',false); chair(64, 64);
 // Tall ficus, terracotta pot, visible leaf clusters with a restrained three-tone ramp.
 e(100, 118, 25, 7, "273e3830"); r(105, 106, 17, 13, "926750"); r(107, 108, 13, 11, "bf8a66"); l(105, 106, 17, "dfb086"); r(112, 83, 3, 26, "665e3d");
 for (const [x, y, w, h] of [[99, 75, 16, 17], [111, 67, 15, 18], [104, 87, 19, 18], [98, 91, 14, 12], [115, 82, 13, 15]]) { e(x, y, w, h, "365b45"); e(x + 1, y, w - 3, h - 4, "537a50"); r(x + 4, y + 3, 3, 2, "89a36a"); }

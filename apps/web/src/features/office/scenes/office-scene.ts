@@ -1,17 +1,24 @@
-import { composeEnvironment } from "../../../../../../packages/shared/src/environment/compose.ts";
 import { environmentPaint } from "../../../../../../packages/shared/src/environment/visuals.ts";
 import type { EnvironmentConfig } from "../../../../../../packages/shared/src/environment/catalog.ts";
 import Phaser from "phaser";
-import { mapMarkers, TILE_SIZE, validateOfficeMap } from "../maps/map-data.ts";
+import { mapMarkers, TILE_SIZE, validateOfficeMap, type OfficeMap } from "../maps/map-data.ts";
 import { clampOfficeZoom, findOfficeTeammate, fitOfficeZoom, isMapPosition, nextOfficeZoom, zoomLevels, type CameraCommand, type NavigationState, type OfficeArea } from "../engine/camera.ts";
 import { avatarDisplayName } from "../../avatars/presets.ts";
 import { PlayerAvatar } from "../engine/player-avatar.ts";
 import type { AvatarAppearance } from "../../avatars/presets.ts";
-import { mapVersion, type OfficeNetwork } from "../../../../../../packages/shared/src/protocol.ts";
-import { movement } from "../input/movement.ts";
+import { mapVersion, type OfficeNetwork, type PlayerSnapshot } from "../../../../../../packages/shared/src/protocol.ts";
+import { movement, runningIntent } from "../input/movement.ts";
 import { VoiceBubbles, type BubbleAnchor } from '../engine/voice-bubbles.ts';
+import { interactionRegistry, closestInteraction, type Interactable, type PrimaryInteraction } from '../../../../../../packages/shared/src/interactions.ts';
+import { advanceMovement } from '../../../../../../packages/shared/src/movement.ts';
+import { createSeating } from '../../../../../../packages/shared/src/seating.ts';
+import {isChairAsset} from '../../../../../../packages/shared/src/environment/seating-metadata.ts';
+import {directionalChairRects} from '../../../../../../packages/shared/src/environment/assets.ts';
+import {composeOfficeEnvironment,type PublishedDecoration} from '../../../../../../packages/shared/src/environment/decoration.ts';
+import {tileLayer} from '../../../../../../packages/shared/src/map.ts';
+import {DecorationOverlay,type EditorView,type EditorEvent} from '../../decoration/overlay.ts';
 
-export type OfficeCallbacks = { onReady(mapVersion?: string): void; onError(): void; onNavigation?(state: NavigationState): void; onReducedEffects?(reduced: boolean): void; onBubbleAnchors?(anchors: BubbleAnchor[]): void };
+export type OfficeCallbacks = { onReady(mapVersion?: string): void; onError(): void; onNavigation?(state: NavigationState): void; onReducedEffects?(reduced: boolean): void; onBubbleAnchors?(anchors: BubbleAnchor[]): void; onInteraction?(value:PrimaryInteraction|null):void;onDecoration?(event:EditorEvent):void };
 export class OfficeScene extends Phaser.Scene {
   player!: Phaser.Physics.Arcade.Sprite;
   avatar!: PlayerAvatar;
@@ -35,29 +42,60 @@ export class OfficeScene extends Phaser.Scene {
   private notice = "";
   private positionsUnavailable = false;
   private readonly movementInput = { x: 0, y: 0, facing: "down" as const };
-  constructor(private readonly pressed: ReadonlySet<string>, private readonly callbacks: OfficeCallbacks, private appearance: AvatarAppearance, private readonly multiplayer = false, private readonly officeId?: string, private readonly environment?: EnvironmentConfig) { super("Office"); }
+  private geometry?:OfficeMap;
+  private interactables:Interactable[]=[];
+  private primary:PrimaryInteraction|null=null;
+  private primaryKey='';
+  private promptAt=0;
+  private preview?:PlayerSnapshot;
+  private previewSeats=new Map<string,string>();
+  private previewSeating?:ReturnType<typeof createSeating>;
+  private previewTime=0;
+  private worldMap?:Phaser.Tilemaps.Tilemap;
+  private seatingVisuals:Phaser.GameObjects.Image[]=[];
+  private rugVisual?:Phaser.GameObjects.Graphics;
+  private editor?:DecorationOverlay;
+  private editing=false;
+  constructor(private readonly pressed: ReadonlySet<string>, private readonly callbacks: OfficeCallbacks, private appearance: AvatarAppearance, private readonly multiplayer = false, private readonly officeId?: string, private readonly environment?: EnvironmentConfig,private readonly decoration?:PublishedDecoration) { super("Office"); }
   preload() {
     this.load.once(Phaser.Loader.Events.FILE_LOAD_ERROR, () => { this.failed = true; this.callbacks.onError(); });
     this.load.image("office-tiles", this.environment ? `/office/environments/${this.environment.theme}.png` : "/office/office-tiles.png");
+    if(!this.environment)this.load.image('seating-art','/office/environments/warm-wood.png');
     this.load.spritesheet("avatar", "/office/avatar.png", { frameWidth: 32, frameHeight: 32 });
-    if (this.environment) this.cache.tilemap.add("studio", { format: Phaser.Tilemaps.Formats.TILED_JSON, data: composeEnvironment(this.environment) });
+    if (this.environment) this.cache.tilemap.add("studio", { format: Phaser.Tilemaps.Formats.TILED_JSON, data: composeOfficeEnvironment(this.environment,this.decoration) });
     else this.load.tilemapTiledJSON("studio", "/office/studio.json");
   }
   create() {
     if (this.failed) return;
     try {
       const data = validateOfficeMap(this.cache.tilemap.get("studio").data);
+      this.geometry=data;this.interactables=interactionRegistry(data);
       const map = this.make.tilemap({ key: "studio" });
+      this.worldMap=map;
       const tiles = map.addTilesetImage("office", "office-tiles", 32, 32, 0, 0);
       if (!tiles) throw new Error("Office tiles unavailable");
       if (!map.createLayer("Floor", tiles, 0, 0)) throw new Error("Office floor unavailable");
       if (this.environment) {
-        const paint = environmentPaint(data, this.environment), graphics = this.add.graphics();
+        const paint = environmentPaint(data, this.environment), graphics = this.add.graphics();this.rugVisual=graphics;
         for (const rect of paint.rugs) graphics.fillStyle(parseInt(rect.color, 16), rect.alpha).fillRect(rect.x, rect.y, rect.width, rect.height);
         this.cameras.main.setBackgroundColor("#" + paint.theme.background);
       }
       for (const name of ["Architecture", "Furniture"]) if (!map.createLayer(name, tiles, 0, 0)) throw new Error("Office layer unavailable");
       if(data.layers.some(layer=>layer.name==='Details')&&!map.createLayer('Details',tiles,0,0))throw Error('Office detail layer unavailable');
+      const chairTexture=this.environment?'office-tiles':'seating-art';
+      for(const object of this.interactables){
+        if(isChairAsset(object.assetId)){
+          const facing=object.slots[0]!.facingDirection,[sx,sy,w,h]=directionalChairRects[object.assetId][facing],key=`chair-${object.assetId}-${facing}`;
+          const texture=this.textures.get(chairTexture);if(!texture.has(key))texture.add(key,0,sx,sy,w,h);
+          map.getLayer('Furniture')!.tilemapLayer.removeTileAt(object.position.x/32,object.position.y/32);
+          this.seatingVisuals.push(this.add.image(object.position.x,object.position.y,chairTexture,key).setOrigin(0).setDepth(.1));
+        }
+        for(const [index,rect]of object.foreground.entries()){
+          const key=`seat-edge-${object.instanceId}-${index}`,texture=this.textures.get('office-tiles');
+          if(!texture.has(key))texture.add(key,0,rect.sourceX,rect.sourceY,rect.width,rect.height);
+          this.seatingVisuals.push(this.add.image(rect.x,rect.y,'office-tiles',key).setOrigin(0).setDepth(3.1).setData('seatingForeground',true));
+        }
+      }
       if (this.environment) {
         const paint = environmentPaint(data, this.environment), graphics = this.add.graphics();
         for (const sign of paint.signs) {
@@ -77,6 +115,7 @@ export class OfficeScene extends Phaser.Scene {
       });
       this.physics.world.setBounds(0, 0, this.mapWidth, this.mapHeight);
       const spawn = mapMarkers(data).find((marker) => marker.type === "spawn")!;
+      if(!this.multiplayer){this.preview={...this.appearance,sessionId:'preview',userId:'preview',x:spawn.x,y:spawn.y,direction:'down',isMoving:false,connected:true};this.previewSeating=createSeating(data,this.previewSeats);}
       this.avatar = new PlayerAvatar(this, spawn.x, spawn.y, this.appearance);
       this.player = this.avatar.sprite;
       if (this.multiplayer) { this.player.setVisible(false); this.avatar.label.setVisible(false); this.player.body!.enable = false; }
@@ -86,10 +125,11 @@ export class OfficeScene extends Phaser.Scene {
       }
       const camera = this.cameras.main;
       this.bubbles = new VoiceBubbles(this, values=>this.callbacks.onBubbleAnchors?.(values));
-      this.events.once(Phaser.Scenes.Events.SHUTDOWN,()=>this.bubbles?.destroy());
+      this.events.once(Phaser.Scenes.Events.SHUTDOWN,()=>{this.bubbles?.destroy();this.previewSeating?.clear();this.publishInteraction(null);this.interactables=[];});
       camera.roundPixels = true;
       this.highlight = this.add.graphics().setDepth(2).lineStyle(3, 0xf8f9f5).strokeRect(-20, -24, 40, 48).lineStyle(1, 0x245743).strokeRect(-20, -24, 40, 48).setVisible(false);
       this.resetZoom();
+      if(this.environment){this.editor=new DecorationOverlay(this,this.environment,data,map=>this.renderFurniture(map),event=>this.callbacks.onDecoration?.(event));this.events.once(Phaser.Scenes.Events.SHUTDOWN,()=>this.editor?.destroy());}
       this.scale.on(Phaser.Scale.Events.RESIZE, this.resize, this);
       this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => { this.wheelZoomTarget = null; this.scale.off(Phaser.Scale.Events.RESIZE, this.resize, this); camera.stopFollow(); this.teammate = null; this.areaId = null; this.network?.close(); this.remotes.clear(); });
       this.events.once(Phaser.Scenes.Events.DESTROY, () => { this.network?.close(); this.remotes.clear(); });
@@ -208,8 +248,41 @@ export class OfficeScene extends Phaser.Scene {
     const key = JSON.stringify({ ...state, zoom: this.wheelZoomTarget === null ? zoom : "wheel" });
     if (key !== this.navigationKey) { this.navigationKey = key; this.callbacks.onNavigation?.(state); }
   }
-  setAppearance(appearance: AvatarAppearance) { this.appearance = appearance; if (!this.multiplayer) this.avatar?.setAppearance(appearance); }
+  setAppearance(appearance: AvatarAppearance) { this.appearance = appearance; if (!this.multiplayer) {this.avatar?.setAppearance(appearance);if(this.preview)Object.assign(this.preview,appearance);} }
   setNetwork(network: OfficeNetwork) { this.network = network; }
+  setEditor(view:EditorView|null){
+    this.editing=!!view;this.editor?.configure(view);this.publishInteraction(null);
+    if(view){this.cameras.main.stopFollow();this.highlight?.setVisible(false);this.network?.input(0,0,false);}else this.followSelf(true);
+  }
+  editorPointer(type:'down'|'move'|'up'|'cancel',x:number,y:number){if(this.editing)this.editor?.pointer(type,x,y);}
+  editorDrop(assetId:string,x:number,y:number){if(this.editing)this.editor?.drop(assetId,x,y);}
+  isEditing(){return this.editing;}
+  private renderFurniture(map:OfficeMap){
+    if(!this.worldMap)return;
+    for(const image of this.seatingVisuals)image.destroy();this.seatingVisuals=[];
+    for(const name of ['Furniture','Details']){const layer=this.worldMap.getLayer(name)?.tilemapLayer;if(!layer)continue;const data=tileLayer(map,name).data;for(let y=0;y<map.height;y++)for(let x=0;x<map.width;x++){const gid=data[y*map.width+x]!;if(gid)layer.putTileAt(gid,x,y,false);else layer.removeTileAt(x,y,false,false);}}
+    for(const object of interactionRegistry(map)){
+      if(isChairAsset(object.assetId)){const facing=object.slots[0]!.facingDirection,[sx,sy,w,h]=directionalChairRects[object.assetId][facing],key=`chair-${object.assetId}-${facing}`,texture=this.textures.get('office-tiles');if(!texture.has(key))texture.add(key,0,sx,sy,w,h);this.worldMap.getLayer('Furniture')!.tilemapLayer.removeTileAt(object.position.x/32,object.position.y/32);this.seatingVisuals.push(this.add.image(object.position.x,object.position.y,'office-tiles',key).setOrigin(0).setDepth(.1));}
+      for(const [index,rect]of object.foreground.entries()){const key=`seat-edge-${object.instanceId}-${index}`,texture=this.textures.get('office-tiles');if(!texture.has(key))texture.add(key,0,rect.sourceX,rect.sourceY,rect.width,rect.height);this.seatingVisuals.push(this.add.image(rect.x,rect.y,'office-tiles',key).setOrigin(0).setDepth(3.1).setData('seatingForeground',true));}
+    }
+    if(this.environment&&this.rugVisual){this.rugVisual.clear();for(const r of environmentPaint(map,this.environment).rugs)this.rugVisual.fillStyle(parseInt(r.color,16),r.alpha).fillRect(r.x,r.y,r.width,r.height);}
+  }
+  interact() {
+    if(this.editing)return false;
+    if(!this.primary||this.primary.available===false)return false;
+    const {action,objectId,slotId}=this.primary;
+    if(this.multiplayer)return this.network?.interact?.({action,objectId,slotId})??false;
+    return !!this.preview&&this.previewSeating?.act('preview',this.preview,{action,objectId,slotId,seq:0})==='OK';
+  }
+  private publishInteraction(value:PrimaryInteraction|null) {
+    const key=value?`${value.action}:${value.slotId}:${value.available!==false}`:'';
+    this.primary=value;
+    if(this.primaryKey!==key){this.primaryKey=key;this.callbacks.onInteraction?.(value);}
+  }
+  private updateInteraction(own:PlayerSnapshot,occupied:ReadonlyMap<string,string>,time:number) {
+    if(time<this.promptAt)return;this.promptAt=time+100;
+    this.publishInteraction(this.geometry&&own.connected?closestInteraction(this.geometry,this.interactables,own,occupied,own.seatId):null);
+  }
   update(_time: number, delta: number) {
     if (!this.player || this.failed) return;
     this.advanceWheelZoom(delta);
@@ -219,16 +292,18 @@ export class OfficeScene extends Phaser.Scene {
       const own = sessionId ? snapshot?.players.get(sessionId) : undefined;
       this.player.setVisible(isMapPosition(own, this.mapWidth, this.mapHeight)); this.avatar.label.setVisible(isMapPosition(own, this.mapWidth, this.mapHeight));
       if (!snapshot || !own || !isMapPosition(own, this.mapWidth, this.mapHeight)) {
+        this.publishInteraction(null);
         this.bubbles?.update(null,()=>undefined,delta,true);
         this.positionsUnavailable = true;
         for (const avatar of this.remotes.values()) avatar.destroy();
         this.remotes.clear(); if (this.teammate) this.followSelf(true, "Teammate locations are unavailable. Reconnect to find them."); this.publishNavigation(); return;
       }
       if (this.positionsUnavailable) { this.positionsUnavailable = false; this.notice = ""; }
-      const input = movement(this.pressed, own.direction, this.movementInput);
+      const input = this.editing?Object.assign(this.movementInput,{x:0,y:0,facing:own.direction}):movement(this.pressed, own.direction, this.movementInput);
       if ((input.x || input.y) && this.mode !== "self") this.followSelf();
-      this.network!.input(input.x, input.y);
+      this.network!.input(input.x, input.y,!this.editing&&runningIntent(this.pressed));
       this.avatar.renderNetwork(own, delta, true);
+      if(!this.editing)this.updateInteraction(own,snapshot.seats??new Map(),_time);
       for (const [id, player] of snapshot.players) {
         if (id === sessionId) continue;
         if (!isMapPosition(player, this.mapWidth, this.mapHeight)) { this.remotes.get(id)?.destroy(); this.remotes.delete(id); continue; }
@@ -247,8 +322,13 @@ export class OfficeScene extends Phaser.Scene {
       this.publishNavigation();
       return;
     }
-    if (this.pressed.size && this.mode !== "self") this.followSelf();
-    this.avatar.update(this.pressed);
+    if (!this.editing&&this.pressed.size && this.mode !== "self") this.followSelf();
+    if(this.preview&&this.geometry) {
+      const input=this.editing?Object.assign(this.movementInput,{x:0,y:0,facing:this.preview.direction}):movement(this.pressed,this.preview.direction,this.movementInput);
+      this.previewTime=Math.min(100,this.previewTime+delta);
+      while(this.previewTime>=50){if(!this.previewSeating?.transitioning('preview'))advanceMovement(this.geometry,this.preview,{...input,run:runningIntent(this.pressed)});this.previewTime-=50;}
+      this.avatar.renderNetwork(this.preview,delta,true);this.updateInteraction(this.preview,this.previewSeats,_time);
+    }
     this.publishNavigation();
   }
 }

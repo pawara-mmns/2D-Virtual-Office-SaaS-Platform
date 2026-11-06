@@ -349,3 +349,19 @@
 }
 .office-hud .office-context > p { color: var(--glass-muted); }
 .office-hud .office-connection { pointer-events: auto; }
+.office-interactions { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+.office-interaction-prompt { position: absolute; left: 50%; bottom: 76px; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px 14px; border-radius: 24px; background: var(--glass-solid, #f5f8f3ed); color: var(--glass-text, #233c32); box-shadow: 0 3px 14px #142a2524; pointer-events: auto; white-space: nowrap; }
+.office-interaction-prompt kbd { padding: 2px 6px; border: 1px solid #718b7b66; border-radius: 5px; font: inherit; font-size: 12px; }
+.office-touch-controls { display: none; position: absolute; bottom: 86px; left: 12px; gap: 8px; align-items: end; pointer-events: none; }
+.office-touch-pad { display: grid; grid-template-columns: repeat(3, 44px); grid-template-rows: repeat(2, 44px); gap: 3px; }
+.office-touch-controls button { pointer-events: auto; touch-action: none; min-width: 44px; min-height: 44px; background: var(--glass-solid, #f5f8f3ed); border-radius: 15px; box-shadow: 0 2px 8px #142a251f; }
+.office-touch-pad [data-direction="ArrowUp"] { grid-column: 2; }
+.office-touch-pad [data-direction="ArrowLeft"] { grid-column: 1; grid-row: 2; }
+.office-touch-pad [data-direction="ArrowDown"] { grid-column: 2; grid-row: 2; }
+.office-touch-pad [data-direction="ArrowRight"] { grid-column: 3; grid-row: 2; }
+.office-run-control { padding: 8px 12px; }
+.office-run-control[aria-pressed="true"] { color: #fff; background: #245743; }
+@media (pointer: coarse), (max-width: 639px) {
+  .office-touch-controls:not([hidden]) { display: flex; }
+  .office-interaction-prompt { bottom: 200px; }
+}

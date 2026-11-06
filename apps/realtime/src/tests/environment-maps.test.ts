@@ -8,7 +8,8 @@ test('environment map adapter binds the caller bearer and office, caches per ten
   const auth=(n:number):Authorization=>({officeId:id(n),organizationId:id(n+100),userId:id(n+200),token:'synthetic-'+n,expiresAt:Date.now()+60000,checkedAt:Date.now(),avatarKey:'fern',displayName:'Fixture'});
   const legacy=validateOfficeMap(JSON.parse(readFileSync(new URL('../../../web/public/office/studio.json',import.meta.url),'utf8')));
   let count=0,mode='ok';const records=new Map<string,EnvironmentConfig>([[id(1),structuredClone(defaultEnvironment)],[id(2),{...defaultEnvironment,theme:'dark-tech'}]]);
-  globalThis.fetch=async(url,options)=>{count++;const parsed=new URL(String(url)),office=parsed.searchParams.get('office_id')!.slice(3);assert.equal(parsed.origin,'https://environment.invalid');assert.equal(new Headers(options?.headers).get('authorization'),'Bearer synthetic-'+(office===id(1)?1:2));
+  globalThis.fetch=async(url,options)=>{const parsed=new URL(String(url)),office=parsed.searchParams.get('office_id')!.slice(3);assert.equal(parsed.origin,'https://environment.invalid');assert.equal(new Headers(options?.headers).get('authorization'),'Bearer synthetic-'+(office===id(1)?1:2));
+    if(parsed.pathname.endsWith('/office_decoration_settings'))return new Response('[]',{headers:{'Content-Type':'application/json'}});count++;
     if(mode==='migration')return new Response(JSON.stringify({code:'42P01'}),{status:404,headers:{'Content-Type':'application/json'}});
     if(mode==='denied')return new Response(JSON.stringify({code:'42501'}),{status:400,headers:{'Content-Type':'application/json'}});
     return new Response(JSON.stringify(mode==='empty'?[]:[{config:mode==='invalid'?{...defaultEnvironment,layout:'forged'}:records.get(office),revision:1}]),{headers:{'Content-Type':'application/json'}});};

@@ -1,7 +1,8 @@
 import type { AvatarAppearance } from "../../avatars/presets.ts";
 import type { OfficeNetwork } from "../../../../../../packages/shared/src/protocol.ts";
 import type { CameraCommand } from "./camera.ts";
-export type OfficeController = { destroy(): Promise<void>; zoomBy(step: number): void; resetZoom(): void; navigate?(command: CameraCommand): boolean; setAppearance?(appearance: AvatarAppearance): void; setNetwork?(network: OfficeNetwork): void };
+import type {EditorView} from '../../decoration/overlay.ts';
+export type OfficeController = { destroy(): Promise<void>; zoomBy(step: number): void; resetZoom(): void; navigate?(command: CameraCommand): boolean; setAppearance?(appearance: AvatarAppearance): void; setNetwork?(network: OfficeNetwork): void; interact?():boolean;setTouchMove?(code:string,active:boolean):void;setEditor?(view:EditorView|null):void };
 // Serialize cleanup across rapid route changes and React Strict Mode remounts.
 export function createOfficeLifecycle() {
   let tail: Promise<unknown> = Promise.resolve();
@@ -19,6 +20,9 @@ export function createOfficeLifecycle() {
       navigate(command: CameraCommand) { return !cancelled && (controller?.navigate?.(command) ?? false); },
       setAppearance(appearance: AvatarAppearance) { if (!cancelled) controller?.setAppearance?.(appearance); },
       setNetwork(network: OfficeNetwork) { if (!cancelled) controller?.setNetwork?.(network); },
+      interact(){return !cancelled&&(controller?.interact?.()??false);},
+      setTouchMove(code:string,active:boolean){if(!cancelled)controller?.setTouchMove?.(code,active);},
+      setEditor(view:EditorView|null){if(!cancelled)controller?.setEditor?.(view);},
       dispose() {
         cancelled = true;
         const closed = ready.then(async () => { await controller?.destroy(); controller = undefined; });

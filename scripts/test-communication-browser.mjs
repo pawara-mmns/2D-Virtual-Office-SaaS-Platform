@@ -1,3 +1,4 @@
+import {unusedDecorationActions} from './unused-decoration-fixture.mjs';
 // Actual office composition, React and Phaser; synthetic identity/transport and
 // profile/history actions. No app debug route, live account, microphone or DB.
 import assert from "node:assert/strict";
@@ -41,7 +42,7 @@ test("office communication composition: responsive panels, focus, drafts, engine
       f.refresh=()=>{Object.assign(f.people[0],f.profile);Object.assign(f.snapshot.players.get('self'),f.profile);f.options.onParticipants(f.people.map(p=>({...p})));};
       function App(){const[version,setVersion]=useState(0),[office,setOffice]=useState(id(3));useEffect(()=>{f.remount=()=>setVersion(v=>v+1);f.switchOffice=()=>{f.snapshot={...f.snapshot,officeId:id(4),players:new Map([['self',f.snapshot.players.get('self')]])};f.people=[f.people[0]];setOffice(id(4));}},[]);return <main className="office-page"><Profiler id="office" onRender={()=>f.commits++}><OfficeCanvas key={office+'/'+version} appearance={f.profile} officeId={office} userId={id(1)} context={{workspaceName:'Synthetic workspace · isolated verification',officeName:'Oak & Fern Studio',workspaceHref:'#workspace'}}/></Profiler></main>}
       const mounted=createRoot(document.getElementById('root'));f.unmount=()=>mounted.unmount();mounted.render(<StrictMode><App/></StrictMode>);
-    `},plugins:[{name:"isolated-office-boundaries",setup(plugin){
+    `},plugins:[{name:"isolated-office-boundaries",setup(plugin){unusedDecorationActions(plugin);
       plugin.onResolve({filter:/network\/connection$/},()=>({path:"network",namespace:"fixture"}));
       plugin.onResolve({filter:/engine\/create-game$/},()=>({path:"engine",namespace:"fixture"}));
       plugin.onResolve({filter:/lib\/supabase\/client$/},()=>({path:"auth",namespace:"fixture"}));
@@ -65,7 +66,7 @@ test("office communication composition: responsive panels, focus, drafts, engine
   if(process.env.OFFICE_TEST_EXPORT_PREVIEW==="1"){
     const preview=resolve(root,".cache/navigation-preview");mkdirSync(preview,{recursive:true});writeFileSync(resolve(preview,"index.html"),fixtureHtml);writeFileSync(resolve(preview,"fixture.js"),built.outputFiles[0].contents);
   }
-  const server=createServer((req,res)=>{const path=new URL(req.url,"http://localhost").pathname;if(path==="/fixture.js"){res.setHeader("Content-Type","text/javascript");res.end(built.outputFiles[0].contents);}else if(path.startsWith("/office/")&&["studio.json","avatar.png","office-tiles.png"].includes(path.slice(8))){res.setHeader("Content-Type",path.endsWith("png")?"image/png":"application/json");res.end(readFileSync(resolve(web,"public",path.slice(1))));}else{res.setHeader("Content-Type","text/html");res.end(fixtureHtml);}});
+  const server=createServer((req,res)=>{const path=new URL(req.url,"http://localhost").pathname;if(path==="/fixture.js"){res.setHeader("Content-Type","text/javascript");res.end(built.outputFiles[0].contents);}else if(path.startsWith("/office/")&&["studio.json","avatar.png","office-tiles.png","environments/warm-wood.png"].includes(path.slice(8))){res.setHeader("Content-Type",path.endsWith("png")?"image/png":"application/json");res.end(readFileSync(resolve(web,"public",path.slice(1))));}else{res.setHeader("Content-Type","text/html");res.end(fixtureHtml);}});
   await new Promise(done=>server.listen(0,"127.0.0.1",done));const cache=resolve(root,".cache");mkdirSync(cache,{recursive:true});const profile=mkdtempSync(resolve(cache,"communication-browser-"));
   const child=spawn(browser,["--headless=new","--remote-debugging-port=0",`--user-data-dir=${profile}`,"--no-first-run","--no-default-browser-check",...(nativeRendering?[]:["--enable-unsafe-swiftshader","--use-angle=swiftshader"]),"--window-size=1440,900","about:blank"],{stdio:"ignore",windowsHide:true});let tools;
   try{
