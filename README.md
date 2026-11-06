@@ -1,5 +1,10 @@
 # Virtual Office
 
+The owner-only in-game [Live Office Editor](docs/live-office-editing.md)
+supports direct furniture editing, immediate multiplayer updates, Save without reloads,
+versioned recovery drafts and protected interactive seating. Its additive live-commit
+migration is prepared locally; see the report for activation and validation.
+
 A multi-tenant 2D virtual office SaaS platform for distributed teams, with private
 pixel-art offices, realtime movement, chat and meeting-zone voice. **Phase 5
 Step 3A prepares Vercel frontend and Railway realtime hosting, preserving Step 3's
