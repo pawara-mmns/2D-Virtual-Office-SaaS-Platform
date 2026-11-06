@@ -21,11 +21,17 @@ import { OfficeVoice } from "@/features/voice/office-voice";
 import type { ProximityState, VoiceBubble } from '../../../../../../packages/shared/src/proximity.ts';
 import { sameVoiceState, type VoiceZoneState } from "../../../../../../packages/shared/src/voice.ts";
 import type { CameraCommand, NavigationState } from "../engine/camera.ts";
+import type { PrimaryInteraction } from '../../../../../../packages/shared/src/interactions.ts';
+import { InteractionControls } from './interaction-controls';
+import type {PublishedDecoration} from '../../../../../../packages/shared/src/environment/decoration';
+import {DecorationEditor} from '../../decoration/decoration-editor';
+import type {EditorView,EditorEvent} from '../../decoration/overlay';
 
 export type { OfficeContext } from "./office-hud";
 
-export default function OfficeCanvas({ appearance, profileWarning, officeId, userId, context, environment }: { environment?: EnvironmentConfig; appearance: AvatarAppearance; profileWarning?: string; officeId: string; userId?: string; context: OfficeContext }) {
+export default function OfficeCanvas({ appearance, profileWarning, officeId, userId, context, environment,decoration,isOwner=false }: { environment?: EnvironmentConfig;decoration?:PublishedDecoration;isOwner?:boolean; appearance: AvatarAppearance; profileWarning?: string; officeId: string; userId?: string; context: OfficeContext }) {
   const environmentKey = JSON.stringify(environment ?? null);
+  const decorationKey=JSON.stringify(decoration??null);
   const host = useRef<HTMLDivElement>(null);
   const controls = useRef<ReturnType<typeof mountOffice> | null>(null);
   const [navigation, setNavigation] = useState<NavigationState | null>(null);
@@ -48,6 +54,16 @@ export default function OfficeCanvas({ appearance, profileWarning, officeId, use
   const [voice,setVoice] = useState<VoiceZoneState | null>(null);
   const [proximity,setProximity] = useState<ProximityState | null>(null);
   const [proximityError,setProximityError] = useState('');
+  const [primary,setPrimary]=useState<PrimaryInteraction|null>(null);
+  const [interactionError,setInteractionError]=useState('');
+  const [editing,setEditing]=useState(false);
+  const editorHandler=useRef<((event:EditorEvent)=>void)|null>(null);
+  const configureEditor=useCallback((view:EditorView|null)=>controls.current?.setEditor(view),[]);
+  const subscribeEditor=useCallback((handler:((event:EditorEvent)=>void)|null)=>{editorHandler.current=handler;},[]);
+  const changeEditing=useCallback((value:boolean)=>{setEditing(value);if(value)setPanel(null);},[]);
+  const touchMove=useCallback((code:string,active:boolean)=>controls.current?.setTouchMove(code,active),[]);
+  const interact=useCallback(()=>{setInteractionError('');controls.current?.interact();},[]);
+  useEffect(()=>{if(!interactionError)return;const timer=setTimeout(()=>setInteractionError(''),5000);return()=>clearTimeout(timer);},[interactionError]);
   const bubbleButtons=useRef(new Map<string,HTMLButtonElement>());
   const lockBubble=useCallback((bubble:VoiceBubble,locked:boolean)=>network.current?.lockBubble?.(bubble,locked)??false,[]);
   const leaveVoice = useCallback(() => network.current?.leaveVoice?.(),[]);
@@ -108,6 +124,8 @@ export default function OfficeCanvas({ appearance, profileWarning, officeId, use
     const controller = mountOffice(async () => {
       const { createOfficeGame } = await import("../engine/create-game");
       return () => createOfficeGame(element, {
+        onInteraction(value){if(active)setPrimary(value);},
+        onDecoration(event){if(active)editorHandler.current?.(event);},
         onBubbleAnchors(values) {
           const visible=new Set<string>();
           for(const value of values){const button=bubbleButtons.current.get(value.bubbleId);if(!button)continue;visible.add(value.bubbleId);button.style.transform=`translate(${value.x}px, ${value.y}px) translate(-50%, -50%)`;button.style.visibility=value.visible?'visible':'hidden';}
@@ -127,6 +145,7 @@ export default function OfficeCanvas({ appearance, profileWarning, officeId, use
               onVoice: (value) => { if (active) setVoice((previous) => sameVoiceState(previous,value) ? previous : value); },
               onProximity: value=>{if(active)setProximity(value);},
               onProximityError: message=>{if(active)setProximityError(message);},
+              onInteractionError:message=>{if(active)setInteractionError(message);},
               onParticipants: (value) => { if (active) setParticipants(value); },
               onAvailabilityError: (message) => { if (active) setAvailabilityError(message); },
               async getToken() { const { data, error } = await client.auth.getSession(); return error ? null : data.session?.access_token ?? null; },
@@ -139,12 +158,12 @@ export default function OfficeCanvas({ appearance, profileWarning, officeId, use
           } catch { setPresence({ status: "offline", count: 0, notice: "The office connection is unavailable. Retry, or contact your workspace administrator if it continues." }); }
         },
         onError: fail,
-      }, latestAppearance.current, true, officeId, environment ?? undefined);
+      }, latestAppearance.current, true, officeId, environment ?? undefined,JSON.parse(decorationKey)??undefined);
     }, fail);
     controls.current = controller;
     return () => { active = false; focusOffice.current = false; window.clearTimeout(timeout); clearTimeout(authTimer); authSubscription?.unsubscribe(); window.removeEventListener("pagehide", leave); network.current?.close(); network.current = null; controls.current = null; void controller.dispose(); };
-  }, [attempt, officeId, chatEvents, environmentKey]);
-  return <section aria-label="Interactive office" className="office-shell" data-panel={panel ?? "none"}>
+  }, [attempt, officeId, chatEvents, environmentKey,decorationKey]);
+  return <section aria-label="Interactive office" className="office-shell" data-panel={panel ?? "none"} data-editing={editing}>
     <div className={`office-work-area${chatOpen ? " chat-open" : ""}`}>
     <div inert={compact && panel !== null} className="office-world relative bg-ink">
       <div ref={host} tabIndex={0} role="region" aria-label="Pixel-art office. Keyboard movement area" aria-describedby="office-camera-hint office-instructions"
@@ -161,6 +180,7 @@ export default function OfficeCanvas({ appearance, profileWarning, officeId, use
           </button>;
         })}
       </div>
+      <InteractionControls key={presence.status==='online'&&panel===null&&!editing?'enabled':'disabled'} primary={primary} online={presence.status==='online'&&panel===null&&!editing} interact={interact} move={touchMove}/>
       {status !== "ready" && <div className="absolute inset-0 flex items-center justify-center bg-surface p-8 text-center">
         {status === "loading" ? <p role="status" className="text-sm text-muted">Preparing your office…</p> : <div><h2 className="font-semibold">Office unavailable</h2><p role="alert" className="mt-3 max-w-sm text-sm leading-7 text-muted">The office engine or artwork could not load. Check your connection and browser graphics support, then try again.</p><button className="auth-button mt-5" onClick={() => { setNavigation(null); setStatus("loading"); setAttempt((value) => value + 1); }}>Try again</button></div>}
       </div>}
@@ -171,11 +191,12 @@ export default function OfficeCanvas({ appearance, profileWarning, officeId, use
       settings={<OfficeDisclosure label="Settings" icon={<HudIcon name="settings" />} material="elevated" panel={{ open: panel === "settings", onOpenChange: settingsPanel, container: panelHost, returnFocus: restoreProfileFocus }}>
         <div className="space-y-4"><div><label htmlFor="office-availability" className="mb-2 block text-sm font-medium">Your availability</label>
           <select id="office-availability" className="office-control" value={own?.availability ?? "AVAILABLE"} disabled={presence.status !== "online" || !own?.connected} onChange={(event) => { setAvailabilityError(""); const value = event.target.value; if (isAvailability(value) && !network.current?.setAvailability?.(value)) setAvailabilityError("Reconnect before changing availability."); }}><option value="AVAILABLE">Available</option><option value="BUSY">Busy</option><option value="DO_NOT_DISTURB">Do not disturb</option></select>
-        </div><HudGlassControl /><p id="office-instructions" className="text-sm leading-6 text-muted">Keyboard required: click or Tab into the office, then use WASD or arrows. Tab to leave. Map navigation changes your view, not your position. Scroll over the map to zoom; Ctrl/Cmd+scroll keeps browser zoom.</p>
+        </div><HudGlassControl /><p id="office-instructions" className="text-sm leading-6 text-muted">Click or Tab into the office, then use WASD or arrows. Hold Shift to run. Press E near an open seat to sit, then E to stand before walking. Touch devices have movement arrows and a Run toggle. Tab to leave. Map navigation changes your view, not your position. Scroll over the map to zoom; Ctrl/Cmd+scroll keeps browser zoom.</p>
         <p className="text-sm leading-6 text-muted">Enable proximity voice to talk with nearby teammates. The Meeting Room takes precedence and uses its own explicit Join Voice action.</p></div>
       </OfficeDisclosure>}
       avatar={<AvatarSettings currentKey={avatarKey} displayName={displayName} icon={<HudIcon name="avatar" />} panel={{ open: panel === "avatar", onOpenChange: avatarPanel, container: panelHost, returnFocus: restoreProfileFocus }} onSaved={(key, name) => { setSavedKey(key); if (name) setSavedName(name); network.current?.appearanceChanged(); }} />}
       controls={<>
+        {isOwner&&environment&&<DecorationEditor officeId={officeId} environment={environment} ready={status==='ready'&&presence.status==='online'} onView={configureEditor} onHandler={subscribeEditor} onEditing={changeEditing}/>}
         <button ref={chatToggle} className="office-control" aria-label="Office Chat" title="Office Chat" aria-expanded={chatOpen} aria-controls="office-chat" onClick={() => setPanel((value) => value === "chat" ? null : "chat")}><HudIcon name="chat" /><span className="hud-control-label">Office Chat</span></button>
         <Participants participants={participants} icon={<HudIcon name="people" />} panel={{ open: panel === "participants", onOpenChange: participantsPanel, container: panelHost }} findable={findable} onFind={(sessionId) => navigateCamera({ type: "teammate", sessionId }, true)} />
       </>}
@@ -200,6 +221,7 @@ export default function OfficeCanvas({ appearance, profileWarning, officeId, use
       </>}
       voice={<OfficeVoice key={officeId+':'+(voice?.sessionId??'pending')} officeId={officeId} state={voice} proximity={proximity} online={presence.status==='online'} denied={presence.status==='denied'} lock={lockBubble} leave={leaveVoice} error={proximityError}/>}
       notices={<>
+        {interactionError&&<p role="alert" className="ui-notice ui-notice-error" data-glass-surface="" data-glass-variant="elevated">{interactionError}</p>}
         {availabilityError && <p role="alert" className="ui-notice ui-notice-error" data-glass-surface="" data-glass-variant="elevated">{availabilityError}</p>}
         {profileWarning && <p role="alert" className="ui-notice ui-notice-warning" data-glass-surface="" data-glass-variant="elevated">{profileWarning}</p>}
       </>}
