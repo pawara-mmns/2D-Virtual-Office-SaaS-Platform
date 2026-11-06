@@ -6,6 +6,7 @@ import { decodeMessage, isAvailability, parseChatSend, type ChatEvent } from "..
 import type { Participant } from "../../../../../../packages/shared/src/protocol.ts";
 import { sameVoiceState, type VoiceZoneState } from "../../../../../../packages/shared/src/voice.ts";
 import { decodeProximity, validBubbleRef, type ProximityState } from '../../../../../../packages/shared/src/proximity.ts';
+import { parseInteraction } from '../../../../../../packages/shared/src/interactions.ts';
 
 type OfficeRoom = Room<object, OfficeSnapshot>;
 export function realtimeUrl(value: string | undefined, production = process.env.NODE_ENV === "production") {
@@ -23,10 +24,11 @@ export function connectOffice(options: {
   onVoice?(state: VoiceZoneState | null): void;
   onProximity?(state:ProximityState|null):void;
   onProximityError?(message:string):void;
+  onInteractionError?(message:string):void;
 }): OfficeNetwork {
   let room: OfficeRoom | undefined, state: OfficeSnapshot | undefined;
   let closed = false, denied = false, online = false, seq = 0, previousCount = 0;
-  let lastX = 0, lastY = 0, lastSent = 0;
+  let lastX = 0, lastY = 0, lastSent = 0, lastRun=false, interactionSeq=0;
   let disposeTransport: (() => void) | undefined;
   let participantKey = "", chatReady = false;
   let voiceState: VoiceZoneState | null = null;
@@ -104,6 +106,7 @@ export function connectOffice(options: {
         options.onChat?.({ type: "error", code, clientMessageId: typeof value?.clientMessageId === "string" ? value.clientMessageId : null });
       });
       room.onMessage("availability.error", () => options.onAvailabilityError?.("Availability could not change. Wait a moment, check access and retry."));
+      room.onMessage('object.error',(value:{code?:string})=>{if(!closed&&online)options.onInteractionError?.(value?.code==='OCCUPIED'?'That seat was just taken. Choose another seat.':value?.code==='RATE_LIMIT'?'Wait a moment before interacting again.':'Move closer to an open seat with a clear approach and try again.');});
       room.onMessage("voice.state", (value: VoiceZoneState) => {
         if (!closed && online && value?.sessionId === room?.sessionId && (value.zone === null || value.zone === "Meeting Room" || value.zone==='Proximity conversation'&&validBubbleRef(value.bubble)) && typeof value.configured === "boolean" &&
           (value.participants === null || Number.isInteger(value.participants) && value.participants >= 0 && value.participants <= 10)) publishVoice(value);
@@ -132,13 +135,14 @@ export function connectOffice(options: {
     lockBubble(ref,locked){if(closed||!online||!room||!validBubbleRef(ref))return false;room.send('proximity.lock',{bubbleId:ref.bubbleId,generation:ref.generation,revision:ref.revision,locked});return true;},
     snapshot: () => online ? state : undefined,
     sessionId: () => room?.sessionId,
-    input(x, y) {
+    input(x, y, run=false) {
       if (!online || !room || closed) return;
       const now = performance.now();
-      if (now - lastSent < 50 || x === lastX && y === lastY && now - lastSent < 100) return;
-      lastX = x; lastY = y; lastSent = now;
-      room.send("input", { seq: seq++, x: Math.sign(x), y: Math.sign(y) });
+      if (now - lastSent < 50 || x === lastX && y === lastY && run===lastRun && now - lastSent < 100) return;
+      lastX = x; lastY = y; lastRun=run; lastSent = now;
+      room.send("input", { seq: seq++, x: Math.sign(x), y: Math.sign(y), run:run===true });
     },
+    interact(request){const value={...request,seq:interactionSeq++};if(!online||!room||closed||!parseInteraction(value))return false;room.send('object.interact',value);return true;},
     appearanceChanged() { void credential().catch(() => {}); },
     close,
     sendChat(body, clientMessageId) { if (closed || !online || !chatReady || !room || !parseChatSend({ body, clientMessageId })) return false; room.send("chat.send", { body, clientMessageId }); return true; },
