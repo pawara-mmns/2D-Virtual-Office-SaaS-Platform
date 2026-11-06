@@ -1,3 +1,4 @@
+import {unusedDecorationActions} from './unused-decoration-fixture.mjs';
 // Actual office/Phaser/React/LiveKit SDK, synthetic auth, transport and generated
 // silent tracks. This is not live-account, microphone or audio acceptance.
 import assert from 'node:assert/strict';
@@ -39,7 +40,7 @@ test('proximity office: consent, capsule/group rendering, private controls, seri
       navigator.mediaDevices.getUserMedia=async()=>{f.captures++;if(f.deny)throw new DOMException('Synthetic denial','NotAllowedError');f.audio??=new AudioContext();const stream=f.audio.createMediaStreamDestination().stream;f.tracks.push(...stream.getTracks());if(f.pending)await new Promise(r=>f.allow=r);return stream;};
       const nativeFetch=fetch;window.fetch=async(url,options)=>{if(url!=='/api/v1/voice/token')return nativeFetch(url,options);f.requests++;f.bodies.push(JSON.parse(options.body));return new Response(JSON.stringify({url:'wss://fixture.livekit.cloud',token:'synthetic-no-network-token'}),{status:f.tokenStatus,headers:{'Content-Type':'application/json'}});};
       const root=createRoot(document.getElementById('root'));f.unmount=()=>root.unmount();root.render(<StrictMode><main className="office-page"><Profiler id="office" onRender={()=>f.commits++}><OfficeCanvas appearance={{avatarKey:'fern',displayName:'Taylor'}} officeId={id(20)} userId={id(1)} environment={{...defaultEnvironment,theme:'minimal-light'}} context={{workspaceName:'Synthetic local verification',officeName:'Proximity conversations',workspaceHref:'#workspace'}}/></Profiler></main></StrictMode>);
-    `},plugins:[{name:'isolated-boundaries',setup(plugin){
+    `},plugins:[{name:'isolated-boundaries',setup(plugin){unusedDecorationActions(plugin);
       for(const [filter,path]of [[/network\/connection$/,'network'],[/engine\/create-game$/,'engine'],[/lib\/supabase\/client$/,'auth'],[/^next\/link$/,'link']])plugin.onResolve({filter},()=>({path,namespace:'fixture'}));
       plugin.onResolve({filter:/^\.\/actions$/},args=>({path:args.importer.endsWith('avatar-settings.tsx')?'profile':'history',namespace:'fixture'}));
       plugin.onResolve({filter:/^livekit-client$/},args=>args.importer.replaceAll('\\','/').endsWith('/voice-session.tsx')?{path:'sdk',namespace:'fixture'}:undefined);

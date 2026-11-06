@@ -1,4 +1,6 @@
-import { assetDefinitions, expandedFixtures } from '../packages/shared/src/environment/assets.ts';
+import { assetDefinitions, expandedFixtures, directionalChairRects } from '../packages/shared/src/environment/assets.ts';
+import {chairFamilies} from '../packages/shared/src/environment/seating-metadata.ts';
+import {drawDirectionalChair} from './seating-art.mjs';
 
 // Original hand-specified silhouettes and details. One restrained palette and
 // upper-left light source serve every family; no noise or random placement.
@@ -32,7 +34,7 @@ export function drawExpandedOfficeAssets(art,theme) {
       shadow();const standing=v==='standing',manager=v==='manager'||v==='return';
       r(7,29,4,19,edge);r(w-12,29,4,19,edge);top(3,5,w-6,29,theme.id==='minimal-light'?wall:wood);
       if(standing){r(10,32,4,22,ink);r(w-15,32,4,22,ink);line(6,54,16,ink);line(w-22,54,16,ink);r(w-17,23,7,4,ink);}
-      else taskChair(Math.floor(w/2)-16,34,v==='single'?'mesh':v==='classroom'?'visitor':'task');
+      else drawDirectionalChair(art,theme,x+Math.floor(w/2)-16,y+32,v==='single'?'mesh':v==='classroom'?'visitor':'task','up',false);
       if(v==='laptop'||v==='creative')laptop(Math.floor(w/2)-10,8);
       else if(v==='dual'||manager){monitor(9,7,23);monitor(35,7,23);}
       else monitor(Math.floor(w/2)-12,7);
@@ -150,5 +152,8 @@ export function drawExpandedOfficeAssets(art,theme) {
       else if(v.startsWith('edge')){if(v.endsWith('h'))r(0,5,32,2,shade(fabric,10));else r(5,0,2,32,shade(fabric,10));}
       else {r(10,10,12,3,shade(wood,-5));r(10,10,3,12,shade(wood,-5));}
     } else throw Error('Missing original art family: '+id);
+  }
+  for(const [id,style]of Object.entries(chairFamilies))for(const direction of ['up','left','right']){
+    const [x,y]=directionalChairRects[id][direction];drawDirectionalChair(art,theme,x,y,style,direction);
   }
 }
