@@ -13,6 +13,7 @@ export async function saveDecorationAction(input:{officeId:string;revision:numbe
   const user=await requireUser();
   try{
     if(!input||JSON.stringify(input).length>65000)throw new DecorationError('Editor request exceeds the office budget.');
+    if(input.operation!=='draft')throw new DecorationError('Publish or restore through the connected live office editor.');
     const owner=await createClient<DecorationDatabase>();
     // Reject non-owners before reading configuration or creating a secret client.
     await loadDecorationWorkspace(owner,input.officeId);
