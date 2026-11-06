@@ -41,7 +41,7 @@ export function parseDecoration(value:unknown):DecorationDocument{
     if(!o||typeof o!=='object'||Object.keys(o).sort().join()!=='assetId,id,orientation,x,y'||typeof o.id!=='string'||!/^(custom\/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|base\/[a-zA-Z0-9_/:.-]{1,140})$/.test(o.id)||ids.has(o.id))return fail('Invalid or duplicate object identity.');
     const asset=editorAsset(o.assetId);
     if(!asset||!asset.orientations.includes(o.orientation)||![o.x,o.y].every(n=>Number.isSafeInteger(n)&&n>=0&&n<=4096&&n%32===0))return fail('Choose a supported asset, orientation and grid position.');
-    ids.add(o.id);return{...o};
+    ids.add(o.id);return{id:o.id,assetId:o.assetId,x:o.x,y:o.y,orientation:o.orientation};
   });
   if(v.removed.some(id=>typeof id!=='string'||!/^base\/[a-zA-Z0-9_/:.-]{1,140}$/.test(id))||new Set(v.removed).size!==v.removed.length||v.removed.some(id=>ids.has(id)))return fail('Invalid removed object identity.');
   return{version:1,objects,removed:[...v.removed]};
@@ -62,6 +62,26 @@ export function upsertDecoration(document:DecorationDocument,object:DecorationOb
   return parseDecoration({...document,objects:[...document.objects.filter(o=>o.id!==object.id),object],removed:document.removed.filter(id=>id!==object.id)});
 }
 export function removeDecoration(document:DecorationDocument,id:string):DecorationDocument{return parseDecoration({...document,objects:document.objects.filter(o=>o.id!==id),removed:id.startsWith('base/')?[...new Set([...document.removed,id])]:document.removed});}
+export function attachedDecorations(objects:readonly DecorationObject[],parent:DecorationObject){
+  const size=editorAsset(parent.assetId)!;if(size.mode!=='blocking')return[];
+  return objects.filter(o=>{const a=editorAsset(o.assetId)!;return a.mode==='surface'&&o.x>=parent.x&&o.y>=parent.y&&o.x+a.width<=parent.x+size.width&&o.y+a.height<=parent.y+Math.min(size.height,32);});
+}
+export function moveDecoration(config:EnvironmentConfig,document:DecorationDocument,next:DecorationObject){
+  const objects=resolvedObjects(config,document),old=objects.find(o=>o.id===next.id);let result=upsertDecoration(document,next);
+  if(old)for(const child of attachedDecorations(objects,old))result=upsertDecoration(result,{...child,x:child.x+next.x-old.x,y:child.y+next.y-old.y});
+  return result;
+}
+export function duplicateDecoration(config:EnvironmentConfig,document:DecorationDocument,sourceId:string,next:DecorationObject,makeId:()=>string=()=>`custom/${crypto.randomUUID()}`){
+  const objects=resolvedObjects(config,document),source=objects.find(o=>o.id===sourceId);if(!source)throw new PlacementError('Select furniture to duplicate.');
+  let result=upsertDecoration(document,next);
+  for(const child of attachedDecorations(objects,source))result=upsertDecoration(result,{...child,id:makeId(),x:child.x+next.x-source.x,y:child.y+next.y-source.y});
+  return result;
+}
+export function deleteDecoration(config:EnvironmentConfig,document:DecorationDocument,id:string){
+  const objects=resolvedObjects(config,document),source=objects.find(o=>o.id===id);let result=removeDecoration(document,id);
+  if(source)for(const child of attachedDecorations(objects,source))result=removeDecoration(result,child.id);
+  return result;
+}
 export function createDecorationHistory(initial:DecorationDocument){
   let current=parseDecoration(initial);const undo:DecorationDocument[]=[],redo:DecorationDocument[]=[];
   return{get current(){return structuredClone(current);},get canUndo(){return undo.length>0;},get canRedo(){return redo.length>0;},
@@ -82,8 +102,8 @@ export function composeDecoratedEnvironment(config:EnvironmentConfig,input:unkno
   for(const room of plan.rooms)for(const door of room.doors)for(const [x,y]of rectangleCells(doorClearance(room,door)))protectedCells.add(`${x}:${y}`);
   for(const lane of group(map,'PassageLanes'))for(const [x,y]of rectangleCells([lane.x/32,lane.y/32,lane.width!/32,lane.height!/32]))protectedCells.add(`${x}:${y}`);
   const added=[...doc.objects].sort((a,b)=>Number(['wall','surface','floor'].includes(editorAsset(a.assetId)!.mode))-Number(['wall','surface','floor'].includes(editorAsset(b.assetId)!.mode))||a.id.localeCompare(b.id));
-  const supports=all.filter(o=>['desk','table','counter','reception'].includes(assetDefinitions[o.assetId as ExpandedAsset]?.kind??'')||['desk','executiveDesk','bench','coffee','meeting','reception','pantry','sideTable','coffeeStation'].includes(o.assetId));
-  const supported=(o:DecorationObject)=>{const a=editorAsset(o.assetId)!;return supports.some(s=>{const surface=editorAsset(s.assetId)!;return o.x>=s.x&&o.y>=s.y&&o.x+a.width<=s.x+surface.width&&o.y+a.height<=s.y+surface.height;});};
+  const supports=all.filter(o=>['desk','table','counter','reception','bench'].includes(assetDefinitions[o.assetId as ExpandedAsset]?.kind??'')||['desk','executiveDesk','bench','coffee','meeting','reception','pantry','sideTable','coffeeStation'].includes(o.assetId));
+  const supported=(o:DecorationObject)=>{const a=editorAsset(o.assetId)!;return supports.some(s=>{const surface=editorAsset(s.assetId)!;return o.x>=s.x&&o.y>=s.y&&o.x+a.width<=s.x+surface.width&&o.y+a.height<=s.y+Math.min(surface.height,32);});};
   const occupiedDetails=new Set<number>();
   for(const o of added){
     const a=editorAsset(o.assetId)!,cells=indices(map,o);
