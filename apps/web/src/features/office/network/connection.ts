@@ -7,6 +7,9 @@ import type { Participant } from "../../../../../../packages/shared/src/protocol
 import { sameVoiceState, type VoiceZoneState } from "../../../../../../packages/shared/src/voice.ts";
 import { decodeProximity, validBubbleRef, type ProximityState } from '../../../../../../packages/shared/src/proximity.ts';
 import { parseInteraction } from '../../../../../../packages/shared/src/interactions.ts';
+import {applyObjectChanges,type LiveSnapshot,type LiveRequest,type LiveReply,type LiveDelta} from '../../../../../../packages/shared/src/environment/live-decoration.ts';
+import {parseDecoration} from '../../../../../../packages/shared/src/environment/decoration.ts';
+import type {EnvironmentConfig} from '../../../../../../packages/shared/src/environment/catalog.ts';
 
 type OfficeRoom = Room<object, OfficeSnapshot>;
 export function realtimeUrl(value: string | undefined, production = process.env.NODE_ENV === "production") {
@@ -17,6 +20,7 @@ export function realtimeUrl(value: string | undefined, production = process.env.
 }
 export function connectOffice(options: {
   url: string; officeId: string; mapVersion: string;
+  environment?:EnvironmentConfig;structureVersion?:string;onEnvironment?(value:LiveSnapshot):void;
   getToken(): Promise<string | null>; onPresence(presence: Presence): void;
   onChat?(event: ChatEvent): void;
   onParticipants?(participants: Participant[]): void;
@@ -33,12 +37,22 @@ export function connectOffice(options: {
   let participantKey = "", chatReady = false;
   let voiceState: VoiceZoneState | null = null;
   let proximity:ProximityState|null=null;
+  let environment:LiveSnapshot|undefined,syncAt=-Infinity;
+  let syncTimer:ReturnType<typeof setTimeout>|undefined;
+  const pending=new Map<string,{resolve(value:LiveSnapshot):void;reject(error:Error):void;timer:ReturnType<typeof setTimeout>}>();
+  const syncEnvironment=()=>{if(!room||!online||closed)return;clearTimeout(syncTimer);const elapsed=performance.now()-syncAt;if(elapsed<350){syncTimer=setTimeout(syncEnvironment,350-elapsed);return;}syncAt=performance.now();room.send('environment.sync');syncTimer=setTimeout(()=>{if(state?.environmentEpoch&&(!environment||environment.epoch!==state.environmentEpoch||environment.revision!==(state.environmentRevision??0)))syncEnvironment();},750);};
+  const acceptSnapshot=(value:LiveSnapshot)=>{
+    if(closed||!online)return false;
+    if(!value||value.officeId!==options.officeId||typeof value.epoch!=='string'||value.structureVersion!==options.structureVersion||![value.revision,value.savedRevision,value.publishedRevision,value.baseRevision].every(n=>Number.isSafeInteger(n)&&n>=0)||JSON.stringify(value).length>180000)return false;
+    if(environment&&value.epoch===environment.epoch&&value.revision<environment.revision)return false;
+    environment={...value,document:parseDecoration(value.document),published:parseDecoration(value.published)};options.onEnvironment?.(environment);return true;
+  };
   const publishVoice = (value: VoiceZoneState | null) => {
     if (sameVoiceState(voiceState,value)) return;
     voiceState = value ? { sessionId:value.sessionId,zone:value.zone,configured:value.configured,participants:value.participants,...(value.bubble?{bubble:{...value.bubble}}:{}) } : null;
     options.onVoice?.(voiceState);
   };
-  const disconnected = () => { chatReady = false; options.onChat?.({ type: "connection", online: false }); options.onParticipants?.([]); publishVoice(null);proximity=null;options.onProximity?.(null); participantKey = ""; };
+  const disconnected = () => { for(const item of pending.values()){clearTimeout(item.timer);item.reject(Error('Connection lost. The operation is unconfirmed. Reconnect and retry Save.'));}pending.clear();clearTimeout(syncTimer);chatReady = false; options.onChat?.({ type: "connection", online: false }); options.onParticipants?.([]); publishVoice(null);proximity=null;options.onProximity?.(null); participantKey = ""; };
   const controller = new AbortController();
   const presence = (status: Presence["status"], notice: string) => {
     if (!closed) options.onPresence({ status, notice, count: online && state ? [...state.players.values()].filter((p) => p.connected).length : 0 });
@@ -88,8 +102,9 @@ export function connectOffice(options: {
       online = true;
       room.onStateChange((next) => {
         if (closed || denied || !online) return;
-        if (next.officeId !== options.officeId || next.mapVersion !== options.mapVersion) { close(); options.onPresence({ status: "offline", count: 0, notice: "Office map changed. Reload this page." }); return; }
+        if (next.officeId !== options.officeId || next.mapVersion !== options.mapVersion&&(!options.structureVersion||next.structureVersion!==options.structureVersion)) { close(); options.onPresence({ status: "offline", count: 0, notice: "Office map changed. Reload this page.",reload:true }); return; }
         state = next;
+        if(next.environmentEpoch&&(!environment||environment.epoch!==next.environmentEpoch||environment.revision<(next.environmentRevision??0)))syncEnvironment();
         if (!chatReady && online) { chatReady = true; options.onChat?.({ type: "connection", online: true }); }
         const participants = [...next.players.values()];
         // Positions never enter React. Notify only when participant presentation
@@ -99,6 +114,19 @@ export function connectOffice(options: {
         const count = [...next.players.values()].filter((p) => p.connected).length;
         if (count !== previousCount) { const before = previousCount; previousCount = count; presence("online", count > before ? "A participant joined." : "A participant left."); }
       });
+      room.onMessage('environment.snapshot',(value:LiveSnapshot)=>{try{acceptSnapshot(value);}catch{syncEnvironment();}});
+      room.onMessage('environment.delta',(value:LiveDelta)=>{
+        if(closed||!online||!options.environment)return;
+        try{
+          if(!environment||value.officeId!==options.officeId||value.epoch!==environment.epoch||value.structureVersion!==options.structureVersion){syncEnvironment();return;}
+          if(value.revision<=environment.revision)return;
+          if(value.previousRevision!==environment.revision||value.revision!==value.previousRevision+1){syncEnvironment();return;}
+          const document=applyObjectChanges(options.environment,environment.document,value.changes);
+          acceptSnapshot({...environment,revision:value.revision,savedRevision:value.savedRevision,publishedRevision:value.publishedRevision,document,published:value.saved?document:environment.published});
+        }catch{syncEnvironment();}
+      });
+      room.onMessage('environment.reply',(value:LiveReply)=>{const item=pending.get(value?.operationId);if(!item)return;clearTimeout(item.timer);pending.delete(value.operationId);try{if(value.snapshot)acceptSnapshot(value.snapshot);}catch{syncEnvironment();}if(value.ok&&environment)item.resolve(environment);else item.reject(Object.assign(Error(value.message||'The edit was not accepted.'),{snapshot:environment}));});
+      syncEnvironment();
       room.onMessage("chat.message", (value: unknown) => { if (!closed && online) try { options.onChat?.({ type: "message", message: decodeMessage(value) }); } catch { options.onChat?.({ type: "error", clientMessageId: null, code: "UNAVAILABLE" }); } });
       room.onMessage("chat.error", (value: { code?: unknown; clientMessageId?: unknown }) => {
         if (closed) return;
@@ -114,7 +142,7 @@ export function connectOffice(options: {
       room.onMessage('proximity.state',(value:unknown)=>{if(closed||!online||!room)return;const decoded=decodeProximity(value,options.officeId,room.sessionId);if(decoded){proximity=decoded;options.onProximity?.(decoded);}});
       room.onMessage('proximity.error',()=>{if(!closed&&online)options.onProximityError?.('Conversation change denied. Check current membership or wait a moment and retry.');});
       room.onDrop(() => { if (closed || denied) return; online = false; disconnected(); presence("reconnecting", "Connection lost. Reconnecting…"); });
-      room.onReconnect(() => { if (closed || denied) return; online = true; lastSent = 0; presence("online", "Reconnected."); void credential(); });
+      room.onReconnect(() => { if (closed || denied) return; online = true; lastSent = 0;syncAt=0;syncEnvironment(); presence("online", "Reconnected."); void credential(); });
       room.onLeave((code) => { if (closed) return; if (code === ENVIRONMENT_CHANGED_CODE) { close(); options.onPresence({ status: "offline", count: 0, notice: "Your owner applied a new office setup. Reload to enter it.", reload: true }); return; } denied ||= code === 4000; online = false; state = undefined; disconnected(); clearInterval(refresh); if (denied && room) room.reconnection.enabled = false; presence(denied ? "denied" : "offline", denied ? "Office access ended. Return to the workspace and check your membership." : "Disconnected. Verify your session and membership, then retry."); });
       room.onError((code) => { if (closed) return; denied ||= code === 401 || code === 403; online = false; disconnected(); if (denied) { clearInterval(refresh); if (room) room.reconnection.enabled = false; } presence(denied ? "denied" : "offline", denied ? "Office access denied. Return to the workspace and check your membership." : "Office connection failed. Check access and retry."); });
       presence("online", "Connected.");
@@ -123,6 +151,8 @@ export function connectOffice(options: {
   const close = () => {
     if (closed) return;
     closed = true; online = false; state = undefined; controller.abort(); clearInterval(refresh);
+    clearTimeout(syncTimer);
+    for(const item of pending.values()){clearTimeout(item.timer);item.reject(Error('Office connection ended. Reopen the editor after reconnecting.'));}pending.clear();
     disconnected();
     if (room) { room.reconnection.enabled = false; void room.leave(); disposeTransport?.(); room.removeAllListeners(); }
   };
@@ -130,6 +160,9 @@ export function connectOffice(options: {
   const refresh = setInterval(() => { void credential().catch(() => {}); }, 10_000);
   void open();
   return {
+    environment:()=>environment,
+    syncEnvironment,
+    editEnvironment(request:LiveRequest){return new Promise((resolve,reject)=>{if(closed||!online||!room){reject(Error('Reconnect to the office before editing.'));return;}if(pending.has(request.operationId)){reject(Error('That operation is still pending.'));return;}const timer=setTimeout(()=>{pending.delete(request.operationId);syncEnvironment();reject(Error(request.kind==='save'?'Save is unconfirmed. Retry Save to reconcile it.':'Edit acknowledgement was lost. Review the current layout before retrying.'));},25000);pending.set(request.operationId,{resolve,reject,timer});room.send('environment.edit',request);});},
     proximity:()=>proximity,
     enableProximity(enabled){if(closed||!online||!room)return false;room.send('proximity.set',{enabled});return true;},
     lockBubble(ref,locked){if(closed||!online||!room||!validBubbleRef(ref))return false;room.send('proximity.lock',{bubbleId:ref.bubbleId,generation:ref.generation,revision:ref.revision,locked});return true;},
@@ -137,6 +170,7 @@ export function connectOffice(options: {
     sessionId: () => room?.sessionId,
     input(x, y, run=false) {
       if (!online || !room || closed) return;
+      if(state?.environmentEpoch&&(!environment||environment.epoch!==state.environmentEpoch||environment.revision!==(state.environmentRevision??0)))return;
       const now = performance.now();
       if (now - lastSent < 50 || x === lastX && y === lastY && run===lastRun && now - lastSent < 100) return;
       lastX = x; lastY = y; lastRun=run; lastSent = now;
