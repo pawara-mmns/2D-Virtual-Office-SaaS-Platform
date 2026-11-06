@@ -9,7 +9,7 @@ export const fixtures = {
   ...expandedFixtures,
 } as const;
 export type Fixture = keyof typeof fixtures;
-export type PlaceFixture = (name: Fixture, dx: number, dy: number, options?:{facing:AvatarDirection}) => boolean;
+export type PlaceFixture = (name: Fixture, dx: number, dy: number, options?:{facing?:AvatarDirection;preserveConnectivity?:boolean}) => boolean;
 export const roomModules = {
   reception:{label:'RECEPTION',floor:6},meeting:{label:'MEETING ROOM',floor:5},pantry:{label:'COFFEE & PANTRY',floor:7},lounge:{label:'LOUNGE',floor:4},work:{label:'WORKSTATIONS',floor:0},collaboration:{label:'COLLABORATION',floor:8},training:{label:'TRAINING',floor:8},'private-office':{label:'PRIVATE OFFICE',floor:5},utility:{label:'PRINT & STORAGE',floor:7},
 } as const;
@@ -98,5 +98,24 @@ export function furnishRoom(room: RoomSpec, config: EnvironmentConfig, density: 
     const dx=wx-room.core[0],dy=wy-room.core[1];
     if(ww>=5&&wh>=4){at('benchWaiting',dx+1,dy+1);at('sideRound',dx+ww-2,dy+1);}
     else if(ww>=4&&wh>=4)at(plant,dx+1,dy+1);
+  }
+  // Additive furnishing pass: never rename, move or replace an existing base
+  // object. Optional placements use the same authoritative support/seat guards.
+  const safeAt:PlaceFixture=(name,x,y)=>at(name,x,y,{preserveConnectivity:true});
+  if(density>0){
+    if(kind==='lounge'){safeAt('gameConsole',1,0);safeAt('beanBag',center+1,h-5);}
+    if(['reception','work','collaboration'].includes(kind))safeAt('livingWall',2,0);
+    if(kind==='meeting')safeAt('windowPanel',1,0);
+    if(kind==='utility')safeAt('trophyShelf',3,0);
+    safeAt('wallSconce',1,0);safeAt('wallSconce',w-3,0);
+  }
+  if(density>1){
+    if(kind==='reception')safeAt('sculpture',1,h-3);
+    if(['work','collaboration'].includes(kind)&&config.furniture==='executive')safeAt('deskTriple',w-5,3);
+    if(['work','collaboration','lounge'].includes(kind))safeAt('planterWide',center-1,h-3);
+    if(['work','collaboration'].includes(kind)&&h>=14)safeAt('planterWide',center-1,6);
+    if(kind==='lounge')safeAt('lampArc',center,3);
+    if(kind==='pantry')safeAt('livingWall',1,0);
+    if(kind==='meeting')safeAt('planterWide',center-1,1);
   }
 }

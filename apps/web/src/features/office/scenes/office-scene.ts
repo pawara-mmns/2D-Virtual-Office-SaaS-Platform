@@ -1,4 +1,4 @@
-import { environmentPaint } from "../../../../../../packages/shared/src/environment/visuals.ts";
+import { environmentPaint,environmentAtmosphere } from "../../../../../../packages/shared/src/environment/visuals.ts";
 import type { EnvironmentConfig } from "../../../../../../packages/shared/src/environment/catalog.ts";
 import Phaser from "phaser";
 import { mapMarkers, TILE_SIZE, validateOfficeMap, type OfficeMap } from "../maps/map-data.ts";
@@ -62,6 +62,9 @@ export class OfficeScene extends Phaser.Scene {
   private furnitureTilesCleared=false;
   private liveSnapshot?:LiveSnapshot;
   private rugKey='';
+  private atmosphere?:Phaser.GameObjects.Image;
+  private atmosphereTexture?:Phaser.Textures.CanvasTexture;
+  private atmosphereKey='';
   constructor(private readonly pressed: ReadonlySet<string>, private readonly callbacks: OfficeCallbacks, private appearance: AvatarAppearance, private readonly multiplayer = false, private readonly officeId?: string, private readonly environment?: EnvironmentConfig,private readonly decoration?:PublishedDecoration) { super("Office"); }
   preload() {
     this.load.once(Phaser.Loader.Events.FILE_LOAD_ERROR, () => { this.failed = true; this.callbacks.onError(); });
@@ -84,6 +87,11 @@ export class OfficeScene extends Phaser.Scene {
       if (this.environment) {
         const paint = environmentPaint(data, this.environment), graphics = this.add.graphics();this.rugVisual=graphics;
         for (const rect of paint.rugs) graphics.fillStyle(parseInt(rect.color, 16), rect.alpha).fillRect(rect.x, rect.y, rect.width, rect.height);
+        // Light is rasterized at one texel per 4 world pixels, then sampled
+        // nearest-neighbor. One batched sprite replaces thousands of draw commands.
+        this.atmosphereTexture=this.textures.createCanvas('office-atmosphere',Math.ceil(data.width*8),Math.ceil(data.height*8))??undefined;
+        if(this.atmosphereTexture){this.atmosphereTexture.setFilter(Phaser.Textures.FilterMode.NEAREST);this.atmosphere=this.add.image(0,0,'office-atmosphere').setOrigin(0).setScale(4);}
+        this.events.once(Phaser.Scenes.Events.SHUTDOWN,()=>{this.atmosphere?.destroy();this.textures.remove('office-atmosphere');this.atmosphereTexture=undefined;});
         this.cameras.main.setBackgroundColor("#" + paint.theme.background);
       }
       for (const name of ["Architecture", "Furniture"]) if (!map.createLayer(name, tiles, 0, 0)) throw new Error("Office layer unavailable");
@@ -298,6 +306,7 @@ export class OfficeScene extends Phaser.Scene {
     for(const [id,sprite]of this.furnitureImages)if(!wanted.has(id)){sprite.destroy();this.furnitureImages.delete(id);}
     this.seatingVisuals=[...this.furnitureImages.values()].filter(s=>s.getData('seatingForeground')||String(s.frame.name).startsWith('chair-'));
     if(this.environment&&this.rugVisual){const rugs=environmentPaint(map,this.environment).rugs,key=JSON.stringify(rugs);if(key!==this.rugKey){this.rugKey=key;this.rugVisual.clear();for(const r of rugs)this.rugVisual.fillStyle(parseInt(r.color,16),r.alpha).fillRect(r.x,r.y,r.width,r.height);}}
+    if(this.environment&&this.atmosphereTexture){const key=JSON.stringify(placements.map(p=>[p.name,p.x,p.y]));if(key!==this.atmosphereKey){this.atmosphereKey=key;const ctx=this.atmosphereTexture.context;ctx.clearRect(0,0,this.atmosphereTexture.width,this.atmosphereTexture.height);for(const r of environmentAtmosphere(map,this.environment)){ctx.fillStyle='#'+r.color;ctx.globalAlpha=r.alpha;ctx.fillRect(Math.round(r.x/4),Math.round(r.y/4),Math.max(1,Math.round(r.width/4)),Math.max(1,Math.round(r.height/4)));}ctx.globalAlpha=1;this.atmosphereTexture.refresh();}}
   }
   interact() {
     if(this.editing)return false;

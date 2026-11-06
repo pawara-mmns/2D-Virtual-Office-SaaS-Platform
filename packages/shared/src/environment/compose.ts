@@ -68,7 +68,7 @@ export function composeEnvironment(input: EnvironmentConfig): ComposedMap {
   const seatingClearance=new Set<string>();
   for(const {spec,cells}of structure.rooms) {
     const [x,y,w,h]=spec.core,center=Math.floor(w/2);
-    const at=(name:Fixture,dx:number,dy:number,options?:{facing:import('../avatars.ts').AvatarDirection})=>{
+    const at=(name:Fixture,dx:number,dy:number,options?:{facing?:import('../avatars.ts').AvatarDirection;preserveConnectivity?:boolean})=>{
       const [sx,sy,pw,ph]=isChairAsset(name)&&options?.facing?directionalChairRects[name][options.facing]:fixtures[name],px=x+dx,py=y+dy;
       const definition=assetDefinitions[name as ExpandedAsset] as AssetSpec|undefined,mode=definition?.mode??'blocking',decorative=mode==='wall'||mode==='surface';
       if(mode==='structure')return false;
@@ -87,12 +87,25 @@ export function composeEnvironment(input: EnvironmentConfig): ComposedMap {
         if(!approach)return false;
         for(const [a,b]of approach)access.push(cellKey(Math.floor(a/32),Math.floor(b/32)));
       }
+      if(options?.preserveConnectivity&&!decorative){
+        const excluded=new Set(rectangleCells([px,py,pw/32,ph/32]).map(([a,b])=>b*width+a));
+        const neighbors=(i:number)=>[i%width?i-1:-1,i%width<width-1?i+1:-1,i-width,i+width];
+        const free=(i:number)=>i>=0&&i<collision.length&&!collision[i]&&!excluded.has(i);
+        // Removing a rectangle can split circulation only at its boundary.
+        // Stop once all surviving boundary neighbors are connected, instead of
+        // flood-filling the entire building for every optional planter.
+        const boundary=new Set([...excluded].flatMap(neighbors).filter(free)),start=boundary.values().next().value;
+        if(start===undefined)return false;
+        const seen=new Set<number>([start]),queue=[start];boundary.delete(start);
+        for(let q=0;q<queue.length&&boundary.size;q++)for(const n of neighbors(queue[q]!))if(free(n)&&!seen.has(n)){seen.add(n);queue.push(n);boundary.delete(n);}
+        if(boundary.size)return false;
+      }
       for(let j=0;j<ph/32;j++)for(let i=0;i<pw/32;i++){
         const index=(py+j)*width+px+i,gid=1+(sy/32+j)*16+sx/32+i;
         if(decorative)details[index]=gid;else{furniture[index]=gid;collision[index]=1;}
       }
       for(const key of access)seatingClearance.add(key);
-      (decorative?decorations:placements).push({name,type:spec.id,x:px*32,y:py*32,width:pw,height:ph,...(options?{facing:options.facing}:{})});return true;
+      (decorative?decorations:placements).push({name,type:spec.id,x:px*32,y:py*32,width:pw,height:ph,...(options?.facing?{facing:options.facing}:{}),...(options?.preserveConnectivity?{optionalDecoration:true}:{})});return true;
     };
     furnishRoom(spec,config,density,at);
     if(spec.kind==='meeting')voices.push({name:'Meeting Room',type:'voice',x:(x+1)*32,y:(y+1)*32,width:(w-2)*32,height:(h-2)*32});

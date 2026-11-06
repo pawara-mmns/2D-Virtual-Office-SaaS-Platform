@@ -56,7 +56,11 @@ export function resolvedObjects(config:EnvironmentConfig,document:DecorationDocu
   const base=baseDecorationObjects(config),known=new Set(base.map(o=>o.id));
   for(const id of [...document.removed,...document.objects.filter(o=>o.id.startsWith('base/')).map(o=>o.id)])if(!known.has(id))fail('Base office changed. Reload and review the draft.');
   const changes=new Map(document.objects.map(o=>[o.id,o]));
-  return[...base.filter(o=>!document.removed.includes(o.id)).map(o=>changes.get(o.id)??o),...document.objects.filter(o=>o.id.startsWith('custom/'))];
+  const map=composeEnvironment(config),optional=new Set([...group(map,'Placements'),...group(map,'Decorations')].filter(p=>p.optionalDecoration).map(baseId));
+  // Owner-authored objects win over new optional styling introduced by an art
+  // upgrade. Never move an existing saved object to make room for new decor.
+  const intersects=(a:DecorationObject,b:DecorationObject)=>{const aa=editorAsset(a.assetId)!,bb=editorAsset(b.assetId)!;return aa.mode!=='floor'&&bb.mode!=='floor'&&aa.mode===bb.mode&&a.x<b.x+bb.width&&a.x+aa.width>b.x&&a.y<b.y+bb.height&&a.y+aa.height>b.y;};
+  return[...base.filter(o=>!document.removed.includes(o.id)&&!(optional.has(o.id)&&!changes.has(o.id)&&document.objects.some(other=>other.id!==o.id&&intersects(o,other)))).map(o=>changes.get(o.id)??o),...document.objects.filter(o=>o.id.startsWith('custom/'))];
 }
 export function upsertDecoration(document:DecorationDocument,object:DecorationObject):DecorationDocument{
   return parseDecoration({...document,objects:[...document.objects.filter(o=>o.id!==object.id),object],removed:document.removed.filter(id=>id!==object.id)});
@@ -91,7 +95,7 @@ export function createDecorationHistory(initial:DecorationDocument){
 function objectMarker(o:DecorationObject):Marker{const a=editorAsset(o.assetId)!;return{name:o.assetId,type:'decoration',instanceId:o.id,x:o.x,y:o.y,width:a.width,height:a.height,facing:o.orientation};}
 function indices(map:OfficeMap,o:DecorationObject){const a=editorAsset(o.assetId)!;return rectangleCells([o.x/32,o.y/32,a.width/32,a.height/32]).map(([x,y])=>y*map.width+x);}
 export function composeDecoratedEnvironment(config:EnvironmentConfig,input:unknown=emptyDecoration(),revision=0,strict=true):OfficeMap{
-  const doc=parseDecoration(input),map=composeEnvironment(config),base=baseDecorationObjects(config),all=resolvedObjects(config,doc),changed=new Set([...doc.removed,...doc.objects.map(o=>o.id)]);
+  const doc=parseDecoration(input),map=composeEnvironment(config),base=baseDecorationObjects(config),all=resolvedObjects(config,doc),active=new Set(all.map(o=>o.id)),changed=new Set([...doc.removed,...doc.objects.map(o=>o.id),...base.filter(o=>!active.has(o.id)).map(o=>o.id)]);
   if(!revision&&!doc.objects.length&&!doc.removed.length&&!strict)return map;
   const furniture=tileLayer(map,'Furniture').data,details=tileLayer(map,'Details').data,collision=tileLayer(map,'Collision').data,architecture=tileLayer(map,'Architecture').data;
   for(const o of base.filter(o=>changed.has(o.id))){const mode=editorAsset(o.assetId)!.mode;for(const i of indices(map,o)){if(mode==='wall'||mode==='surface')details[i]=0;else{furniture[i]=0;collision[i]=architecture[i]?1:0;}}}

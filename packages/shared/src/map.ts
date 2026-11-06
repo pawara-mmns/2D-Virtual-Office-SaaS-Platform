@@ -1,6 +1,6 @@
 import { environmentAtlas } from './environment/assets.ts';
 export type TileLayer = { type: "tilelayer"; name: string; width: number; height: number; data: number[] };
-export type Marker = { name: string; type: string; x: number; y: number; width?: number; height?: number; facing?:import('./avatars.ts').AvatarDirection;instanceId?:string };
+export type Marker = { name: string; type: string; x: number; y: number; width?: number; height?: number; facing?:import('./avatars.ts').AvatarDirection;instanceId?:string;optionalDecoration?:boolean };
 export type OfficeMap = { width: number; height: number; tilewidth: number; tileheight: number; tilesets?: {firstgid:number;tilecount:number;columns:number;tilewidth:number;tileheight:number;imagewidth:number;imageheight:number}[]; layers: (TileLayer | { type: "objectgroup"; name: string; objects: Marker[] })[] };
 export const TILE_SIZE = 32;
 export const PLAYER_SPEED = 120;

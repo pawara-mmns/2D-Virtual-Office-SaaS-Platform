@@ -14,7 +14,7 @@ export type SeatSlot = { id:string;parentObjectId:string;worldPosition:Point;anc
 export type ForegroundRect=SeatRect&{sourceX:number;sourceY:number};
 export type Interactable = OfficeObject & {objectType:'chair'|'sofa'|'bench';occupancy:{capacity:number;onePerSlot:true};slots:SeatSlot[];foreground:ForegroundRect[]};
 // Only seating artwork gets functional actions. Future action names confer no capability.
-export const seatingCatalog=Object.fromEntries([...Object.keys(chairFamilies),...embeddedWorkstationAssets,'waiting','benchWaiting','sofa','sofaCompact','sofaSectional'].map(id=>{const rect=fixtures[id as Fixture],seats=catalogSeats(id,rect[2],rect[3]);return[id,{type:seats[0]!.type,slots:seats.length}];})) as Partial<Record<Fixture,{type:Interactable['objectType'];slots:number}>>;
+export const seatingCatalog=Object.fromEntries([...Object.keys(chairFamilies),...embeddedWorkstationAssets,'waiting','benchWaiting','sofa','sofaCompact','sofaSectional','beanBag'].map(id=>{const rect=fixtures[id as Fixture],seats=catalogSeats(id,rect[2],rect[3]);return[id,{type:seats[0]!.type,slots:seats.length}];})) as Partial<Record<Fixture,{type:Interactable['objectType'];slots:number}>>;
 function placements(map:OfficeMap):Marker[] {
   const layer=map.layers.find(l=>l.name==='Placements'&&l.type==='objectgroup');
   if(layer?.type==='objectgroup')return layer.objects;

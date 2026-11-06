@@ -6,9 +6,10 @@ export type ChairAsset=keyof typeof chairFamilies;
 export function isChairAsset(id:string):id is ChairAsset{return Object.hasOwn(chairFamilies,id);}
 // These describe the actual artwork, including chairs drawn INSIDE desk sprites.
 // Stand-up desks and collaboration tables do not invent an embedded seat.
-const deskWidths:Record<string,number>={desk:64,executiveDesk:96,deskSingle:64,deskDual:64,deskLaptop:64,deskCreative:64,deskReturn:96,deskManager:96,classroomDesk:64};
+const deskWidths:Record<string,number>={desk:64,executiveDesk:96,deskSingle:64,deskDual:64,deskLaptop:64,deskCreative:64,deskReturn:96,deskManager:96,classroomDesk:64,deskTriple:96};
 const opposite:Record<AvatarDirection,AvatarDirection>={up:'down',down:'up',left:'right',right:'left'};
 export function catalogSeats(id:string,width:number,height:number,facing?:AvatarDirection):CatalogSeat[] {
+  if(id==='beanBag')return[{key:'0',type:'sofa',anchor:{x:16,y:13},footprint:{x:0,y:0,width:32,height:32},facing:'down',exit:'down'}];
   if(isChairAsset(id)){
     const direction=facing??'down',lounge=chairFamilies[id]==='lounge';
     const x=direction==='left'?14:direction==='right'?18:16;

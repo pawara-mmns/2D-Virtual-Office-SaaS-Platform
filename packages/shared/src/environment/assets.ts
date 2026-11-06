@@ -8,6 +8,22 @@ export type AssetMode = 'blocking'|'wall'|'surface'|'structure';
 export type AssetSpec = { category: AssetCategory; kind: string; width: number; height: number; variant: string; mode: AssetMode; material?: 'solid'|'glass'|'half'|'threshold' };
 const asset=(category:AssetCategory,kind:string,width:number,height:number,variant:string,mode:AssetMode='blocking'):AssetSpec=>({category,kind,width,height,variant,mode});
 const structure=(variant:string,material:NonNullable<AssetSpec['material']>)=>({...asset('structure','structure',1,1,variant,'structure'),material});
+// Packed after the existing directional frames: saved GIDs and sprite crops stay stable.
+export const premiumDefinitions={
+  deskTriple:asset('workstations','desk',3,2,'triple'),
+  beanBag:asset('lounge','beanbag',1,1,'canvas'),
+  livingWall:asset('decor','living-wall',3,1,'vines','wall'),
+  gameConsole:asset('lounge','media',2,1,'console','wall'),
+  trophyShelf:asset('decor','trophies',2,1,'awards','wall'),
+  sculpture:asset('reception','sculpture',1,1,'loop'),
+  windowPanel:asset('decor','window',2,1,'daylight','wall'),
+} as const;
+// Local artwork coordinates reserved for a future display renderer. This is
+// geometry only: there is no SHARE_SCREEN action, media subscription or permission.
+export const displaySurfaces={
+  wallDisplay:{x:6,y:6,width:84,height:19,interactive:false},
+  gameConsole:{x:6,y:6,width:52,height:19,interactive:false},
+} as const;
 export const assetDefinitions = {
   deskSingle:asset('workstations','desk',2,2,'single'),deskDual:asset('workstations','desk',2,2,'dual'),deskLaptop:asset('workstations','desk',2,2,'laptop'),deskStanding:asset('workstations','desk',2,2,'standing'),deskCreative:asset('workstations','desk',2,2,'creative'),deskReturn:asset('workstations','desk',3,2,'return'),deskManager:asset('workstations','desk',3,2,'manager'),benchShared:asset('workstations','bench',4,1,'shared'),benchLaptop:asset('workstations','bench',4,1,'laptop'),
   deskNotebook:asset('workstations','accessory',1,1,'notebook','surface'),deskLamp:asset('workstations','accessory',1,1,'lamp','surface'),deskMug:asset('workstations','accessory',1,1,'mug','surface'),deskFiles:asset('workstations','accessory',1,1,'files','surface'),
@@ -21,12 +37,14 @@ export const assetDefinitions = {
   classroomDesk:asset('training','desk',2,2,'classroom'),podium:asset('training','podium',1,2,'lectern'),projectorTable:asset('training','table',2,1,'projector'),collaborationRound:asset('training','table',3,2,'collaboration'),mobileBoard:asset('training','mobile-board',2,2,'mobile'),
   wallPanelH:structure('panel-h','solid'),wallPanelV:structure('panel-v','solid'),glassFrostH:structure('frost-h','glass'),glassFrostV:structure('frost-v','glass'),halfShelfH:structure('shelf-h','half'),halfShelfV:structure('shelf-v','half'),doorFlushH:structure('door-h','threshold'),doorFlushV:structure('door-v','threshold'),innerCornerNW:structure('inner-nw','solid'),innerCornerNE:structure('inner-ne','solid'),innerCornerSE:structure('inner-se','solid'),innerCornerSW:structure('inner-sw','solid'),wallEdgeH:structure('edge-h','solid'),wallEdgeV:structure('edge-v','solid'),
   directionalSign:asset('decor','wall',2,1,'direction','wall'),companyPoster:asset('decor','wall',2,1,'poster','wall'),wallSconce:asset('decor','wall',1,1,'sconce','wall'),consoleTable:asset('lounge','table',2,1,'console'),magazineStand:asset('reception','storage',1,2,'magazines'),cornerPlanter:asset('decor','plant',1,1,'corner'),
+  ...premiumDefinitions,
 } as const satisfies Record<string,AssetSpec>;
 export type ExpandedAsset = keyof typeof assetDefinitions;
 export type AtlasRect = readonly [x:number,y:number,width:number,height:number];
 const packed:Partial<Record<ExpandedAsset,AtlasRect>>={};
 let x=0,y=256,rowHeight=0;
 for(const [id,definition]of Object.entries(assetDefinitions)) {
+  if(Object.hasOwn(premiumDefinitions,id))continue;
   const w=definition.width*32,h=definition.height*32;
   if(x+w>environmentAtlas.width){x=0;y+=rowHeight;rowHeight=0;}
   if(y+h>environmentAtlas.height)throw Error('Office asset atlas capacity exceeded');
@@ -45,6 +63,14 @@ for(const id of Object.keys(chairFamilies) as ChairAsset[]){
     variants[direction]=[x,y,32,32];x+=32;rowHeight=Math.max(rowHeight,32);
   }
   directionalChairRects[id]=variants;
+}
+// Reserve a clean shelf after all original frames (currently y=960).
+x=0;y+=rowHeight;rowHeight=0;
+for(const [id,spec]of Object.entries(premiumDefinitions)){
+  const w=spec.width*32,h=spec.height*32;
+  if(x+w>environmentAtlas.width){x=0;y+=rowHeight;rowHeight=0;}
+  if(y+h>environmentAtlas.height)throw Error('Premium atlas capacity exceeded');
+  packed[id as ExpandedAsset]=[x,y,w,h];x+=w;rowHeight=Math.max(rowHeight,h);
 }
 export const assetTile=(id:ExpandedAsset)=>{const [x,y]=expandedFixtures[id];return 1+y/32*environmentAtlas.columns+x/32;};
 export function assetMaterial(gid:number):AssetSpec['material'] {
