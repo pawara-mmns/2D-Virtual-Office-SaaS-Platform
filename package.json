@@ -7,6 +7,8 @@
     "node": ">=22.14.0"
   },
   "scripts": {
+    "test:seating:browser": "pnpm --filter @virtual-office/realtime exec tsx --test ../../scripts/test-directional-seating-browser.mjs",
+    "test:movement:browser": "pnpm --filter @virtual-office/realtime exec tsx --test ../../scripts/test-movement-seating-browser.mjs",
     "admin:setup:local": "node scripts/platform-admin-local.mjs",
     "admin:connect:data": "node --experimental-strip-types scripts/platform-admin-connect-data.mjs",
     "admin:check:data": "node --experimental-strip-types scripts/platform-admin-check-data.mjs",

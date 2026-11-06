@@ -13,6 +13,8 @@ import type { VoiceService } from "../voice/service.ts";
 import { createProximity } from '../voice/proximity.ts';
 import { conversationSpace } from '../voice/space.ts';
 import type { ProximitySettings } from '../../../../packages/shared/src/proximity.ts';
+import { parseInteraction } from '../../../../packages/shared/src/interactions.ts';
+import { createSeating } from '../interactions/seating.ts';
 
 type OfficeClient = Client<{ auth: Authorization }>;
 type Control = { input: MoveInput; lastInput: number; window: number; messages: number; refreshing: boolean; nextCheck: number };
@@ -44,12 +46,16 @@ export function officeRoomClass(services: RoomServices) {
     private proximity!:ReturnType<typeof createProximity>;
     private proximityAt=new Map<string,number>();
     private proximityRevision=new Map<string,number>();
+    private seating!:ReturnType<typeof createSeating>;
+    private interactionAt=new Map<string,number>();
+    private interactionSeq=new Map<string,number>();
     // All default matchmaking paths fail closed. Only our authorized endpoint
     // can reserve seats with trusted authData. Never inherit bundle JWT defaults.
     static async onAuth(): Promise<never> { throw new ServerError(403, "Use authorized office admission."); }
     onCreate(options: { officeId: string; map?: OfficeMap }) {
       this.officeMap = options.map ?? services.map;
       this.state.officeId = options.officeId;
+      this.seating=createSeating(this.officeMap,this.state.seats);
       this.proximity=createProximity(options.officeId,services.voice,services.proximity,Date.now,conversationSpace(this.officeMap));
       this.state.mapVersion = mapVersion(this.officeMap);
       this.seatReservationTimeout = 10;
@@ -63,6 +69,20 @@ export function officeRoomClass(services: RoomServices) {
         if (++control.messages > 35 || !validInput(value)) { this.deny(client); return; }
         if (value.seq <= control.input.seq) return;
         control.input = value; control.lastInput = now;
+      });
+      this.onMessage('object.interact',(client,value:unknown)=>{
+        const now=Date.now(),player=this.state.players.get(client.sessionId),request=parseInteraction(value),auth=client.auth;
+        const reject=(code:string)=>client.send('object.error',{code});
+        if(!player?.connected||!auth||now>=auth.expiresAt||now-auth.checkedAt>=AUTH_LEASE_MS){reject('DENIED');return;}
+        if(!request||request.seq<=(this.interactionSeq.get(client.sessionId)??-1)){reject('INVALID');return;}
+        this.interactionSeq.set(client.sessionId,request.seq);
+        if(now-(this.interactionAt.get(client.sessionId)??0)<250){reject('RATE_LIMIT');return;}
+        this.interactionAt.set(client.sessionId,now);
+        const result=this.seating.act(client.sessionId,player,request,now);
+        if(result!=='OK'){reject(result);return;}
+        const control=this.controls.get(client.sessionId);
+        // Explicit E/touch stand clears cached input; only fresh intent may walk.
+        if(control){control.input={seq:control.input.seq,x:0,y:0};control.lastInput=0;}
       });
       this.onMessage("credential", (client, value: unknown) => {
         const control = this.controls.get(client.sessionId);
@@ -160,6 +180,7 @@ export function officeRoomClass(services: RoomServices) {
       }
     }
     private deny(client: OfficeClient) {
+      this.seating.release(client.sessionId,this.state.players.get(client.sessionId));
       this.proximity.leave(client.sessionId);
       services.voice?.leave(client.sessionId);
       this.revoked.add(client.sessionId);
@@ -191,13 +212,14 @@ export function officeRoomClass(services: RoomServices) {
         if (!control || !player) continue;
         if (!client.auth || now >= client.auth.expiresAt || now - client.auth.checkedAt >= AUTH_LEASE_MS) { this.deny(client); continue; }
         if (now >= control.nextCheck && !control.refreshing) void this.revalidate(client);
-        simulate(this.officeMap, player, now - control.lastInput < 250 && player.connected ? control.input : { x: 0, y: 0 });
+        if(!this.seating.transitioning(client.sessionId,now))simulate(this.officeMap, player, now - control.lastInput < 250 && player.connected ? control.input : { x: 0, y: 0 });
       }
       this.proximity.sync(this.clients.flatMap(client=>{const p=this.state.players.get(client.sessionId);return p?.connected&&client.auth?[{sessionId:client.sessionId,auth:client.auth,x:p.x,y:p.y,meeting:!!meetingZone(this.officeMap,p.x,p.y)}]:[];}),
         (id,value)=>this.clients.find(c=>c.sessionId===id)?.send('proximity.state',value),(id,value)=>this.clients.find(c=>c.sessionId===id)?.send('voice.state',value));
       this.simulationWorkMs += performance.now() - began;
     }
     onDrop(client: OfficeClient) {
+      this.seating.release(client.sessionId,this.state.players.get(client.sessionId));
       this.proximityRevision.set(client.sessionId,(this.proximityRevision.get(client.sessionId)??0)+1);
       this.proximity.leave(client.sessionId);
       services.voice?.leave(client.sessionId);
@@ -218,6 +240,7 @@ export function officeRoomClass(services: RoomServices) {
       control.input = { seq: control.input.seq, x: 0, y: 0 }; control.lastInput = 0; control.nextCheck = Date.now() + AUTH_CHECK_MS;
     }
     onLeave(client: OfficeClient) {
+      this.seating.release(client.sessionId,this.state.players.get(client.sessionId));this.interactionAt.delete(client.sessionId);this.interactionSeq.delete(client.sessionId);
       this.proximityRevision.delete(client.sessionId);
       this.proximity.leave(client.sessionId);this.proximityAt.delete(client.sessionId);
       services.voice?.leave(client.sessionId);
@@ -225,6 +248,6 @@ export function officeRoomClass(services: RoomServices) {
       this.state.players.delete(client.sessionId); this.controls.delete(client.sessionId); this.revoked.delete(client.sessionId);
       if (client.auth) services.release(this.state.officeId, client.auth.userId, client.sessionId);
     }
-    onDispose() { this.proximity.close();this.proximityAt.clear();for (const id of this.state.players.keys()) services.voice?.leave(id); this.controls.clear(); this.revoked.clear(); this.chatPending.clear(); this.statusPending.clear(); this.statusAt.clear(); services.disposed(this.state.officeId, this.roomId); }
+    onDispose() { this.seating.clear();this.interactionAt.clear();this.interactionSeq.clear();this.proximity.close();this.proximityAt.clear();for (const id of this.state.players.keys()) services.voice?.leave(id); this.controls.clear(); this.revoked.clear(); this.chatPending.clear(); this.statusPending.clear(); this.statusAt.clear(); services.disposed(this.state.officeId, this.roomId); }
   };
 }

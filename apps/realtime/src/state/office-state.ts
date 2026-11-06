@@ -5,8 +5,10 @@ export const PlayerState = schema({
   x: t.float32().default(0), y: t.float32().default(0),
   direction: t.string<"down" | "left" | "right" | "up">().default("down"),
   isMoving: t.boolean().default(false), connected: t.boolean().default(true),
+  isRunning: t.boolean().default(false), seatId: t.string().default(''),
+  motionState: t.string<'IDLE'|'WALKING'|'RUNNING'|'SITTING'|'STANDING'>().default('IDLE'),
   availability: t.string<"AVAILABLE" | "BUSY" | "DO_NOT_DISTURB">().default("AVAILABLE"),
 }, "PlayerState");
 export type PlayerState = SchemaType<typeof PlayerState>;
-export const OfficeState = schema({ officeId: t.string().default(""), mapVersion: t.string().default(""), players: t.map(PlayerState) }, "OfficeState");
+export const OfficeState = schema({ officeId: t.string().default(""), mapVersion: t.string().default(""), players: t.map(PlayerState), seats:t.map('string') }, "OfficeState");
 export type OfficeState = SchemaType<typeof OfficeState>;
