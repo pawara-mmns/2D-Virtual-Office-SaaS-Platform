@@ -1,6 +1,7 @@
 import type { EnvironmentConfig } from "../../../../../../packages/shared/src/environment/catalog.ts";
 // Imported dynamically inside the client effect. Never import this module from a Server Component.
 import Phaser from "phaser";
+import type {LiveSnapshot} from '../../../../../../packages/shared/src/environment/live-decoration.ts';
 import { OfficeScene, type OfficeCallbacks } from "../scenes/office-scene.ts";
 import { attachMovementInput } from "../input/movement.ts";
 import { attachWheelZoom } from "../input/wheel-zoom.ts";
@@ -10,6 +11,7 @@ import type { CameraCommand } from "./camera.ts";
 import { softwareRenderer } from "./renderer-effects.ts";
 import type {PublishedDecoration} from '../../../../../../packages/shared/src/environment/decoration.ts';
 import type {EditorView} from '../../decoration/overlay.ts';
+import type {EditorCommand} from '../../decoration/manipulation.ts';
 
 export function createOfficeGame(host: HTMLElement, callbacks: OfficeCallbacks, appearance: AvatarAppearance = { avatarKey: defaultAvatar, displayName: "You" }, multiplayer = false, officeId?: string, environment?: EnvironmentConfig,decoration?:PublishedDecoration) {
   const input = attachMovementInput(host, () => document.activeElement === host&&!scene.isEditing(), window,()=>scene.interact());
@@ -17,16 +19,31 @@ export function createOfficeGame(host: HTMLElement, callbacks: OfficeCallbacks, 
   host.addEventListener("pointerdown", focus);
   const scene = new OfficeScene(input.pressed, callbacks, appearance, multiplayer, officeId, environment,decoration);
   const coordinates=(event:{clientX:number;clientY:number})=>{const rect=host.getBoundingClientRect();return{x:(event.clientX-rect.left)*scene.scale.width/rect.width,y:(event.clientY-rect.top)*scene.scale.height/rect.height};};
+  let spaceHeld=false;
+  const touches=new Map<number,{x:number;y:number}>();
+  let gesture:{distance:number;zoom:number;anchor:{x:number;y:number}}|undefined;
+  const panKey=(event:KeyboardEvent)=>{if(event.code!=='Space')return;if(event.type==='keyup'){spaceHeld=false;return;}if(document.activeElement!==host)return;event.preventDefault();spaceHeld=true;host.style.cursor='grab';};
+  const releasePan=()=>{spaceHeld=false;touches.clear();gesture=undefined;scene.editorCommand('cancel');};
   const pointer=(event:PointerEvent)=>{
-    if(!scene.isEditing())return;event.preventDefault();
+    if(!scene.isEditing()||event.type==='pointerdown'&&![0,1].includes(event.button))return;event.preventDefault();
     if(event.type==='pointerdown')host.setPointerCapture(event.pointerId);
-    const p=coordinates(event),type=event.type==='pointerdown'?'down':event.type==='pointermove'?'move':event.type==='pointerup'?'up':'cancel';scene.editorPointer(type,p.x,p.y);
+    const p=coordinates(event),type=event.type==='pointerdown'?'down':event.type==='pointermove'?'move':event.type==='pointerup'?'up':event.type==='pointerleave'?'leave':'cancel';
+    if(event.pointerType==='touch'&&type==='down')touches.set(event.pointerId,p);else if(touches.has(event.pointerId)&&type==='move')touches.set(event.pointerId,p);
+    if(touches.size>=2){const [a,b]=[...touches.values()],x=(a!.x+b!.x)/2,y=(a!.y+b!.y)/2,distance=Math.max(1,Math.hypot(a!.x-b!.x,a!.y-b!.y));if(!gesture){scene.editorCommand('cancel');gesture={distance,zoom:scene.cameras.main.zoom,anchor:scene.editorWorldPoint(x,y)};}scene.editorGesture(x,y,gesture.zoom*distance/gesture.distance,gesture.anchor);}
+    else if(!gesture)scene.editorPointer(type,p.x,p.y,{pan:spaceHeld||event.button===1||!!(event.buttons&4),alt:event.altKey,touch:event.pointerType==='touch'});
+    if(type==='up'||type==='cancel'){touches.delete(event.pointerId);if(!touches.size)gesture=undefined;}
     if((type==='up'||type==='cancel')&&host.hasPointerCapture(event.pointerId))host.releasePointerCapture(event.pointerId);
   };
+  const auxiliary=(event:MouseEvent)=>{if(event.button===1)event.preventDefault();};
   const dragover=(event:DragEvent)=>{if(scene.isEditing())event.preventDefault();};
   const drop=(event:DragEvent)=>{if(!scene.isEditing())return;event.preventDefault();const p=coordinates(event);scene.editorDrop(event.dataTransfer?.getData('application/x-office-asset')??'',p.x,p.y);};
-  for(const type of ['pointerdown','pointermove','pointerup','pointercancel'] as const)host.addEventListener(type,pointer);
-  host.addEventListener('dragover',dragover);host.addEventListener('drop',drop);
+  let editorAttached=false;
+  const attachEditor=(active:boolean)=>{
+    if(active===editorAttached)return;editorAttached=active;
+    for(const type of ['pointerdown','pointermove','pointerup','pointercancel','pointerleave'] as const){if(active)host.addEventListener(type,pointer);else host.removeEventListener(type,pointer);}
+    if(active){host.addEventListener('dragover',dragover);host.addEventListener('drop',drop);}else{host.removeEventListener('dragover',dragover);host.removeEventListener('drop',drop);}
+    if(active){host.addEventListener('auxclick',auxiliary);window.addEventListener('keydown',panKey);window.addEventListener('keyup',panKey);window.addEventListener('blur',releasePan);}else{host.removeEventListener('auxclick',auxiliary);window.removeEventListener('keydown',panKey);window.removeEventListener('keyup',panKey);window.removeEventListener('blur',releasePan);releasePan();}
+  };
   const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
   const updateMotion = () => scene.setReducedMotion(motion.matches);
   updateMotion();
@@ -66,7 +83,9 @@ export function createOfficeGame(host: HTMLElement, callbacks: OfficeCallbacks, 
     game,
     setAppearance(appearance: AvatarAppearance) { scene.setAppearance(appearance); },
     setNetwork(network: OfficeNetwork) { scene.setNetwork(network); },
-    setEditor(view:EditorView|null){input.pressed.clear();scene.setEditor(view);},
+    applyEnvironment(snapshot:LiveSnapshot){scene.applyEnvironment(snapshot);},
+    setEditor(view:EditorView|null){input.pressed.clear();scene.setEditor(view);attachEditor(!!view);},
+    editorCommand(command:EditorCommand){return scene.editorCommand(command);},
     interact(){const result=scene.interact();input.pressed.clear();return result;},
     setTouchMove(code:string,active:boolean){if(!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','TouchRun'].includes(code))return;if(active)input.pressed.add(code);else input.pressed.delete(code);},
     zoomBy(step: number) { scene.zoomBy(step); }, resetZoom() { scene.resetZoom(); },
@@ -74,8 +93,7 @@ export function createOfficeGame(host: HTMLElement, callbacks: OfficeCallbacks, 
     destroy() {
       if (destroyed) return destroyed;
       observer.disconnect(); input.destroy(); removeWheel(); host.removeEventListener("pointerdown", focus); motion.removeEventListener("change", updateMotion);
-      for(const type of ['pointerdown','pointermove','pointerup','pointercancel'] as const)host.removeEventListener(type,pointer);
-      host.removeEventListener('dragover',dragover);host.removeEventListener('drop',drop);
+      attachEditor(false);
       destroyed = new Promise<void>((resolve) => {
         game.events.once(Phaser.Core.Events.DESTROY, resolve);
         game.destroy(true, false);
