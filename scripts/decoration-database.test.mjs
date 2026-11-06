@@ -12,7 +12,7 @@ test('Phase 02 SQL: private drafts, verified active owners, cross-tenant denial,
    create function auth.role() returns text language sql stable as $$select nullif(current_setting('request.jwt.claims',true),'')::jsonb->>'role'$$;
    grant usage on schema auth to anon,authenticated;
    insert into auth.users select ('00000000-0000-4000-8000-'||lpad(i::text,12,'0'))::uuid,'fixture'||i||'@editor.invalid',case when i<6 then now() else null end,null from generate_series(1,6)i;`);
-  for(const name of ['20261021000100_organization_foundation.sql','20261029000100_office_environments.sql','20261105000100_office_decorations.sql'])await db.exec(readFileSync(new URL('../supabase/migrations/'+name,import.meta.url),'utf8'));
+  for(const name of ['20261021000100_organization_foundation.sql','20261029000100_office_environments.sql','20261105000100_office_decorations.sql','20261106000100_live_office_decoration.sql'])await db.exec(readFileSync(new URL('../supabase/migrations/'+name,import.meta.url),'utf8'));
   const as=async(n,role='authenticated')=>{await db.exec('reset role');await db.query("select set_config('request.jwt.claims',$1,false)",[JSON.stringify({sub:id(n),role})]);await db.exec('set role '+role);};
   await as(1);const org1=(await db.query("select public.create_organization('Editor A',gen_random_uuid()) as id")).rows[0].id;
   await as(2);const org2=(await db.query("select public.create_organization('Editor B',gen_random_uuid()) as id")).rows[0].id;
@@ -27,6 +27,13 @@ test('Phase 02 SQL: private drafts, verified active owners, cross-tenant denial,
   await as(3);let visible=(await db.query('select * from public.office_decoration_settings')).rows;assert.equal(visible.length,1);assert.deepEqual(visible[0].published,empty);assert.equal(visible[0].published_revision,0);
   await assert.rejects(()=>load(office1),/owner required/);await assert.rejects(()=>db.query('select * from private.office_decoration_drafts'),/permission denied/);await assert.rejects(()=>db.query("update public.office_decoration_settings set revision=99"),/permission denied/);
   await as(2);assert.equal((await db.query('select * from public.office_decoration_settings')).rows.length,0);await assert.rejects(()=>load(office1),/owner required/);assert.equal((await load(office2)).rows[0].value.revision,0);
+  const commit=(actor,op,revision,document=doc)=>db.query('select public.commit_live_office_decoration($1,$2,$3,$4,0,$5::jsonb) as value',[office2,id(actor),id(op),revision,JSON.stringify(document)]);
+  await assert.rejects(()=>commit(2,90,0),/permission denied/,'a browser owner cannot invoke the live writer');
+  await as(2,'service_role');await assert.rejects(()=>commit(1,90,0),/owner required/);
+  await assert.rejects(()=>commit(2,90,0,{...doc,objects:[{...doc.objects[0],x:1}]}),/Invalid decoration/);
+  await as(2);assert.equal((await load(office2)).rows[0].value.revision,0,'failed atomic commit leaves no draft');
+  await as(2,'service_role');const liveCommit=(await commit(2,90,0)).rows[0].value;assert.deepEqual(liveCommit,{revision:2,publishedRevision:1});assert.deepEqual((await commit(2,90,0)).rows[0].value,liveCommit,'durable operation retry is idempotent');await assert.rejects(()=>commit(2,90,0,empty),/Commit ID conflict/);await assert.rejects(()=>commit(2,91,0),/revision conflict/);
+  await as(2);assert.deepEqual((await load(office2)).rows[0].value.published,doc);await assert.rejects(()=>db.query('select * from private.office_decoration_commits'),/permission denied/);
   await as(5);assert.deepEqual((await load(office1)).rows[0].value.draft,doc,'another owner can review shared draft');
   await as(1,'service_role');await assert.rejects(()=>write(5,office1,0,'draft'),/revision conflict/);await assert.rejects(()=>write(1,office1,1,'publish',empty),/Save this draft/);
   let published=(await write(1,office1,1,'publish')).rows[0].value;assert.equal(published.revision,2);assert.equal(published.publishedRevision,1);
