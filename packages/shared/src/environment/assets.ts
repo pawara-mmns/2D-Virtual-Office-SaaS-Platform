@@ -1,3 +1,5 @@
+import {chairFamilies,type ChairAsset} from './seating-metadata.ts';
+import type {AvatarDirection} from '../avatars.ts';
 // Content-owned atlas contract. The first 128 tiles retain their existing art;
 // a deterministic shelf packer assigns new assets below those legacy rows.
 export const environmentAtlas = { width: 512, height: 1024, columns: 16, tileCount: 512 } as const;
@@ -31,6 +33,19 @@ for(const [id,definition]of Object.entries(assetDefinitions)) {
   packed[id as ExpandedAsset]=[x,y,w,h];x+=w;rowHeight=Math.max(rowHeight,h);
 }
 export const expandedFixtures=packed as Record<ExpandedAsset,AtlasRect>;
+// Directional artwork is a render variant of the same catalog object, not a
+// second furniture item. Append it after existing atlas rectangles to retain IDs.
+export const directionalChairRects={} as Record<ChairAsset,Record<AvatarDirection,AtlasRect>>;
+for(const id of Object.keys(chairFamilies) as ChairAsset[]){
+  const base=id==='chair'?[64,64,32,32] as const:id==='armchair'?[288,64,32,32] as const:expandedFixtures[id as ExpandedAsset];
+  const variants={down:base} as Record<AvatarDirection,AtlasRect>;
+  for(const direction of ['up','left','right'] as const){
+    if(x+32>environmentAtlas.width){x=0;y+=rowHeight;rowHeight=0;}
+    if(y+32>environmentAtlas.height)throw Error('Directional chair atlas capacity exceeded');
+    variants[direction]=[x,y,32,32];x+=32;rowHeight=Math.max(rowHeight,32);
+  }
+  directionalChairRects[id]=variants;
+}
 export const assetTile=(id:ExpandedAsset)=>{const [x,y]=expandedFixtures[id];return 1+y/32*environmentAtlas.columns+x/32;};
 export function assetMaterial(gid:number):AssetSpec['material'] {
   for(const [id,spec]of Object.entries(assetDefinitions))if(spec.mode==='structure'&&assetTile(id as ExpandedAsset)===gid)return spec.material;

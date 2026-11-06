@@ -3,7 +3,9 @@ import { decorPacks, parseEnvironment, type EnvironmentConfig } from './catalog.
 import { boundaryCells, cellKey, doorClearance, doorVestibule, doorway, rectangleCells, roomCells, wallMaterial, wallTile } from './architecture.ts';
 import { floorPlans } from './plans.ts';
 import { fixtures, furnishRoom, roomModules, type Fixture } from './rooms.ts';
-import { assetDefinitions, assetTile, environmentAtlas, type AssetSpec, type ExpandedAsset } from './assets.ts';
+import { assetDefinitions, assetTile, environmentAtlas, directionalChairRects, type AssetSpec, type ExpandedAsset } from './assets.ts';
+import {isChairAsset,catalogSeats,seatExits} from './seating-metadata.ts';
+import {bodyCorners} from '../movement.ts';
 import { passageGeometry, passageLaneRects, passageRecipe } from './passages.ts';
 
 export type ComposedMap = OfficeMap & {type:string;version:string;orientation:string;renderorder:string;infinite:boolean;tilesets:object[]};
@@ -63,22 +65,34 @@ export function composeEnvironment(input: EnvironmentConfig): ComposedMap {
   const markers:Marker[]=[{name:'Entrance',type:'spawn',x:plan.spawn[0]*32,y:plan.spawn[1]*32}];
   const rugs:Marker[]=[],branding:Marker[]=[],voices:Marker[]=[],placements:Marker[]=[],decorations:Marker[]=[],passageDecor:Marker[]=[];
   const density=decorPacks.find(d=>d.id===config.decor)!.density;
+  const seatingClearance=new Set<string>();
   for(const {spec,cells}of structure.rooms) {
     const [x,y,w,h]=spec.core,center=Math.floor(w/2);
-    const at=(name:Fixture,dx:number,dy:number)=>{
-      const [sx,sy,pw,ph]=fixtures[name],px=x+dx,py=y+dy;
+    const at=(name:Fixture,dx:number,dy:number,options?:{facing:import('../avatars.ts').AvatarDirection})=>{
+      const [sx,sy,pw,ph]=isChairAsset(name)&&options?.facing?directionalChairRects[name][options.facing]:fixtures[name],px=x+dx,py=y+dy;
       const definition=assetDefinitions[name as ExpandedAsset] as AssetSpec|undefined,mode=definition?.mode??'blocking',decorative=mode==='wall'||mode==='surface';
       if(mode==='structure')return false;
       for(let j=0;j<ph/32;j++)for(let i=0;i<pw/32;i++){
         const index=(py+j)*width+px+i;
-        if(!cells.has(cellKey(px+i,py+j))||structure.reserved.has(cellKey(px+i,py+j)))return false;
+        if(!cells.has(cellKey(px+i,py+j))||structure.reserved.has(cellKey(px+i,py+j))||!decorative&&seatingClearance.has(cellKey(px+i,py+j)))return false;
         if(mode==='wall'?!walls[index]||details[index]:mode==='surface'?!furniture[index]||details[index]:!!collision[index])return false;
+      }
+      const access:string[]=[];
+      for(const seat of catalogSeats(name,pw,ph,options?.facing)){
+        const ax=px*32+seat.anchor.x,ay=py*32+seat.anchor.y,r={...seat.footprint,x:px*32+seat.footprint.x,y:py*32+seat.footprint.y};
+        const approach=seatExits(r,{x:ax,y:ay},seat.exit).map(p=>bodyCorners(p.x,p.y)).find(points=>points.every(([a,b])=>{
+          const tx=Math.floor(a/32),ty=Math.floor(b/32);
+          return tx>=0&&ty>=0&&tx<width&&ty<height&&!collision[ty*width+tx]&&!(a>=px*32&&a<(px*32+pw)&&b>=py*32&&b<(py*32+ph));
+        }));
+        if(!approach)return false;
+        for(const [a,b]of approach)access.push(cellKey(Math.floor(a/32),Math.floor(b/32)));
       }
       for(let j=0;j<ph/32;j++)for(let i=0;i<pw/32;i++){
         const index=(py+j)*width+px+i,gid=1+(sy/32+j)*16+sx/32+i;
         if(decorative)details[index]=gid;else{furniture[index]=gid;collision[index]=1;}
       }
-      (decorative?decorations:placements).push({name,type:spec.id,x:px*32,y:py*32,width:pw,height:ph});return true;
+      for(const key of access)seatingClearance.add(key);
+      (decorative?decorations:placements).push({name,type:spec.id,x:px*32,y:py*32,width:pw,height:ph,...(options?{facing:options.facing}:{})});return true;
     };
     furnishRoom(spec,config,density,at);
     if(spec.kind==='meeting')voices.push({name:'Meeting Room',type:'voice',x:(x+1)*32,y:(y+1)*32,width:(w-2)*32,height:(h-2)*32});
@@ -93,7 +107,7 @@ export function composeEnvironment(input: EnvironmentConfig): ComposedMap {
   for(const prop of passage.props) {
     const [sx,sy,pw,ph]=fixtures[prop.asset],indices=rectangleCells([prop.x,prop.y,pw/32,ph/32]).map(([x,y])=>y*width+x);
     // Room-mounted details retain ownership if they share a corridor wall.
-    if(indices.some(i=>prop.wall?!!details[i]:!!collision[i]))continue;
+    if(indices.some(i=>prop.wall?!!details[i]:!!collision[i]||seatingClearance.has(cellKey(i%width,Math.floor(i/width)))))continue;
     for(let j=0;j<ph/32;j++)for(let i=0;i<pw/32;i++){
       const index=(prop.y+j)*width+prop.x+i,gid=1+(sy/32+j)*16+sx/32+i;
       if(prop.wall)details[index]=gid;else{furniture[index]=gid;collision[index]=1;}
