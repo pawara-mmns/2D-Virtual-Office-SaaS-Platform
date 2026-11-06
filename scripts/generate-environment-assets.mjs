@@ -1,4 +1,6 @@
 import { polishEnvironmentAtlas } from './polish-environment-art.mjs';
+import {drawPremiumOffice} from './premium-office-art.mjs';
+import {importOfficeArtwork} from './import-office-art.mjs';
 import { drawExpandedOfficeAssets } from './expanded-office-art.mjs';
 import { environmentAtlas } from '../packages/shared/src/environment/assets.ts';
 // Build five small shared atlases, not a map image per combination.
@@ -37,6 +39,8 @@ export function generateEnvironmentAtlases(base) {
     art.rect(454,191,23,12,shift(theme.wood,-18));art.rect(480,191,25,12,shift(theme.wood,-18));art.rect(474,194,2,5,'e9e7dd');art.rect(482,194,2,5,'e9e7dd');
     polishEnvironmentAtlas(art,theme);
     drawExpandedOfficeAssets(art,theme);
+    drawPremiumOffice(art,theme);
+    importOfficeArtwork(art,theme.id);
     art.png('environments/'+theme.id+'.png');
   }
 }
