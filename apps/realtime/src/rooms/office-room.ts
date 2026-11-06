@@ -15,6 +15,8 @@ import { conversationSpace } from '../voice/space.ts';
 import type { ProximitySettings } from '../../../../packages/shared/src/proximity.ts';
 import { parseInteraction } from '../../../../packages/shared/src/interactions.ts';
 import { createSeating } from '../interactions/seating.ts';
+import {LiveOffice,type LiveStore} from '../environment/live.ts';
+import {structureVersion,type LiveDelta} from '../../../../packages/shared/src/environment/live-decoration.ts';
 
 type OfficeClient = Client<{ auth: Authorization }>;
 type Control = { input: MoveInput; lastInput: number; window: number; messages: number; refreshing: boolean; nextCheck: number };
@@ -24,6 +26,7 @@ export type RoomServices = {
   voice?: VoiceService;
   proximity?:Partial<ProximitySettings>;
   loadMap?: EnvironmentMaps;
+  liveStore?:LiveStore;
   claimed(officeId: string, userId: string, sessionId: string): boolean;
   release(officeId: string, userId: string, sessionId: string): void;
   disposed(officeId: string, roomId: string): void;
@@ -49,6 +52,11 @@ export function officeRoomClass(services: RoomServices) {
     private seating!:ReturnType<typeof createSeating>;
     private interactionAt=new Map<string,number>();
     private interactionSeq=new Map<string,number>();
+    private live?:LiveOffice;
+    private liveStarting?:Promise<void>;
+    private editPending=new Set<string>();
+    private editAt=new Map<string,number>();
+    private editWindows=new Map<string,{at:number;count:number}>();
     // All default matchmaking paths fail closed. Only our authorized endpoint
     // can reserve seats with trusted authData. Never inherit bundle JWT defaults.
     static async onAuth(): Promise<never> { throw new ServerError(403, "Use authorized office admission."); }
@@ -84,6 +92,8 @@ export function officeRoomClass(services: RoomServices) {
         // Explicit E/touch stand clears cached input; only fresh intent may walk.
         if(control){control.input={seq:control.input.seq,x:0,y:0};control.lastInput=0;}
       });
+      this.onMessage('environment.sync',client=>{const now=Date.now();if(now-(this.editAt.get('sync/'+client.sessionId)??0)<300)return;this.editAt.set('sync/'+client.sessionId,now);if(this.live&&this.state.players.get(client.sessionId)?.connected)client.send('environment.snapshot',this.live.snapshot);});
+      this.onMessage('environment.edit',(client,value:unknown)=>{void this.editEnvironment(client,value);});
       this.onMessage("credential", (client, value: unknown) => {
         const control = this.controls.get(client.sessionId);
         if (!control || control.refreshing || typeof value !== "string" || value.length > 8192) return;
@@ -105,9 +115,34 @@ export function officeRoomClass(services: RoomServices) {
       try {
         const fresh = await services.authorize(auth.token, this.state.officeId);
         const current = await services.loadMap(fresh);
-        if (this.clients.length && mapVersion(current) !== this.state.mapVersion) await this.disconnect(ENVIRONMENT_CHANGED_CODE);
+        if (this.clients.length && mapVersion(current) !== this.state.mapVersion && (!this.live||structureVersion(current)!==this.state.structureVersion)) await this.disconnect(ENVIRONMENT_CHANGED_CODE);
       } catch { /* Never substitute geometry on an outage; normal auth leases still apply. */ }
       finally { this.checkingEnvironment = false; }
+    }
+    private async editEnvironment(client:OfficeClient,value:unknown){
+      const operationId=value&&typeof value==='object'&&'operationId'in value&&typeof value.operationId==='string'?value.operationId.slice(0,36):'';
+      const fail=(message:string)=>client.send('environment.reply',{operationId,ok:false,message,snapshot:this.live?.snapshot});
+      if(!this.live||!services.liveStore){fail('Live editing is unavailable. Check the realtime editor configuration.');return;}
+      const now=Date.now(),previous=this.editWindows.get(client.sessionId),window=previous&&now-previous.at<1000?previous:{at:now,count:0};this.editWindows.set(client.sessionId,window);
+      if(this.editPending.has(client.sessionId)||++window.count>20){fail('Wait for the previous edit to finish.');return;}
+      this.editAt.set(client.sessionId,Date.now());this.editPending.add(client.sessionId);
+      try{
+        const auth=await this.actionIdentity(client);
+        const result=await this.live.run(value,auth,services.liveStore,()=>this.state.players.values(),()=>new Map([...this.controls].map(([id,c])=>[id,Date.now()-c.lastInput<250?c.input:{x:0,y:0}])),(map,delta)=>this.applyLiveMap(map,delta));
+        client.send('environment.reply',{operationId,ok:true,snapshot:result.snapshot});
+      }catch(error){fail(error instanceof Error?error.message:'The edit could not be accepted.');}
+      finally{this.editPending.delete(client.sessionId);}
+    }
+    private applyLiveMap(map:OfficeMap,delta:LiveDelta){
+      this.officeMap=map;this.seating.updateMap(map);
+      this.state.environmentRevision=delta.revision;
+      if(delta.saved)this.state.mapVersion=mapVersion(map);
+      this.broadcast('environment.delta',delta);
+    }
+    private async startLive(auth:Authorization){
+      if(!services.liveStore)return;
+      if(!this.liveStarting)this.liveStarting=(async()=>{const seed=await services.liveStore!.read(auth);const live=new LiveOffice(seed.config,seed.workspace,this.state.officeId);if(mapVersion(live.map)!==this.state.mapVersion)throw Error('Office setup changed during admission.');this.live=live;this.state.structureVersion=live.snapshot.structureVersion;this.state.environmentEpoch=live.snapshot.epoch;})();
+      try{await this.liveStarting;}catch{this.liveStarting=undefined;/* Movement remains available when editing storage is unavailable. */}
     }
     private async actionIdentity(client: OfficeClient) {
       const auth = client.auth;
@@ -164,6 +199,7 @@ export function officeRoomClass(services: RoomServices) {
         const fresh = await services.authorize(auth.token, this.state.officeId);
         if (client.state === ClientState.LEAVING || client.state === ClientState.CLOSED || fresh.userId !== auth.userId || fresh.organizationId !== auth.organizationId || this.state.players.size >= 10 || [...this.state.players.values()].some((p) => p.userId === fresh.userId)) throw new Error();
         client.auth = fresh;
+        await this.startLive(fresh);
         const spawn = mapMarkers(this.officeMap).find((m) => m.type === "spawn")!;
         let spawnX = spawn.x;
         for (let i = 0; i < 20; i++) {
@@ -174,6 +210,7 @@ export function officeRoomClass(services: RoomServices) {
         Object.assign(player, { sessionId: client.sessionId, userId: fresh.userId, avatarKey: fresh.avatarKey, displayName: fresh.displayName, x: spawnX, y: spawn.y });
         this.state.players.set(client.sessionId, player);
         this.controls.set(client.sessionId, { input: { seq: -1, x: 0, y: 0 }, lastInput: 0, window: Date.now(), messages: 0, refreshing: false, nextCheck: Date.now() + AUTH_CHECK_MS });
+        const pending=this.live?.pendingFor(fresh.userId);if(pending)void this.editEnvironment(client,pending);
       } catch {
         if (client.auth) services.release(this.state.officeId, client.auth.userId, client.sessionId);
         throw new ServerError(403, "Office access denied.");
@@ -238,8 +275,12 @@ export function officeRoomClass(services: RoomServices) {
       this.state.players.get(client.sessionId)!.connected = true;
       const control = this.controls.get(client.sessionId)!;
       control.input = { seq: control.input.seq, x: 0, y: 0 }; control.lastInput = 0; control.nextCheck = Date.now() + AUTH_CHECK_MS;
+      if(this.live)client.send('environment.snapshot',this.live.snapshot);
+      const pending=this.live?.pendingFor(fresh.userId);if(pending)void this.editEnvironment(client,pending);
     }
     onLeave(client: OfficeClient) {
+      this.editAt.delete(client.sessionId);this.editAt.delete('sync/'+client.sessionId);this.editPending.delete(client.sessionId);
+      this.editWindows.delete(client.sessionId);
       this.seating.release(client.sessionId,this.state.players.get(client.sessionId));this.interactionAt.delete(client.sessionId);this.interactionSeq.delete(client.sessionId);
       this.proximityRevision.delete(client.sessionId);
       this.proximity.leave(client.sessionId);this.proximityAt.delete(client.sessionId);
