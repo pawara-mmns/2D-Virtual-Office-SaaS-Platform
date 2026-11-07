@@ -10,6 +10,11 @@ sprites, seven editable assets, warm baked lighting and an offline artwork impor
 pipeline. The report includes actual Phaser comparisons, performance measurements
 and the local catalog migration required before saving new assets to hosted Supabase.
 
+The follow-up [room and UI polish](docs/room-polish.md) refines the glass HUD,
+interaction chips and editor, adds eight original room accents, and improves
+reception and corridor lighting. The report includes actual playable screenshots,
+regression results and the additional local catalog migration.
+
 A multi-tenant 2D virtual office SaaS platform for distributed teams, with private
 pixel-art offices, realtime movement, chat and meeting-zone voice. **Phase 5
 Step 3A prepares Vercel frontend and Railway realtime hosting, preserving Step 3's
