@@ -24,3 +24,18 @@
 @media(max-width:379px){.office-shell[data-editing=true] .office-hud .office-map-hud{bottom:130px}}
 /* Native top-layer dialogs still inherit the HUD's click-through pointer rule. */
 .editor-dialog{pointer-events:auto}
+
+/* Same material, control rhythm and feedback as the play-mode HUD. */
+.editor-bar { padding: 5px; border-radius: 18px!important; }
+.editor-bar .editor-apply { min-width: 96px; }
+.editor-context { padding: 4px; border-radius: 14px!important; }
+.editor-bar .editor-state { padding: 5px 10px; border: 1px solid var(--glass-lower-edge,#becdc3); box-shadow: 0 3px 10px #142b2318; font-size: 10px; letter-spacing: .01em; }
+.editor-selection-name { padding: 4px 9px; border: 1px solid var(--glass-lower-edge,#becdc3); color: var(--glass-ink,#233c32); }
+.editor-notice { padding: 5px 5px 5px 13px; font-size: 12px; box-shadow: 0 8px 24px #142b2326; }
+.editor-notice[data-error=true] { border-left: 3px solid #ad5448; }
+.editor-asset { transition: background-color 120ms,border-color 120ms; }
+.editor-asset:hover { border-color: var(--glass-accent,#245743); }
+.editor-dialog h2 { font-size: 17px; letter-spacing: -.02em; }
+@starting-style { .editor-notice,.editor-placement { opacity: 0; } }
+.editor-notice,.editor-placement { transition: opacity 140ms; }
+@media(prefers-reduced-motion:reduce) { .editor-asset,.editor-notice,.editor-placement { transition: none; } @starting-style { .editor-notice,.editor-placement { opacity: 1; } } }
