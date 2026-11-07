@@ -220,8 +220,9 @@ export default function OfficeCanvas({ appearance, profileWarning, officeId, use
           <select id="office-area" className="office-control" aria-describedby="office-camera-hint" disabled={status !== "ready" || !navigation?.areas.length} value={navigation?.areaId ?? ""} onChange={(event) => { if (event.target.value) navigateCamera({ type: "area", id: event.target.value }); }}>
             <option value="">View an area</option>{navigation?.areas.map((area) => <option key={area.id} value={area.id}>{area.name}</option>)}
           </select></details>
+          {navigation?.mode!=="self"&&navigation&&<button className="office-control office-camera-return" aria-label="Return to my avatar" title="Return to my avatar · Escape" disabled={!navigation.canReturn} onClick={()=>navigateCamera({type:"self"},true)}><HudIcon name="follow"/><span className="sr-only">Return to my avatar</span></button>}
         </div>
-        {navigation && <div className="office-status office-orientation"><p className={navigation.mode === "self" ? "sr-only" : undefined} id="office-camera-hint" role="status" aria-live="polite" aria-atomic="true">{navigation.hint}{navigation.canReturn && " Move or press Escape to follow yourself."}</p>{navigation.mode !== "self" && <button className="office-control" disabled={!navigation.canReturn} onClick={() => navigateCamera({ type: "self" }, true)}>Return to my avatar</button>}</div>}
+        {navigation && <p className="sr-only" id="office-camera-hint" role="status" aria-live="polite" aria-atomic="true">{navigation.hint}{navigation.canReturn && " Move or press Escape to follow yourself."}</p>}
       </GlassSurface>}
       panels={<>
         <ChatPanel key={officeId} officeId={officeId} open={chatOpen} onClose={closeChat} events={chatEvents} userId={userId ?? own?.userId} names={names} send={sendChat} />
