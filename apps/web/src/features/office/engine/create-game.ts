@@ -14,10 +14,10 @@ import type {EditorView} from '../../decoration/overlay.ts';
 import type {EditorCommand} from '../../decoration/manipulation.ts';
 
 export function createOfficeGame(host: HTMLElement, callbacks: OfficeCallbacks, appearance: AvatarAppearance = { avatarKey: defaultAvatar, displayName: "You" }, multiplayer = false, officeId?: string, environment?: EnvironmentConfig,decoration?:PublishedDecoration) {
-  const input = attachMovementInput(host, () => document.activeElement === host&&!scene.isEditing(), window,()=>scene.interact());
+  const input = attachMovementInput(host, () => document.activeElement === host&&!scene.isEditing(), window,()=>scene.interact(),()=>scene.recordMovementInput());
   const focus = () => host.focus({ preventScroll: true });
   host.addEventListener("pointerdown", focus);
-  const scene = new OfficeScene(input.pressed, callbacks, appearance, multiplayer, officeId, environment,decoration);
+  const scene = new OfficeScene(input.pressed, {...callbacks,onMovementReset(){input.pressed.clear();callbacks.onMovementReset?.();}}, appearance, multiplayer, officeId, environment,decoration);
   const coordinates=(event:{clientX:number;clientY:number})=>{const rect=host.getBoundingClientRect();return{x:(event.clientX-rect.left)*scene.scale.width/rect.width,y:(event.clientY-rect.top)*scene.scale.height/rect.height};};
   let spaceHeld=false;
   const touches=new Map<number,{x:number;y:number}>();
@@ -81,13 +81,14 @@ export function createOfficeGame(host: HTMLElement, callbacks: OfficeCallbacks, 
   let destroyed: Promise<void> | undefined;
   return {
     game,
+    movementDiagnostics:process.env.NODE_ENV==='production'?undefined:()=>scene.movementDiagnostics(),
     setAppearance(appearance: AvatarAppearance) { scene.setAppearance(appearance); },
     setNetwork(network: OfficeNetwork) { scene.setNetwork(network); },
     applyEnvironment(snapshot:LiveSnapshot){scene.applyEnvironment(snapshot);},
     setEditor(view:EditorView|null){input.pressed.clear();scene.setEditor(view);attachEditor(!!view);},
     editorCommand(command:EditorCommand){return scene.editorCommand(command);},
     interact(){const result=scene.interact();input.pressed.clear();return result;},
-    setTouchMove(code:string,active:boolean){if(!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','TouchRun'].includes(code))return;if(active)input.pressed.add(code);else input.pressed.delete(code);},
+    setTouchMove(code:string,active:boolean){if(!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','TouchRun'].includes(code))return;if(active){if(!input.pressed.has(code)&&code!=='TouchRun')scene.recordMovementInput();input.pressed.add(code);}else input.pressed.delete(code);},
     zoomBy(step: number) { scene.zoomBy(step); }, resetZoom() { scene.resetZoom(); },
     navigate(command: CameraCommand) { return scene.navigate(command); },
     destroy() {

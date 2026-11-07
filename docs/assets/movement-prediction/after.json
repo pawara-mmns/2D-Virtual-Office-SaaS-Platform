@@ -1,0 +1,139 @@
+{
+  "phase": "after",
+  "scope": "actual local two-client Phaser/Colyseus over ordered delayed WebSocket proxy; synthetic identities, no hosted service",
+  "profiles": [
+    {
+      "rtt": 0,
+      "jitter": 0,
+      "samples": [
+        {
+          "visibleMs": 25.199999999254942,
+          "authoritativeMs": 41.19999999925494
+        },
+        {
+          "visibleMs": 25.199999999254942,
+          "authoritativeMs": 58.40000000037253
+        },
+        {
+          "visibleMs": 30.5,
+          "authoritativeMs": 64.5
+        },
+        {
+          "visibleMs": 27.09999999962747,
+          "authoritativeMs": 76.29999999888241
+        }
+      ],
+      "visibleMeanMs": 26.99999999953434,
+      "authoritativeMeanMs": 60.09999999962747
+    },
+    {
+      "rtt": 80,
+      "jitter": 10,
+      "samples": [
+        {
+          "visibleMs": 18.799999998882413,
+          "authoritativeMs": 153
+        },
+        {
+          "visibleMs": 31,
+          "authoritativeMs": 181.30000000074506
+        },
+        {
+          "visibleMs": 22.299999998882413,
+          "authoritativeMs": 138.2999999988824
+        },
+        {
+          "visibleMs": 24.699999999254942,
+          "authoritativeMs": 175.19999999925494
+        }
+      ],
+      "visibleMeanMs": 24.199999999254942,
+      "authoritativeMeanMs": 161.9499999997206
+    },
+    {
+      "rtt": 180,
+      "jitter": 35,
+      "samples": [
+        {
+          "visibleMs": 31.399999998509884,
+          "authoritativeMs": 248.09999999962747
+        },
+        {
+          "visibleMs": 18,
+          "authoritativeMs": 251.59999999962747
+        },
+        {
+          "visibleMs": 25,
+          "authoritativeMs": 225.2000000011176
+        },
+        {
+          "visibleMs": 25.5,
+          "authoritativeMs": 274.90000000037253
+        }
+      ],
+      "visibleMeanMs": 24.97499999962747,
+      "authoritativeMeanMs": 249.95000000018626
+    },
+    {
+      "rtt": 300,
+      "jitter": 60,
+      "samples": [
+        {
+          "visibleMs": 30.799999998882413,
+          "authoritativeMs": 363.69999999925494
+        },
+        {
+          "visibleMs": 26.800000000745058,
+          "authoritativeMs": 376.30000000074506
+        },
+        {
+          "visibleMs": 23.5,
+          "authoritativeMs": 340.90000000037253
+        },
+        {
+          "visibleMs": 27.399999998509884,
+          "authoritativeMs": 377.69999999925494
+        }
+      ],
+      "visibleMeanMs": 27.12499999953434,
+      "authoritativeMeanMs": 364.64999999990687
+    }
+  ],
+  "recovery": {
+    "reconnected": true,
+    "epochAdvanced": true,
+    "staleHeldInputCleared": true,
+    "freshInputAccepted": true
+  },
+  "remoteInterpolation": {
+    "scope": "controlled server pose stream over the actual delayed WebSocket and Phaser remote path",
+    "samples": 57,
+    "maximumFrameStepPx": 5.427183864105928,
+    "finalErrorPx": 0,
+    "bufferMs": 50
+  },
+  "acknowledgementGap": {
+    "delayedDownstreamMs": 1400,
+    "predictionStopped": true,
+    "boundedPendingInputs": true,
+    "finalErrorPx": 0
+  },
+  "frameTimes": {
+    "medianMs": 16.700000000000728,
+    "p95Ms": 16.80000000000291,
+    "frames": 120
+  },
+  "clientDiagnostics": {
+    "rttMs": 89.29999999888241,
+    "jitterMs": 3.1334555630354783,
+    "pendingInputs": 10,
+    "correctionPx": 0,
+    "serverMovementMs": 0.08591685606061886,
+    "prediction": true,
+    "fps": 60.003500855991966,
+    "inputVisibleMs": 14.100000001490116
+  },
+  "simulationTicks": 1598,
+  "serverMeanWorkMs": 0.08590456821027746,
+  "runtimeErrors": []
+}

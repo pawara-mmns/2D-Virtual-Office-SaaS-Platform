@@ -7,6 +7,7 @@
     "node": ">=22.14.0"
   },
   "scripts": {
+    "test:movement:latency": "pnpm --filter @virtual-office/realtime exec tsx ../../scripts/measure-movement-latency.mjs",
     "test:decoration:browser": "pnpm --filter @virtual-office/realtime exec tsx --test ../../scripts/test-decoration-browser.mjs",
     "test:decoration:database": "node --test scripts/decoration-database.test.mjs",
     "test:seating:browser": "pnpm --filter @virtual-office/realtime exec tsx --test ../../scripts/test-directional-seating-browser.mjs",
