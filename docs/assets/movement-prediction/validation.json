@@ -1,0 +1,30 @@
+{
+  "scope": "local tests; synthetic identities; no production acceptance",
+  "webTests": 173,
+  "realtimeTests": 69,
+  "browserSuites": 6,
+  "latencyAndRecovery": "passed",
+  "checks": {
+    "web": true,
+    "realtime": true,
+    "lint": true,
+    "types": true,
+    "build": true
+  },
+  "productionMeasurements": "not performed in this phase",
+  "databaseCpuReduction": "not measured",
+  "logs": [
+    ".cache/prediction-web-units-final.log",
+    ".cache/prediction-units-final.log",
+    ".cache/prediction-lint-final.log",
+    ".cache/prediction-types-final.log",
+    ".cache/prediction-build-final.log",
+    ".cache/prediction-editor-retry.log",
+    ".cache/prediction-movement-browser.log",
+    ".cache/prediction-seating-browser.log",
+    ".cache/prediction-engine-browser.log",
+    ".cache/prediction-proximity-browser.log",
+    ".cache/prediction-voice-browser.log",
+    ".cache/prediction-latency-final.log"
+  ]
+}

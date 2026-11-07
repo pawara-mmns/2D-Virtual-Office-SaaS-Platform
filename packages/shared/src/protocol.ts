@@ -4,6 +4,7 @@ import type { ProximityState, BubbleRef } from './proximity.ts';
 import type { InteractionRequest } from './interactions.ts';
 import type {LiveSnapshot,LiveRequest} from './environment/live-decoration.ts';
 export const TICK_MS = 50;
+export const MOVEMENT_HZ = 60;
 export const ENVIRONMENT_CHANGED_CODE = 4052;
 export const AUTH_CHECK_MS = 10_000;
 export const AUTH_LEASE_MS = 15_000;
@@ -13,8 +14,10 @@ export type PlayerSnapshot = AvatarAppearance & {
   sessionId: string; userId: string; x: number; y: number;
   direction: AvatarDirection; isMoving: boolean; connected: boolean; availability?: Availability;
   isRunning?: boolean; motionState?: 'IDLE'|'WALKING'|'RUNNING'|'SITTING'|'STANDING'; seatId?: string;
+  movementEpoch?:number;
 };
-export type OfficeSnapshot = { officeId: string; mapVersion: string;structureVersion?:string;environmentRevision?:number;environmentEpoch?:string; players: Map<string, PlayerSnapshot>; seats?: Map<string,string> };
+export type OfficeSnapshot = { officeId: string; mapVersion: string;movementProtocol?:number;structureVersion?:string;environmentRevision?:number;environmentEpoch?:string; players: Map<string, PlayerSnapshot>; seats?: Map<string,string> };
+export type MovementDiagnostics={rttMs:number;jitterMs:number;pendingInputs:number;correctionPx:number;serverMovementMs:number|null;prediction:boolean;fps?:number;inputVisibleMs?:number|null};
 export type Participant = Pick<PlayerSnapshot, "sessionId" | "userId" | "displayName" | "avatarKey" | "connected" | "availability"> & { isSelf?: boolean };
 export type Presence = { status: "connecting" | "online" | "reconnecting" | "offline" | "denied"; count: number; notice: string; reload?: boolean };
 export type OfficeNetwork = {
@@ -27,6 +30,8 @@ export type OfficeNetwork = {
   snapshot(): OfficeSnapshot | undefined;
   sessionId(): string | undefined;
   input(x: number, y: number, run?: boolean): void;
+  renderFrame?(map:import('./map.ts').OfficeMap,now:number,delta:number):Map<string,PlayerSnapshot>|undefined;
+  movementDiagnostics?():MovementDiagnostics|undefined;
   interact?(request: Omit<InteractionRequest,'seq'>): boolean;
   appearanceChanged(): void;
   close(): void;

@@ -20,7 +20,7 @@ import {tileLayer} from '../../../../../../packages/shared/src/map.ts';
 import {DecorationOverlay,type EditorView,type EditorEvent,type EditorPointer} from '../../decoration/overlay.ts';
 import type {EditorCommand} from '../../decoration/manipulation.ts';
 
-export type OfficeCallbacks = { onReady(mapVersion?: string,structureVersion?:string): void; onError(): void; onNavigation?(state: NavigationState): void; onReducedEffects?(reduced: boolean): void; onBubbleAnchors?(anchors: BubbleAnchor[]): void; onInteraction?(value:PrimaryInteraction|null):void;onDecoration?(event:EditorEvent):void };
+export type OfficeCallbacks = { onReady(mapVersion?: string,structureVersion?:string): void; onError(): void;onMovementReset?():void; onNavigation?(state: NavigationState): void; onReducedEffects?(reduced: boolean): void; onBubbleAnchors?(anchors: BubbleAnchor[]): void; onInteraction?(value:PrimaryInteraction|null):void;onDecoration?(event:EditorEvent):void };
 export class OfficeScene extends Phaser.Scene {
   player!: Phaser.Physics.Arcade.Sprite;
   avatar!: PlayerAvatar;
@@ -65,6 +65,13 @@ export class OfficeScene extends Phaser.Scene {
   private atmosphere?:Phaser.GameObjects.Image;
   private atmosphereTexture?:Phaser.Textures.CanvasTexture;
   private atmosphereKey='';
+  private diagnosticFrameMs=16.7;
+  private diagnosticInputAt:number|null=null;
+  private diagnosticVisibleMs:number|null=null;
+  private diagnosticMoving=false;
+  private movementLifetime='';
+  recordMovementInput(){if(process.env.NODE_ENV!=='production')this.diagnosticInputAt=performance.now();}
+  movementDiagnostics(){if(process.env.NODE_ENV==='production')return undefined;const metrics=this.network?.movementDiagnostics?.();return metrics?{...metrics,fps:1000/this.diagnosticFrameMs,inputVisibleMs:this.diagnosticVisibleMs}:undefined;}
   constructor(private readonly pressed: ReadonlySet<string>, private readonly callbacks: OfficeCallbacks, private appearance: AvatarAppearance, private readonly multiplayer = false, private readonly officeId?: string, private readonly environment?: EnvironmentConfig,private readonly decoration?:PublishedDecoration) { super("Office"); }
   preload() {
     this.load.once(Phaser.Loader.Events.FILE_LOAD_ERROR, () => { this.failed = true; this.callbacks.onError(); });
@@ -325,6 +332,7 @@ export class OfficeScene extends Phaser.Scene {
   }
   update(_time: number, delta: number) {
     if (!this.player || this.failed) return;
+    if(process.env.NODE_ENV!=='production'&&delta>0)this.diagnosticFrameMs=this.diagnosticFrameMs*.9+delta*.1;
     const live=this.network?.environment?.();if(live&&live!==this.liveSnapshot)this.applyEnvironment(live);
     this.advanceWheelZoom(delta);
     if(this.editing)this.editor?.update();
@@ -334,6 +342,7 @@ export class OfficeScene extends Phaser.Scene {
       const own = sessionId ? snapshot?.players.get(sessionId) : undefined;
       this.player.setVisible(isMapPosition(own, this.mapWidth, this.mapHeight)); this.avatar.label.setVisible(isMapPosition(own, this.mapWidth, this.mapHeight));
       if (!snapshot || !own || !isMapPosition(own, this.mapWidth, this.mapHeight)) {
+        this.movementLifetime='disconnected';
         this.publishInteraction(null);
         this.bubbles?.update(null,()=>undefined,delta,true);
         this.positionsUnavailable = true;
@@ -341,17 +350,24 @@ export class OfficeScene extends Phaser.Scene {
         this.remotes.clear(); if (this.teammate) this.followSelf(true, "Teammate locations are unavailable. Reconnect to find them."); this.publishNavigation(); return;
       }
       if (this.positionsUnavailable) { this.positionsUnavailable = false; this.notice = ""; }
+      const lifetime=`${sessionId}/${own.movementEpoch??0}/${snapshot.environmentEpoch??''}`;
+      if(this.movementLifetime&&this.movementLifetime!==lifetime)this.callbacks.onMovementReset?.();
+      this.movementLifetime=lifetime;
       const input = this.editing?Object.assign(this.movementInput,{x:0,y:0,facing:own.direction}):movement(this.pressed, own.direction, this.movementInput);
       if ((input.x || input.y) && this.mode !== "self") this.followSelf();
       this.network!.input(input.x, input.y,!this.editing&&runningIntent(this.pressed));
-      this.avatar.renderNetwork(own, delta, true);
+      const presented=this.geometry?this.network?.renderFrame?.(this.geometry,performance.now(),delta):undefined;
+      const beforeX=this.player.x,beforeY=this.player.y;
+      if(process.env.NODE_ENV!=='production'){const moving=!!(input.x||input.y);if(moving&&!this.diagnosticMoving&&this.diagnosticInputAt===null)this.diagnosticInputAt=performance.now();if(!moving)this.diagnosticInputAt=null;this.diagnosticMoving=moving;}
+      this.avatar.renderNetwork(presented?.get(sessionId!)??own, delta, true,!!presented);
+      if(process.env.NODE_ENV!=='production'&&this.diagnosticInputAt!==null&&Math.hypot(this.player.x-beforeX,this.player.y-beforeY)>.01){this.diagnosticVisibleMs=performance.now()-this.diagnosticInputAt;this.diagnosticInputAt=null;}
       if(!this.editing)this.updateInteraction(own,snapshot.seats??new Map(),_time);
       for (const [id, player] of snapshot.players) {
         if (id === sessionId) continue;
         if (!isMapPosition(player, this.mapWidth, this.mapHeight)) { this.remotes.get(id)?.destroy(); this.remotes.delete(id); continue; }
         let avatar = this.remotes.get(id);
         if (!avatar) { avatar = new PlayerAvatar(this, player.x, player.y, player); this.remotes.set(id, avatar); }
-        avatar.renderNetwork(player, delta, false);
+        avatar.renderNetwork(presented?.get(id)??player, delta, false,!!presented);
       }
       for (const [id, avatar] of this.remotes) if (!snapshot.players.has(id)) { avatar.destroy(); this.remotes.delete(id); }
       if (this.teammate) {

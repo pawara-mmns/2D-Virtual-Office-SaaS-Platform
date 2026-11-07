@@ -10,6 +10,7 @@ import { parseInteraction } from '../../../../../../packages/shared/src/interact
 import {applyObjectChanges,type LiveSnapshot,type LiveRequest,type LiveReply,type LiveDelta} from '../../../../../../packages/shared/src/environment/live-decoration.ts';
 import {parseDecoration} from '../../../../../../packages/shared/src/environment/decoration.ts';
 import type {EnvironmentConfig} from '../../../../../../packages/shared/src/environment/catalog.ts';
+import {OfficePrediction} from './prediction.ts';
 
 type OfficeRoom = Room<object, OfficeSnapshot>;
 export function realtimeUrl(value: string | undefined, production = process.env.NODE_ENV === "production") {
@@ -38,6 +39,9 @@ export function connectOffice(options: {
   let voiceState: VoiceZoneState | null = null;
   let proximity:ProximityState|null=null;
   let environment:LiveSnapshot|undefined,syncAt=-Infinity;
+  let prediction:OfficePrediction|undefined;
+  let intent={x:0,y:0,run:false},native=false;
+  let diagnosticPingAt=0,diagnosticNonce=0,diagnosticSentAt=0,websocketRtt=0,serverMovementMs:number|null=null;
   let syncTimer:ReturnType<typeof setTimeout>|undefined;
   const pending=new Map<string,{resolve(value:LiveSnapshot):void;reject(error:Error):void;timer:ReturnType<typeof setTimeout>}>();
   const syncEnvironment=()=>{if(!room||!online||closed)return;clearTimeout(syncTimer);const elapsed=performance.now()-syncAt;if(elapsed<350){syncTimer=setTimeout(syncEnvironment,350-elapsed);return;}syncAt=performance.now();room.send('environment.sync');syncTimer=setTimeout(()=>{if(state?.environmentEpoch&&(!environment||environment.epoch!==state.environmentEpoch||environment.revision!==(state.environmentRevision??0)))syncEnvironment();},750);};
@@ -52,7 +56,7 @@ export function connectOffice(options: {
     voiceState = value ? { sessionId:value.sessionId,zone:value.zone,configured:value.configured,participants:value.participants,...(value.bubble?{bubble:{...value.bubble}}:{}) } : null;
     options.onVoice?.(voiceState);
   };
-  const disconnected = () => { for(const item of pending.values()){clearTimeout(item.timer);item.reject(Error('Connection lost. The operation is unconfirmed. Reconnect and retry Save.'));}pending.clear();clearTimeout(syncTimer);chatReady = false; options.onChat?.({ type: "connection", online: false }); options.onParticipants?.([]); publishVoice(null);proximity=null;options.onProximity?.(null); participantKey = ""; };
+  const disconnected = () => { prediction?.dispose();prediction=undefined;native=false;intent={x:0,y:0,run:false};for(const item of pending.values()){clearTimeout(item.timer);item.reject(Error('Connection lost. The operation is unconfirmed. Reconnect and retry Save.'));}pending.clear();clearTimeout(syncTimer);chatReady = false; options.onChat?.({ type: "connection", online: false }); options.onParticipants?.([]); publishVoice(null);proximity=null;options.onProximity?.(null); participantKey = ""; };
   const controller = new AbortController();
   const presence = (status: Presence["status"], notice: string) => {
     if (!closed) options.onPresence({ status, notice, count: online && state ? [...state.players.values()].filter((p) => p.connected).length : 0 });
@@ -134,7 +138,8 @@ export function connectOffice(options: {
         options.onChat?.({ type: "error", code, clientMessageId: typeof value?.clientMessageId === "string" ? value.clientMessageId : null });
       });
       room.onMessage("availability.error", () => options.onAvailabilityError?.("Availability could not change. Wait a moment, check access and retry."));
-      room.onMessage('object.error',(value:{code?:string})=>{if(!closed&&online)options.onInteractionError?.(value?.code==='OCCUPIED'?'That seat was just taken. Choose another seat.':value?.code==='RATE_LIMIT'?'Wait a moment before interacting again.':'Move closer to an open seat with a clear approach and try again.');});
+      room.onMessage('object.error',(value:{code?:string})=>{prediction?.releaseInteraction();if(!closed&&online)options.onInteractionError?.(value?.code==='OCCUPIED'?'That seat was just taken. Choose another seat.':value?.code==='RATE_LIMIT'?'Wait a moment before interacting again.':'Move closer to an open seat with a clear approach and try again.');});
+      if(process.env.NODE_ENV!=='production')room.onMessage('movement.pong',(value:{nonce:number;workMs:number})=>{if(value?.nonce!==diagnosticNonce)return;websocketRtt=performance.now()-diagnosticSentAt;serverMovementMs=Number.isFinite(value.workMs)?Math.max(0,value.workMs):null;});
       room.onMessage("voice.state", (value: VoiceZoneState) => {
         if (!closed && online && value?.sessionId === room?.sessionId && (value.zone === null || value.zone === "Meeting Room" || value.zone==='Proximity conversation'&&validBubbleRef(value.bubble)) && typeof value.configured === "boolean" &&
           (value.participants === null || Number.isInteger(value.participants) && value.participants >= 0 && value.participants <= 10)) publishVoice(value);
@@ -160,6 +165,14 @@ export function connectOffice(options: {
   const refresh = setInterval(() => { void credential().catch(() => {}); }, 10_000);
   void open();
   return {
+    renderFrame(map,now){
+      if(!online||!room||!state||closed||state.movementProtocol!==1)return undefined;
+      if(state.environmentEpoch&&(!environment||state.environmentEpoch!==environment.epoch||state.environmentRevision!==environment.revision))return undefined;
+      if(!prediction){prediction=new OfficePrediction(room);native=true;}
+      if(process.env.NODE_ENV!=='production'&&now-diagnosticPingAt>=1000){diagnosticPingAt=now;diagnosticSentAt=performance.now();room.send('movement.ping',++diagnosticNonce);}
+      return prediction.frame(map,intent,now,state,room.sessionId);
+    },
+    movementDiagnostics:process.env.NODE_ENV==='production'?undefined:()=>prediction?{...prediction.metrics(),rttMs:websocketRtt||prediction.metrics().rttMs,serverMovementMs}:undefined,
     environment:()=>environment,
     syncEnvironment,
     editEnvironment(request:LiveRequest){return new Promise((resolve,reject)=>{if(closed||!online||!room){reject(Error('Reconnect to the office before editing.'));return;}if(pending.has(request.operationId)){reject(Error('That operation is still pending.'));return;}const timer=setTimeout(()=>{pending.delete(request.operationId);syncEnvironment();reject(Error(request.kind==='save'?'Save is unconfirmed. Retry Save to reconcile it.':'Edit acknowledgement was lost. Review the current layout before retrying.'));},25000);pending.set(request.operationId,{resolve,reject,timer});room.send('environment.edit',request);});},
@@ -170,13 +183,15 @@ export function connectOffice(options: {
     sessionId: () => room?.sessionId,
     input(x, y, run=false) {
       if (!online || !room || closed) return;
+      intent={x:Math.sign(x),y:Math.sign(y),run:run===true};
+      if(native||state?.movementProtocol===1)return;
       if(state?.environmentEpoch&&(!environment||environment.epoch!==state.environmentEpoch||environment.revision!==(state.environmentRevision??0)))return;
       const now = performance.now();
       if (now - lastSent < 50 || x === lastX && y === lastY && run===lastRun && now - lastSent < 100) return;
       lastX = x; lastY = y; lastRun=run; lastSent = now;
       room.send("input", { seq: seq++, x: Math.sign(x), y: Math.sign(y), run:run===true });
     },
-    interact(request){const value={...request,seq:interactionSeq++};if(!online||!room||closed||!parseInteraction(value))return false;room.send('object.interact',value);return true;},
+    interact(request){const value={...request,seq:interactionSeq++};if(!online||!room||closed||!parseInteraction(value))return false;prediction?.holdInteraction();intent={x:0,y:0,run:false};room.send('object.interact',value);return true;},
     appearanceChanged() { void credential().catch(() => {}); },
     close,
     sendChat(body, clientMessageId) { if (closed || !online || !chatReady || !room || !parseChatSend({ body, clientMessageId })) return false; room.send("chat.send", { body, clientMessageId }); return true; },

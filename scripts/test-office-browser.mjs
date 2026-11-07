@@ -21,6 +21,7 @@ const html = `<!doctype html><html lang="en"><meta charset="utf-8"><title>Office
 <style>body{margin:24px;background:#f8f9f5;color:#202c27;font:14px Arial}header{width:1152px;max-width:100%;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center}h1{font-size:20px;margin:4px 0}#world{width:1152px;height:650px;max-width:calc(100vw - 48px);overflow:hidden;border:1px solid #dce2d8}canvas{display:block;image-rendering:pixelated}button,input{padding:10px}small{color:#5c6961}#world:focus-visible{outline:3px solid #245743}</style>
 <header><div><small>Virtual Office · isolated engine validation</small><h1>Oak & Fern Studio</h1></div><button id="outside">Outside canvas</button></header><div id="world" tabindex="0" aria-label="Office"></div><p><input id="text" aria-label="Input focus test" placeholder="Keyboard focus check"></p>
 <script type="importmap">{"imports":{"phaser":"/phaser.js"}}</script>
+<script>globalThis.process={env:{NODE_ENV:'development'}};</script>
 <script type="module">
 import {createOfficeGame} from '/modules/office/engine/create-game.ts';
 import {mountOffice} from '/modules/office/engine/lifecycle.ts';

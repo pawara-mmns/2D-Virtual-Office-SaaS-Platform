@@ -1,10 +1,10 @@
 import { ENVIRONMENT_CHANGED_CODE } from "../../../../packages/shared/src/protocol.ts";
 import type { EnvironmentMaps } from "../environment/maps.ts";
 import { Room, ServerError, ClientState, type Client } from "colyseus";
-import { OfficeState, PlayerState } from "../state/office-state.ts";
+import { OfficeState, PlayerState,MovementCommand } from "../state/office-state.ts";
 import { canStand, simulate } from "../movement/simulation.ts";
 import { mapMarkers, type OfficeMap } from "../../../../packages/shared/src/map.ts";
-import { AUTH_CHECK_MS, AUTH_LEASE_MS, RECONNECT_SECONDS, TICK_MS, mapVersion, validInput, type MoveInput } from "../../../../packages/shared/src/protocol.ts";
+import { AUTH_CHECK_MS, AUTH_LEASE_MS, RECONNECT_SECONDS, TICK_MS,MOVEMENT_HZ, mapVersion, validInput, type MoveInput } from "../../../../packages/shared/src/protocol.ts";
 import type { Authorize, Authorization } from "../auth/authorize.ts";
 import { ChatFailure, type ChatStore } from "../chat/store.ts";
 import { isAvailability, parseChatSend, type ChatErrorCode } from "../../../../packages/shared/src/chat.ts";
@@ -32,10 +32,11 @@ export type RoomServices = {
   disposed(officeId: string, roomId: string): void;
 };
 export function officeRoomClass(services: RoomServices) {
-  return class OfficeRoom extends Room<{ state: OfficeState; client: OfficeClient }> {
+  return class OfficeRoom extends Room<{ state: OfficeState; client: OfficeClient;input:InstanceType<typeof MovementCommand> }> {
     state = new OfficeState();
     maxClients = 10;
-    maxMessagesPerSecond = 45;
+    maxMessagesPerSecond = 100;
+    inputs=this.defineInput(MovementCommand,{bufferMaxSize:8,stepMs:1000/MOVEMENT_HZ,sanitize:input=>{if(![-1,0,1].includes(input.x)||![-1,0,1].includes(input.y)){input.x=0;input.y=0;input.run=false;}}});
     // Local diagnostics, deliberately outside synchronized Schema state.
     simulationTicks = 0;
     simulationWorkMs = 0;
@@ -49,6 +50,9 @@ export function officeRoomClass(services: RoomServices) {
     private proximity!:ReturnType<typeof createProximity>;
     private proximityAt=new Map<string,number>();
     private proximityRevision=new Map<string,number>();
+    private proximityNext=0;
+    private diagnosticAt=new Map<string,number>();
+    private nativeClients=new Set<string>();
     private seating!:ReturnType<typeof createSeating>;
     private interactionAt=new Map<string,number>();
     private interactionSeq=new Map<string,number>();
@@ -69,10 +73,11 @@ export function officeRoomClass(services: RoomServices) {
       this.seatReservationTimeout = 10;
       this.patchRate = TICK_MS;
       if (services.loadMap) this.clock.setInterval(() => void this.checkEnvironment(), 5000);
-      this.setFixedTimestep(() => this.tick(), 1000 / TICK_MS);
+      this.setFixedTimestep(() => this.tick(), MOVEMENT_HZ);
       this.onMessage("input", (client, value: unknown) => {
         const control = this.controls.get(client.sessionId), now = Date.now();
         if (!control) return;
+        if(this.nativeClients.has(client.sessionId)||this.inputs.get(client.sessionId).size){this.deny(client);return;}
         if (now - control.window >= 1000) { control.window = now; control.messages = 0; }
         if (++control.messages > 35 || !validInput(value)) { this.deny(client); return; }
         if (value.seq <= control.input.seq) return;
@@ -88,6 +93,8 @@ export function officeRoomClass(services: RoomServices) {
         this.interactionAt.set(client.sessionId,now);
         const result=this.seating.act(client.sessionId,player,request,now);
         if(result!=='OK'){reject(result);return;}
+        player.movementEpoch++;
+        this.inputs.get(client.sessionId).drain();
         const control=this.controls.get(client.sessionId);
         // Explicit E/touch stand clears cached input; only fresh intent may walk.
         if(control){control.input={seq:control.input.seq,x:0,y:0};control.lastInput=0;}
@@ -106,6 +113,13 @@ export function officeRoomClass(services: RoomServices) {
       this.onMessage("voice.leave", (client) => { void this.proximityAction(client,{enabled:false});void services.voice?.revoke(client.sessionId); });
       this.onMessage('proximity.set',(client,value:unknown)=>{void this.proximityAction(client,value);});
       this.onMessage('proximity.lock',(client,value:unknown)=>{void this.proximityAction(client,value);});
+      // Local diagnostics only: no user IDs, positions, credentials or secrets.
+      this.onMessage('movement.ping',(client,value:unknown)=>{
+        if(process.env.NODE_ENV==='production')return;
+        if(typeof value!=='number'||!Number.isSafeInteger(value)||value<0||Date.now()-(this.diagnosticAt.get(client.sessionId)??0)<900)return;
+        this.diagnosticAt.set(client.sessionId,Date.now());
+        client.send('movement.pong',{nonce:value,workMs:this.simulationWorkMs/Math.max(1,this.simulationTicks)});
+      });
       this.onMessage("*", (client) => this.deny(client));
     }
     private async checkEnvironment() {
@@ -135,6 +149,7 @@ export function officeRoomClass(services: RoomServices) {
     }
     private applyLiveMap(map:OfficeMap,delta:LiveDelta){
       this.officeMap=map;this.seating.updateMap(map);
+      for(const [id,player]of this.state.players){player.movementEpoch++;this.inputs.get(id).drain();const control=this.controls.get(id);if(control){control.input={seq:control.input.seq,x:0,y:0};control.lastInput=0;}}
       this.state.environmentRevision=delta.revision;
       if(delta.saved)this.state.mapVersion=mapVersion(map);
       this.broadcast('environment.delta',delta);
@@ -249,10 +264,21 @@ export function officeRoomClass(services: RoomServices) {
         if (!control || !player) continue;
         if (!client.auth || now >= client.auth.expiresAt || now - client.auth.checkedAt >= AUTH_LEASE_MS) { this.deny(client); continue; }
         if (now >= control.nextCheck && !control.refreshing) void this.revalidate(client);
-        if(!this.seating.transitioning(client.sessionId,now))simulate(this.officeMap, player, now - control.lastInput < 250 && player.connected ? control.input : { x: 0, y: 0 });
+        const channel=this.inputs.get(client.sessionId);if(channel.size)this.nativeClients.add(client.sessionId);
+        const native=this.nativeClients.has(client.sessionId);
+        // One server-sized step per tick, regardless of how many commands a
+        // client sends. Drop old backlog rather than fast-forwarding the player.
+        if(native){
+          if(channel.size>3)channel.take(channel.size-1);
+          const command=channel.next();
+          const current=command&&command.epoch===player.movementEpoch&&command.revision===this.state.environmentRevision&&player.connected;
+          control.input={seq:channel.consumedCount,x:current?command.x:0,y:current?command.y:0,run:current&&command.run===true};control.lastInput=current?now:0;
+        }
+        if(!this.seating.transitioning(client.sessionId,now))simulate(this.officeMap,player,now-control.lastInput<250&&player.connected?control.input:{x:0,y:0},1000/MOVEMENT_HZ);
       }
-      this.proximity.sync(this.clients.flatMap(client=>{const p=this.state.players.get(client.sessionId);return p?.connected&&client.auth?[{sessionId:client.sessionId,auth:client.auth,x:p.x,y:p.y,meeting:!!meetingZone(this.officeMap,p.x,p.y)}]:[];}),
+      if(now>=this.proximityNext){this.proximityNext=now+TICK_MS;this.proximity.sync(this.clients.flatMap(client=>{const p=this.state.players.get(client.sessionId);return p?.connected&&client.auth?[{sessionId:client.sessionId,auth:client.auth,x:p.x,y:p.y,meeting:!!meetingZone(this.officeMap,p.x,p.y)}]:[];}),
         (id,value)=>this.clients.find(c=>c.sessionId===id)?.send('proximity.state',value),(id,value)=>this.clients.find(c=>c.sessionId===id)?.send('voice.state',value));
+      }
       this.simulationWorkMs += performance.now() - began;
     }
     onDrop(client: OfficeClient) {
@@ -263,6 +289,9 @@ export function officeRoomClass(services: RoomServices) {
       const player = this.state.players.get(client.sessionId);
       if (!player || this.revoked.has(client.sessionId)) return;
       player.connected = false; player.isMoving = false;
+      player.movementEpoch++;
+      this.inputs.get(client.sessionId).drain();
+      this.nativeClients.delete(client.sessionId);
       const control = this.controls.get(client.sessionId);
       if (control) control.input = { ...control.input, x: 0, y: 0 };
       void this.allowReconnection(client, RECONNECT_SECONDS).catch(() => {});
@@ -273,12 +302,16 @@ export function officeRoomClass(services: RoomServices) {
       if (client.state === ClientState.LEAVING || client.state === ClientState.CLOSED || !client.auth || fresh.userId !== client.auth.userId || fresh.organizationId !== client.auth.organizationId || !this.state.players.has(client.sessionId)) throw new ServerError(403, "Office access denied.");
       client.auth = fresh;
       this.state.players.get(client.sessionId)!.connected = true;
+      this.state.players.get(client.sessionId)!.movementEpoch++;
+      this.inputs.get(client.sessionId).drain();
       const control = this.controls.get(client.sessionId)!;
       control.input = { seq: control.input.seq, x: 0, y: 0 }; control.lastInput = 0; control.nextCheck = Date.now() + AUTH_CHECK_MS;
       if(this.live)client.send('environment.snapshot',this.live.snapshot);
       const pending=this.live?.pendingFor(fresh.userId);if(pending)void this.editEnvironment(client,pending);
     }
     onLeave(client: OfficeClient) {
+      this.diagnosticAt.delete(client.sessionId);
+      this.nativeClients.delete(client.sessionId);
       this.editAt.delete(client.sessionId);this.editAt.delete('sync/'+client.sessionId);this.editPending.delete(client.sessionId);
       this.editWindows.delete(client.sessionId);
       this.seating.release(client.sessionId,this.state.players.get(client.sessionId));this.interactionAt.delete(client.sessionId);this.interactionSeq.delete(client.sessionId);
