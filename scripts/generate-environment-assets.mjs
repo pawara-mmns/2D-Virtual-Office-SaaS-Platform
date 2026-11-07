@@ -1,5 +1,6 @@
 import { polishEnvironmentAtlas } from './polish-environment-art.mjs';
 import {drawPremiumOffice} from './premium-office-art.mjs';
+import {drawRoomAccents} from './room-accent-art.mjs';
 import {importOfficeArtwork} from './import-office-art.mjs';
 import { drawExpandedOfficeAssets } from './expanded-office-art.mjs';
 import { environmentAtlas } from '../packages/shared/src/environment/assets.ts';
@@ -40,6 +41,7 @@ export function generateEnvironmentAtlases(base) {
     polishEnvironmentAtlas(art,theme);
     drawExpandedOfficeAssets(art,theme);
     drawPremiumOffice(art,theme);
+    drawRoomAccents(art,theme);
     importOfficeArtwork(art,theme.id);
     art.png('environments/'+theme.id+'.png');
   }

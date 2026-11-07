@@ -25,7 +25,7 @@ export class PlayerAvatar {
     }
     this.sprite = scene.physics.add.sprite(x, y, "avatar", avatarIdleFrame(this.key, this.facing)).setDepth(3).setCollideWorldBounds(true);
     this.sprite.setSize(avatarBody.width, avatarBody.height).setOffset(avatarBody.offsetX, avatarBody.offsetY);
-    this.label = scene.add.text(x, y - 26, this.fullName, { fontFamily: "Arial", fontSize: "10px", color: "#fff9e8", backgroundColor: "#344c48", padding: { x: 5, y: 3 } }).setOrigin(.5).setDepth(4);
+    this.label = scene.add.text(x, y - 26, this.fullName, { fontFamily: "Arial", fontSize: "10px", color: "#f7f8f1", backgroundColor: "#25363d", padding: { x: 5, y: 3 },shadow:{offsetX:0,offsetY:1,color:'#101e25',blur:0,fill:true} }).setOrigin(.5).setDepth(4);
   }
   setAppearance(appearance: AvatarAppearance) {
     this.key = safeAvatarKey(appearance.avatarKey); this.fullName = avatarDisplayName(appearance.displayName);
@@ -58,6 +58,7 @@ export class PlayerAvatar {
     // Tile furniture stays below avatars. A seated pose rests visibly on its cushion.
     this.sprite.setDepth(3+state.y/100000);this.label.setDepth(4+state.y/100000);
     this.sprite.setAlpha(state.connected ? 1 : .5);
+    this.label.setAlpha(state.connected?1:.65);
     this.positionLabel();
     this.label.setVisible(local || this.scene.cameras.main.worldView.contains(this.sprite.x, this.sprite.y));
   }
@@ -70,6 +71,8 @@ export class PlayerAvatar {
   }
   private positionLabel() {
     const camera = this.scene.cameras.main;
+    // Cap close-up label size without scaling or filtering the pixel avatar.
+    this.label.setScale(Math.min(1,1.4/camera.zoom));
     if (camera.worldView.width <= 0 || camera.worldView.height <= 0) return;
     const available = Math.max(24, Math.floor(camera.width / camera.zoom) - 12);
     if (available !== this.labelWidth) {
@@ -77,7 +80,7 @@ export class PlayerAvatar {
       let letters = [...this.fullName];
       while (this.label.width > available && letters.length > 1) { letters = letters.slice(0, -1); this.label.setText(letters.join("") + "…"); }
     }
-    const view = camera.worldView, halfWidth = this.label.width / 2, halfHeight = this.label.height / 2;
+    const view = camera.worldView, halfWidth = this.label.displayWidth / 2, halfHeight = this.label.displayHeight / 2;
     // At the top edge there is not enough space above the artwork: put the
     // label below, rather than clipping it or covering the character's head.
     const y = this.seated&&this.facing==='up'||this.sprite.y - 26 - halfHeight < view.top + 2 ? this.sprite.y + 26 : this.sprite.y - 26;

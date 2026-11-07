@@ -112,11 +112,10 @@ export class OfficeScene extends Phaser.Scene {
       }
       if (this.environment) {
         const paint = environmentPaint(data, this.environment), graphics = this.add.graphics();
+        for(const r of paint.brandPanels)graphics.fillStyle(parseInt(r.color,16),r.alpha).fillRect(r.x,r.y,r.width,r.height);
         for (const sign of paint.signs) {
-          graphics.fillStyle(parseInt(paint.theme.background,16), 1).fillRoundedRect(sign.x, sign.y, sign.width!, sign.height!, 3);
-          graphics.fillStyle(parseInt(paint.accent,16), 1).fillRect(sign.x, sign.y, 4, sign.height!);
-          const title = this.add.text(sign.x+10, sign.y+10, sign.name, {fontFamily:"Arial, sans-serif",fontSize:"10px",color:"#ffffff"});
-          if (title.width > sign.width!-14) title.setScale((sign.width!-14)/title.width, 1);
+          const title = this.add.text(sign.x+sign.width!/2, sign.y+sign.height!/2, sign.name, {fontFamily:"Arial, sans-serif",fontSize:"10px",color:"#fff1db"}).setOrigin(.5);
+          if (title.width > sign.width!-68) title.setScale((sign.width!-68)/title.width, 1);
         }
       }
       const collision = map.createLayer("Collision", tiles, 0, 0);

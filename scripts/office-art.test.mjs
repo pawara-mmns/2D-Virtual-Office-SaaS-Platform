@@ -6,6 +6,7 @@ import {resolve,sep} from 'node:path';
 import {createHash} from 'node:crypto';
 import {decodeArtwork,importOfficeArtwork} from './import-office-art.mjs';
 import {fixtures} from '../packages/shared/src/environment/rooms.ts';
+import {environmentAtlas} from '../packages/shared/src/environment/assets.ts';
 
 // Encode real PNG rows with each filter to test artist exports, not just the
 // generator's unfiltered output. CRCs are valid despite not used by our decoder.
@@ -25,9 +26,9 @@ test('offline artwork manifest enforces provenance, digest and exact crop withou
   const cache=resolve('.cache');mkdirSync(cache,{recursive:true});const root=mkdtempSync(resolve(cache,'art-import-'));
   try{
     const source=png(64,32,4),file=resolve(root,'art.png'),manifest=resolve(root,'manifest.json');writeFileSync(file,source.bytes);
-    const entry={assetId:'windowPanel',theme:'warm-wood',file:'art.png',license:'original',author:'Local synthetic test',source:'Generated within this test',sha256:createHash('sha256').update(source.bytes).digest('hex')};
-    const art={pixels:Buffer.alloc(512*1024*4,17)};writeFileSync(manifest,JSON.stringify([entry]));assert.equal(importOfficeArtwork(art,'warm-wood',manifest),1);
-    const[x,y]=fixtures.windowPanel;assert.deepEqual(art.pixels.subarray((y*512+x)*4,(y*512+x+64)*4),source.pixels.subarray(0,64*4));assert.equal(art.pixels[0],17);
+    const entry={assetId:'presentationPanel',theme:'warm-wood',file:'art.png',license:'original',author:'Local synthetic test',source:'Generated within this test',sha256:createHash('sha256').update(source.bytes).digest('hex')};
+    const art={pixels:Buffer.alloc(environmentAtlas.width*environmentAtlas.height*4,17)};writeFileSync(manifest,JSON.stringify([entry]));assert.equal(importOfficeArtwork(art,'warm-wood',manifest),1);
+    const[x,y]=fixtures.presentationPanel;assert.ok(y>=1024);assert.deepEqual(art.pixels.subarray((y*512+x)*4,(y*512+x+64)*4),source.pixels.subarray(0,64*4));assert.equal(art.pixels[0],17);
     writeFileSync(manifest,JSON.stringify([{...entry,sha256:'0'.repeat(64)}]));assert.throws(()=>importOfficeArtwork(art,'warm-wood',manifest),/hash/);
     writeFileSync(manifest,JSON.stringify([{...entry,author:''}]));assert.throws(()=>importOfficeArtwork(art,'warm-wood',manifest),/provenance/);
     writeFileSync(manifest,JSON.stringify([entry,entry]));assert.throws(()=>importOfficeArtwork(art,'warm-wood',manifest),/Duplicate/);
