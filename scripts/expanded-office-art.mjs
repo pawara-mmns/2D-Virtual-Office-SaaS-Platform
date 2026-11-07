@@ -1,6 +1,7 @@
 import { assetDefinitions, expandedFixtures, directionalChairRects, premiumDefinitions } from '../packages/shared/src/environment/assets.ts';
 import {chairFamilies} from '../packages/shared/src/environment/seating-metadata.ts';
 import {drawDirectionalChair} from './seating-art.mjs';
+import {collectionDefinitions,collectionChairs} from '../packages/shared/src/environment/collection.ts';
 
 // Original hand-specified silhouettes and details. One restrained palette and
 // upper-left light source serve every family; no noise or random placement.
@@ -9,7 +10,7 @@ export function drawExpandedOfficeAssets(art,theme) {
   const wood=theme.wood,wall=theme.wall,fabric=theme.fabric,ink=shade(theme.background,-18),edge=shade(wood,-30);
   const paper='eeeade',screen=theme.id==='dark-tech'?'497fa4':'7b9b9c',leaf=theme.id==='eco-green'?'50784c':'65815d';
   for(const [id,spec]of Object.entries(assetDefinitions)) {
-    if(Object.hasOwn(premiumDefinitions,id))continue; // Authored by premium-office-art.mjs.
+    if(Object.hasOwn(premiumDefinitions,id)||Object.hasOwn(collectionDefinitions,id))continue;
     const [x,y,w,h]=expandedFixtures[id],v=spec.variant;
     const r=(a,b,c,d,color)=>{
       if(![a,b,c,d].every(Number.isInteger)||a<0||b<0||a+c>w||b+d>h)throw Error('Invalid pixel bounds: '+id+' '+[a,b,c,d]);
@@ -155,6 +156,7 @@ export function drawExpandedOfficeAssets(art,theme) {
     } else throw Error('Missing original art family: '+id);
   }
   for(const [id,style]of Object.entries(chairFamilies))for(const direction of ['up','left','right']){
+    if(Object.hasOwn(collectionChairs,id))continue;
     const [x,y]=directionalChairRects[id][direction];drawDirectionalChair(art,theme,x,y,style,direction);
   }
 }

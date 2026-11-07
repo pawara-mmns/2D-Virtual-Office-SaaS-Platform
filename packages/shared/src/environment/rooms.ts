@@ -2,6 +2,7 @@ import { layouts, themes, type EnvironmentConfig } from './catalog.ts';
 import type { RoomSpec } from './plans.ts';
 import { expandedFixtures } from './assets.ts';
 import type {AvatarDirection} from '../avatars.ts';
+import {collectionDefinitions,type CollectionAsset} from './collection.ts';
 
 export const fixtures = {
   desk:[0,64,64,64],executiveDesk:[0,192,96,64],bench:[128,128,128,32],divider:[0,128,64,32],chair:[64,64,32,32],plant:[96,64,32,64],ceramic:[448,64,32,64],sofa:[128,64,96,64],coffee:[224,64,64,32],armchair:[288,64,32,32],meeting:[320,64,128,64],books:[0,160,96,32],board:[96,160,64,32],reception:[160,160,96,64],cabinet:[256,160,64,32],lamp:[320,160,32,64],notice:[352,160,64,32],pantry:[448,160,64,64],
@@ -129,5 +130,36 @@ export function furnishRoom(room: RoomSpec, config: EnvironmentConfig, density: 
     if(kind==='pantry')mounted('hospitalityShelf');
     if(kind==='collaboration'||kind==='training')mounted('ideaBoard');
     if(kind==='utility')safeAt('supplyCubbies',1,1);
+  }
+  // The collection fills a small number of deliberate perimeter/feature slots.
+  // Existing primary furniture/IDs remain intact, and saved owner objects take
+  // priority over these optional additions in resolvedObjects(). Small rooms
+  // simply omit furniture that cannot fit with safe approaches and circulation.
+  if(density>0){
+    const index=layout*17+theme*7+['standard','executive','collaborative'].indexOf(config.furniture)*11+density*19;
+    const eligible=Object.entries(collectionDefinitions).filter(([,s])=>s.rooms.includes(kind));
+    const choose=(mode:'blocking'|'wall'|'surface',offset:number)=>{
+      const candidates=eligible.filter(([,s])=>s.mode===mode);
+      return candidates.map((_,i)=>candidates[(index+offset+i)%candidates.length]!).slice(0,6);
+    };
+    for(const offset of density>1?[0,9]:[0]){
+      let placed=false;
+      for(const [id,s]of choose('blocking',offset)){
+        const columns=[1,w-s.width-1,center-Math.ceil(s.width/2)];
+        for(const [x,y]of [...columns.map(x=>[x,h-s.height-2]),...columns.map(x=>[x,1]),...columns.map(x=>[x,h-s.height-5])]){
+          if(x!>=1&&y!>=1&&safeAt(id as CollectionAsset,x!,y!)){placed=true;break;}
+        }
+        if(placed)break;
+      }
+    }
+    // Mounted art and surface equipment have independent, bounded slots.
+    for(const [id,s]of choose('wall',4)){
+      let placed=false;for(const y of[0,h-1]){for(const x of[center-1,1,w-s.width-1,center+2])if(x>=1&&safeAt(id as CollectionAsset,x,y)){placed=true;break;}if(placed)break;}
+      if(placed)break;
+    }
+    for(const [id]of choose('surface',8)){
+      let placed=false;for(const [x,y]of[[1,2],[2,3],[center-1,3],[w-4,3],[center-1,Math.floor(h/2)-1],[1,h-4],[center-1,h-2],[w-3,h-3]])if(safeAt(id as CollectionAsset,x!,y!)){placed=true;break;}
+      if(placed)break;
+    }
   }
 }

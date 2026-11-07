@@ -6,6 +6,7 @@ import {documentKey,objectChanges,type LiveSnapshot,type LiveRequest} from '../.
 import {editorAssets,editorAsset,assetRect,emptyDecoration,parseDecoration,resolvedObjects,moveDecoration,duplicateDecoration,deleteDecoration,createDecorationHistory,validateDecoration,type DecorationDocument,type DecorationObject} from '../../../../../packages/shared/src/environment/decoration';
 import type {DecorationWorkspace} from '../../../../../packages/shared/src/environment/decoration-database';
 import type {EnvironmentConfig} from '../../../../../packages/shared/src/environment/catalog';
+import {environmentAtlas} from '../../../../../packages/shared/src/environment/assets';
 import type {EditorView,EditorEvent} from './overlay';
 import {contextPosition,editorShortcut,type EditorCommand,type ScreenBounds} from './manipulation';
 import {loadDecorationAction,saveDecorationAction} from './actions';
@@ -124,7 +125,7 @@ export function DecorationEditor({officeId,environment,ready,container,onView,on
           <header><strong>Add to your office</strong><Tool label="Close furniture library" onClick={()=>{setLibrary(false);add.current?.focus();}}><X/></Tool></header>
           <label className="editor-search"><Search aria-hidden="true"/><input aria-label="Search office assets" placeholder="Find furniture…" value={query} onChange={e=>setQuery(e.target.value)}/></label>
           <label className="sr-only" htmlFor="editor-category">Furniture category</label><select id="editor-category" value={category} onChange={e=>setCategory(e.target.value)}><option value="all">All furniture</option>{[...new Set(editorAssets.map(a=>a.category))].map(c=><option key={c} value={c}>{c}</option>)}</select>
-          <div className="editor-assets">{filtered.map(a=>{const rect=assetRect(a.id,a.orientations[0]!),scale=a.width===32&&a.height===32?1:.5,style:CSSProperties=rect?{width:a.width*scale,height:a.height*scale,backgroundImage:`url('/office/environments/${environment.theme}.png')`,backgroundSize:`${512*scale}px ${1024*scale}px`,backgroundPosition:`-${rect[0]*scale}px -${rect[1]*scale}px`}:{width:48,height:32,background:'#9ab6a5',border:'3px solid #527562'};
+          <div className="editor-assets">{filtered.map(a=>{const rect=assetRect(a.id,a.orientations[0]!),scale=Math.min(1,64/a.width,48/a.height),style:CSSProperties=rect?{width:a.width*scale,height:a.height*scale,backgroundImage:`url('/office/environments/${environment.theme}.png')`,backgroundSize:`${environmentAtlas.width*scale}px ${environmentAtlas.height*scale}px`,backgroundPosition:`-${rect[0]*scale}px -${rect[1]*scale}px`}:{width:48,height:32,background:'#9ab6a5',border:'3px solid #527562'};
             return <button key={a.id} className="editor-asset" data-asset={a.id} draggable onDragStart={e=>{e.dataTransfer.setData('application/x-office-asset',a.id);e.dataTransfer.effectAllowed='copy';}} onClick={()=>chooseAsset(a.id)}><span className="editor-thumbnail" aria-hidden="true"><span style={style}/></span><strong>{a.label}</strong><small>{a.width/32} × {a.height/32}</small></button>;
           })}{!filtered.length&&<p>No matching furniture.</p>}</div>
         </section>}

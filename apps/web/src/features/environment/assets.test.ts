@@ -29,7 +29,7 @@ test('all expanded assets are integrated into room recipes or architectural tile
     const visible=new Set([...tileLayer(map,'Floor').data,...tileLayer(map,'Architecture').data]);
     for(const [id,definition]of Object.entries(assetDefinitions))if(definition.mode==='structure'&&visible.has(assetTile(id as ExpandedAsset)))used.add(id);
   }
-  assert.deepEqual(Object.keys(assetDefinitions).filter(id=>!used.has(id)),[],'No unused expansion sprites');
+  assert.deepEqual(Object.keys(assetDefinitions).filter(id=>!used.has(id)),[],'Every original and collection design is actually used across bounded room recipes');
 });
 
 test('wall and desktop details render only on their valid supports and never introduce collision tiles',()=>{
@@ -73,12 +73,18 @@ test('all five generated atlases contain distinct original artwork for every exp
     const png=readFileSync(new URL('../../../public/office/environments/'+theme.id+'.png',import.meta.url));
     assert.equal(png.readUInt32BE(16),environmentAtlas.width);assert.equal(png.readUInt32BE(20),environmentAtlas.height);assert.equal(png[24],8);assert.equal(png[25],6);
     const chunks:Buffer[]=[];for(let offset=8;offset<png.length;){const size=png.readUInt32BE(offset),type=png.toString('ascii',offset+4,offset+8);if(type==='IDAT')chunks.push(png.subarray(offset+8,offset+8+size));offset+=size+12;}
-    const raw=inflateSync(Buffer.concat(chunks)),stride=environmentAtlas.width*4+1,hashes=new Map<string,string>();
+    const raw=inflateSync(Buffer.concat(chunks)),stride=environmentAtlas.width*4+1,hashes=new Map<string,string>(),shapes=new Map<string,string>();
     for(let row=0;row<environmentAtlas.height;row++)assert.equal(raw[row*stride],0);
     for(const [id,[x,y,w,h]]of Object.entries(expandedFixtures)) {
       const crop=Buffer.alloc(w*h*4);for(let row=0;row<h;row++)raw.copy(crop,row*w*4,(y+row)*stride+1+x*4,(y+row)*stride+1+(x+w)*4);
       let visible=0;for(let i=3;i<crop.length;i+=4)if(crop[i])visible++;assert.ok(visible>8,theme.id+' '+id+' has visible art');
       const hash=createHash('sha256').update(w+','+h+':').update(crop).digest('hex');assert.ok(!hashes.has(hash),id+' duplicates '+hashes.get(hash));hashes.set(hash,id);
+      // Replace each color with its first-seen palette index: a simple recolor
+      // has exactly the same region geometry and fails this comparison.
+      const palette=new Map<number,number>(),regions=Buffer.alloc(w*h*2);
+      for(let i=0;i<crop.length;i+=4){const rgba=crop.readUInt32BE(i);if(!palette.has(rgba))palette.set(rgba,palette.size);regions.writeUInt16LE(palette.get(rgba)!,i/2);}
+      const shape=createHash('sha256').update(w+','+h+':').update(regions).digest('hex');
+      if(y>=1152)assert.ok(!shapes.has(shape),id+' is only a recolor of '+shapes.get(shape));shapes.set(shape,id);
     }
   }
 });

@@ -13,7 +13,7 @@ import { interactionRegistry, closestInteraction, type Interactable, type Primar
 import { advanceMovement } from '../../../../../../packages/shared/src/movement.ts';
 import { createSeating } from '../../../../../../packages/shared/src/seating.ts';
 import {isChairAsset} from '../../../../../../packages/shared/src/environment/seating-metadata.ts';
-import {directionalChairRects} from '../../../../../../packages/shared/src/environment/assets.ts';
+import {directionalChairRects,assetRenderDepth} from '../../../../../../packages/shared/src/environment/assets.ts';
 import {composeOfficeEnvironment,composeDecoratedEnvironment,editorAsset,assetRect,type PublishedDecoration} from '../../../../../../packages/shared/src/environment/decoration.ts';
 import {structureVersion,type LiveSnapshot} from '../../../../../../packages/shared/src/environment/live-decoration.ts';
 import {tileLayer} from '../../../../../../packages/shared/src/map.ts';
@@ -298,8 +298,8 @@ export class OfficeScene extends Phaser.Scene {
       let sprite=this.furnitureImages.get(id);if(!sprite){sprite=this.add.image(x,y,'office-tiles',key).setOrigin(0).setData('decorationId',id);this.furnitureImages.set(id,sprite);}
       if(sprite.frame.name!==key)sprite.setTexture('office-tiles',key);if(sprite.x!==x||sprite.y!==y)sprite.setPosition(x,y);if(sprite.depth!==depth)sprite.setDepth(depth);sprite.setData('seatingForeground',foreground);
     };
-    for(const o of placements){const a=editorAsset(o.name)!,facing=o.facing??'down',id=o.instanceId??`base/${o.type}/${o.name}/${o.x}:${o.y}`,rect=assetRect(o.name,facing);if(!rect)continue;
-      const key=isChairAsset(o.name)?`chair-${o.name}-${facing}`:`furniture-${o.name}-${facing}`;image(id,key,rect,o.x,o.y,isChairAsset(o.name)?.1:a.mode==='surface'||a.mode==='wall'?.05:0);
+    for(const o of placements){const facing=o.facing??'down',id=o.instanceId??`base/${o.type}/${o.name}/${o.x}:${o.y}`,rect=assetRect(o.name,facing);if(!rect)continue;
+      const key=isChairAsset(o.name)?`chair-${o.name}-${facing}`:`furniture-${o.name}-${facing}`;image(id,key,rect,o.x,o.y,assetRenderDepth(o.name));
     }
     for(const object of interactionRegistry(map))for(const [index,rect]of object.foreground.entries())image(object.instanceId+'/edge/'+index,`seat-edge-${object.assetId}-${index}`,[rect.sourceX,rect.sourceY,rect.width,rect.height],rect.x,rect.y,3.1,true);
     for(const [id,sprite]of this.furnitureImages)if(!wanted.has(id)){sprite.destroy();this.furnitureImages.delete(id);}

@@ -12,8 +12,13 @@ test('Phase 02 SQL: private drafts, verified active owners, cross-tenant denial,
    create function auth.role() returns text language sql stable as $$select nullif(current_setting('request.jwt.claims',true),'')::jsonb->>'role'$$;
    grant usage on schema auth to anon,authenticated;
    insert into auth.users select ('00000000-0000-4000-8000-'||lpad(i::text,12,'0'))::uuid,'fixture'||i||'@editor.invalid',case when i<6 then now() else null end,null from generate_series(1,6)i;`);
-  for(const name of ['20261021000100_organization_foundation.sql','20261029000100_office_environments.sql','20261105000100_office_decorations.sql','20261106000100_live_office_decoration.sql','20261106000200_premium_office_catalog.sql','20261106000300_room_polish_catalog.sql'])await db.exec(readFileSync(new URL('../supabase/migrations/'+name,import.meta.url),'utf8'));
-  assert.equal((await db.query("select jsonb_object_length from (select count(*) as jsonb_object_length from jsonb_object_keys(private.office_editor_catalog())) c")).rows[0].jsonb_object_length,121);
+  for(const name of ['20261021000100_organization_foundation.sql','20261029000100_office_environments.sql','20261105000100_office_decorations.sql','20261106000100_live_office_decoration.sql','20261106000200_premium_office_catalog.sql','20261106000300_room_polish_catalog.sql','20261107000100_premium_asset_collection.sql'])await db.exec(readFileSync(new URL('../supabase/migrations/'+name,import.meta.url),'utf8'));
+  assert.equal((await db.query("select jsonb_object_length from (select count(*) as jsonb_object_length from jsonb_object_keys(private.office_editor_catalog())) c")).rows[0].jsonb_object_length,211);
+  const {collectionCatalog}=await import('../packages/shared/src/environment/collection-catalog.ts');
+  for(const asset of collectionCatalog)for(const orientation of ['down','left','up','right']){
+    const value={version:1,removed:[],objects:[{id:'custom/'+id(90),assetId:asset.id,x:64,y:64,orientation}]};
+    assert.equal((await db.query('select private.valid_office_decoration($1::jsonb) as ok',[JSON.stringify(value)])).rows[0].ok,asset.orientations.includes(orientation),asset.id+' '+orientation+' matches authored frames');
+  }
   for(const assetId of ['deskTriple','beanBag','livingWall','gameConsole','trophyShelf','sculpture','windowPanel','loungeArt','codePanel','presentationPanel','receptionCrest','hospitalityShelf','ideaBoard','supplyCubbies','wayfindingLight']){
     const premium={version:1,removed:[],objects:[{id:'custom/'+id(90),assetId,x:64,y:64,orientation:'down'}]};
     assert.equal((await db.query('select private.valid_office_decoration($1::jsonb) as ok',[JSON.stringify(premium)])).rows[0].ok,true,assetId+' is accepted by the database catalog');

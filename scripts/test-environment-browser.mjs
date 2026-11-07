@@ -1,4 +1,6 @@
 import {unusedDecorationActions} from './unused-decoration-fixture.mjs';
+import {collectionCatalog} from '../packages/shared/src/environment/collection-catalog.ts';
+import {collectionGroups} from '../packages/shared/src/environment/collection.ts';
 ﻿// Actual editor, preview and React/Phaser composition. Synthetic actions,
 // identity and transport; no hosted database or microphone access.
 import assert from 'node:assert/strict';import{test}from'node:test';import{createServer}from'node:http';import{spawn}from'node:child_process';import{existsSync,mkdirSync,mkdtempSync,readFileSync,readdirSync,writeFileSync,rmSync}from'node:fs';import{createRequire}from'node:module';import{resolve,sep}from'node:path';import{setTimeout as delay}from'node:timers/promises';
@@ -57,5 +59,16 @@ test('owner environment editor: composition previews, apply feedback, responsive
     await evaluate("(()=>{const s=environmentFixture.engine.game.scene.getScene('Office'),p=s.geometry.layers.find(l=>l.name==='PassageDecor').objects.find(p=>p.name==='wayfindingLight');if(!p)throw Error('Missing reference wayfinding light');s.cameras.main.stopFollow();s.cameras.main.setZoom(2);s.cameras.main.centerOn(p.x+32,p.y+48)})()");await delay(100);await shot('room-polish-corridor.png');
     await command('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await command('Emulation.setCPUThrottlingRate',{rate:4});await click('Fit Office');await delay(150);await shot('premium-mobile.png');const mobile=await sample();await command('Emulation.setCPUThrottlingRate',{rate:1});
     assert.deepEqual(tools.errors,[]);const measurements={scope:'local headless Brave; desktop and 390px emulation at 4x CPU throttle, not physical mobile/GPU certification',desktop,mobile};writeFileSync(resolve(cache,'premium-performance.json'),JSON.stringify(measurements,null,2));console.info(JSON.stringify(measurements));
+    // Render all 90 actual atlas frames in the existing Phaser game, in ten
+    // inspectable pages. This is separate from normal room/collision probes.
+    await command('Emulation.setDeviceMetricsOverride',{width:1440,height:1000,deviceScaleFactor:1,mobile:false});
+    await evaluate(`(()=>{document.querySelector('.office-hud').style.visibility='hidden';document.querySelector('.office-interactions').style.visibility='hidden';const f=environmentFixture,g=f.engine.game,s=g.scene.getScene('Office');s.scene.pause();s.scene.setVisible(false);g.scene.add('CollectionGallery',{create(){this.cameras.main.setBackgroundColor('#182b32');f.galleryReady=true;}},true);})()`);await until(()=>evaluate('environmentFixture.galleryReady'));
+    let rendered=0;
+    for(const [index,group]of collectionGroups.entries()){
+      const assets=collectionCatalog.filter(a=>a.collection===group);
+      const observed=await evaluate(`(()=>{const g=environmentFixture.engine.game,s=g.scene.getScene('CollectionGallery'),texture=g.textures.get('office-tiles');s.children.removeAll(true);s.add.text(36,22,${JSON.stringify(group)},{fontFamily:'Arial',fontSize:'28px',color:'#f3e7cf'});s.add.text(36,62,'Original native pixel artwork · actual Phaser frames · Warm Wood',{fontFamily:'Arial',fontSize:'14px',color:'#afc5bc'});return ${JSON.stringify(assets)}.map((a,i)=>{const x=38+(i%3)*466,y=105+Math.floor(i/3)*285,key='collection-review-'+a.id;if(!texture.has(key))texture.add(key,0,...a.atlas);s.add.rectangle(x,y,440,266,0xe3e5dc).setOrigin(0);const scale=Math.min(3,400/a.width,180/a.height);s.add.image(x+220,y+104,'office-tiles',key).setScale(scale);s.add.text(x+12,y+204,a.label,{fontFamily:'Arial',fontSize:'17px',color:'#233e43'});s.add.text(x+12,y+236,a.id+' · '+a.width+'×'+a.height+' · '+a.mode,{fontFamily:'Arial',fontSize:'12px',color:'#536c6d'});const frame=texture.get(key);return{id:a.id,width:frame.width,height:frame.height};});})()`);
+      assert.deepEqual(observed,assets.map(a=>({id:a.id,width:a.width,height:a.height})));rendered+=observed.length;await delay(100);await shot('phase03-phaser-library-'+String(index+1).padStart(2,'0')+'.png');
+    }
+    assert.equal(rendered,90);assert.deepEqual(tools.errors,[]);console.info('Actual Phaser collection gallery: 90 native designs rendered, 10 category captures, no runtime errors.');
   }finally{tools?.close();child.kill();await new Promise(done=>server.close(done));const safe=resolve(profile);if(safe.startsWith(resolve(cache)+sep)){for(let i=0;i<20;i++){try{rmSync(safe,{recursive:true,force:true,maxRetries:2});break;}catch{await delay(100);}}}}
 });

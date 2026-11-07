@@ -20,9 +20,9 @@ function free(doc=emptyDecoration(),assetId='chairTask',orientation:DecorationOb
   throw Error('No free fixture placement');
 }
 test('editor catalog uses only real artwork and native orientation variants; strict bounded payloads reject injection',()=>{
-  assert.equal(editorAssets.length,121);assert.equal(new Set(editorAssets.map(a=>a.id)).size,editorAssets.length);
+  assert.equal(editorAssets.length,211);assert.equal(new Set(editorAssets.map(a=>a.id)).size,editorAssets.length);
   for(const a of editorAssets){assert.ok(a.width>0&&a.height>0);if(a.mode!=='floor')for(const d of a.orientations)assert.ok(assetRect(a.id,d));assert.notEqual(a.mode,'structure');}
-  const migration=readFileSync(new URL('../../../../../supabase/migrations/20261106000300_room_polish_catalog.sql',import.meta.url),'utf8'),sqlCatalog=JSON.parse(migration.match(/select '(\{.*\})'::jsonb;/)![1]!);
+  const migration=readFileSync(new URL('../../../../../supabase/migrations/20261107000100_premium_asset_collection.sql',import.meta.url),'utf8'),sqlCatalog=JSON.parse(migration.match(/select '(\{.*\})'::jsonb;/)![1]!);
   assert.deepEqual(sqlCatalog,Object.fromEntries(editorAssets.map(a=>[a.id,{width:a.width,height:a.height,mode:a.mode,orientations:a.orientations}])),'SQL allowlist cannot drift from the authored catalog');
   for(const value of [null,{...emptyDecoration(),url:'https://invalid'}, {...emptyDecoration(),objects:[object(32,32,'foreign')]},{...emptyDecoration(),objects:[{...object(32,32),collision:[]}]},{...emptyDecoration(),objects:[object(33,32)]},{...emptyDecoration(),objects:[object(-32,32)]},{...emptyDecoration(),objects:[object(32,32,'deskSingle','left')]},{...emptyDecoration(),objects:[{...object(32,32),id:'custom/'+'-'.repeat(36)}]},{...emptyDecoration(),objects:Array.from({length:161},()=>object(32,32))}])assert.throws(()=>parseDecoration(value));
 });

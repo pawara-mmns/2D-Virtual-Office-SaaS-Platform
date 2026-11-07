@@ -21,3 +21,13 @@ Add an entry to `manifest.json`:
 Permitted license labels are `original`, `CC0`, and `licensed`; the latter requires retaining the actual license record with the source. A label is not proof of permission: review provenance before adding files. Run `pnpm assets:office`, then the asset and browser tests. The importer rejects escaping paths/symlinks, mismatched hashes, dimensions, formats, duplicate targets and oversized decoded payloads. It supports all five PNG row filters. It copies native pixels into the same five atlases; editor thumbnails, preview and game consume that exact artwork. No remote fetch or runtime asset upload is involved.
 
 The manifest starts empty intentionally: no generated image is misrepresented as commissioned high-resolution art. Higher-fidelity art can be introduced one reviewed asset at a time. Keep the primary grid and seating constraints, and capture actual Phaser screenshots for every replacement.
+
+Phase 03 adds 90 stable design IDs in `packages/shared/src/environment/collection.ts`.
+Their dimensions, orientation frames, seat anchors, display rectangles and theme
+support are exported in `docs/assets/phase03-collection/catalog.json`. The atlas is
+now 512×2048; the importer and editor use the shared dimensions. New chair frames
+can be replaced individually with `facing: "down"`, `"up"`, `"left"` or `"right"`.
+After replacements, regenerate the review sheets with
+`node --experimental-strip-types scripts/generate-collection-review.mjs --capture`
+and `OFFICE_TEST_BROWSER` set to an installed Chromium browser. Contact sheets use
+the real atlas crops; the Phaser browser suite also renders every new design.

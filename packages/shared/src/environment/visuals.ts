@@ -1,6 +1,7 @@
 import type { OfficeMap, Marker } from '../map.ts';
 import { accents, themes, type EnvironmentConfig } from './catalog.ts';
 import {tileLayer} from '../map.ts';
+import {collectionSpec} from './collection.ts';
 export type PaintRect={x:number;y:number;width:number;height:number;color:string;alpha:number};
 export function environmentPaint(map:OfficeMap,config:EnvironmentConfig){
   const accent=accents.find(a=>a.id===config.overrides.accent)!.color,theme=themes.find(t=>t.id===config.theme)!;
@@ -41,7 +42,9 @@ export function environmentAtmosphere(map:OfficeMap,config:EnvironmentConfig):Pa
   const sources:{x:number;y:number;radius:number;color:string;strength:number}[]=[];
   const add=(x:number,y:number,radius:number,color='ffbf63',strength=.22)=>sources.push({x,y,radius,color,strength});
   for(const p of [...objects('Decorations'),...objects('Placements')]){
-    if(['wallSconce','lamp','lampArc','deskLamp'].includes(p.name))add(p.x+16,p.y+(p.name==='wallSconce'?36:28),52,'ffc16b',.65);
+    const collection=collectionSpec(p.name);
+    if(collection?.light)add(p.x+(p.width??32)/2,p.y+(collection.mode==='wall'?32:Math.min(p.height??32,38)),collection.light==='screen'?36:44,collection.light==='screen'?'a4c8df':'f2cd91',collection.light==='desk'?.24:collection.light==='screen'?.14:.30);
+    else if(['wallSconce','lamp','lampArc','deskLamp'].includes(p.name))add(p.x+16,p.y+(p.name==='wallSconce'?36:28),52,'ffc16b',.65);
     else if(['wallDisplay','gameConsole'].includes(p.name))add(p.x+(p.width??64)/2,p.y+32,40,'92b9ff',.13);
     else if(p.name.startsWith('reception'))add(p.x+(p.width??96)/2,p.y+60,48,'ffd58a',.38);
     else if(['desk','deskSingle','deskDual','deskTriple','deskManager'].includes(p.name))add(p.x+(p.width??64)/2,p.y+27,24,'8aa9ee',.08);

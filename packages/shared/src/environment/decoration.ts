@@ -1,4 +1,4 @@
-import {assetDefinitions,directionalChairRects,type AssetCategory,type AssetMode,type AtlasRect,type ExpandedAsset} from './assets.ts';
+import {assetDefinitions,directionalChairRects,isSurfaceSupport,type AssetCategory,type AssetMode,type AtlasRect,type ExpandedAsset} from './assets.ts';
 import {fixtures,type Fixture} from './rooms.ts';
 import {isChairAsset,catalogSeats} from './seating-metadata.ts';
 import {composeEnvironment} from './compose.ts';
@@ -9,6 +9,7 @@ import {interactionRegistry,seatApproach,standPosition} from '../interactions.ts
 import {canStand} from '../movement.ts';
 import type {EnvironmentConfig} from './catalog.ts';
 import type {AvatarDirection} from '../avatars.ts';
+import {collectionSpec} from './collection.ts';
 
 export const OBJECT_BUDGET=160, HISTORY_LIMIT=60;
 export type DecorationObject={id:string;assetId:string;x:number;y:number;orientation:AvatarDirection};
@@ -23,7 +24,7 @@ export const editorAssets:EditorAsset[]=[
     if(def?.mode==='structure')return[];
     // Every entry references existing authored atlas artwork; architecture is immutable.
     const category=def?.category??(isChairAsset(id)||['sofa','waiting'].includes(id)?'seating':'decor');
-    return[{id,label:label(id),category,mode:def?.mode??'blocking',width:rect[2],height:rect[3],orientations:isChairAsset(id)?['down','left','up','right'] as const:['down'] as const}];
+    return[{id,label:collectionSpec(id)?.label??label(id),category,mode:def?.mode??'blocking',width:rect[2],height:rect[3],orientations:isChairAsset(id)?['down','left','up','right'] as const:['down'] as const}];
   }),
   {id:'rugRunner',label:'Runner rug',category:'floor',mode:'floor',width:128,height:64,orientations:['down']},
   {id:'rugGrid',label:'Grid rug',category:'floor',mode:'floor',width:96,height:64,orientations:['down']},
@@ -60,7 +61,10 @@ export function resolvedObjects(config:EnvironmentConfig,document:DecorationDocu
   // Owner-authored objects win over new optional styling introduced by an art
   // upgrade. Never move an existing saved object to make room for new decor.
   const intersects=(a:DecorationObject,b:DecorationObject)=>{const aa=editorAsset(a.assetId)!,bb=editorAsset(b.assetId)!;return aa.mode!=='floor'&&bb.mode!=='floor'&&aa.mode===bb.mode&&a.x<b.x+bb.width&&a.x+aa.width>b.x&&a.y<b.y+bb.height&&a.y+aa.height>b.y;};
-  return[...base.filter(o=>!document.removed.includes(o.id)&&!(optional.has(o.id)&&!changes.has(o.id)&&document.objects.some(other=>other.id!==o.id&&intersects(o,other)))).map(o=>changes.get(o.id)??o),...document.objects.filter(o=>o.id.startsWith('custom/'))];
+  const result=[...base.filter(o=>!document.removed.includes(o.id)&&!(optional.has(o.id)&&!changes.has(o.id)&&document.objects.some(other=>other.id!==o.id&&intersects(o,other)))).map(o=>changes.get(o.id)??o),...document.objects.filter(o=>o.id.startsWith('custom/'))];
+  // An optional accessory follows its optional support when an owner override
+  // suppresses that furniture. Never silently drop an owner-authored accessory.
+  return result.filter(o=>editorAsset(o.assetId)!.mode!=='surface'||!optional.has(o.id)||changes.has(o.id)||result.some(p=>{const size=editorAsset(p.assetId)!;return isSurfaceSupport(p.assetId)&&o.x>=p.x&&o.y>=p.y&&o.x+editorAsset(o.assetId)!.width<=p.x+size.width&&o.y+editorAsset(o.assetId)!.height<=p.y+Math.min(size.height,32);}));
 }
 export function upsertDecoration(document:DecorationDocument,object:DecorationObject):DecorationDocument{
   return parseDecoration({...document,objects:[...document.objects.filter(o=>o.id!==object.id),object],removed:document.removed.filter(id=>id!==object.id)});
@@ -106,7 +110,7 @@ export function composeDecoratedEnvironment(config:EnvironmentConfig,input:unkno
   for(const room of plan.rooms)for(const door of room.doors)for(const [x,y]of rectangleCells(doorClearance(room,door)))protectedCells.add(`${x}:${y}`);
   for(const lane of group(map,'PassageLanes'))for(const [x,y]of rectangleCells([lane.x/32,lane.y/32,lane.width!/32,lane.height!/32]))protectedCells.add(`${x}:${y}`);
   const added=[...doc.objects].sort((a,b)=>Number(['wall','surface','floor'].includes(editorAsset(a.assetId)!.mode))-Number(['wall','surface','floor'].includes(editorAsset(b.assetId)!.mode))||a.id.localeCompare(b.id));
-  const supports=all.filter(o=>['desk','table','counter','reception','bench'].includes(assetDefinitions[o.assetId as ExpandedAsset]?.kind??'')||['desk','executiveDesk','bench','coffee','meeting','reception','pantry','sideTable','coffeeStation'].includes(o.assetId));
+  const supports=all.filter(o=>isSurfaceSupport(o.assetId));
   const supported=(o:DecorationObject)=>{const a=editorAsset(o.assetId)!;return supports.some(s=>{const surface=editorAsset(s.assetId)!;return o.x>=s.x&&o.y>=s.y&&o.x+a.width<=s.x+surface.width&&o.y+a.height<=s.y+Math.min(surface.height,32);});};
   const occupiedDetails=new Set<number>();
   for(const o of added){

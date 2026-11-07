@@ -15,6 +15,11 @@ interaction chips and editor, adds eight original room accents, and improves
 reception and corridor lighting. The report includes actual playable screenshots,
 regression results and the additional local catalog migration.
 
+[Phase 03 expands the premium asset collection](docs/phase03-premium-collection.md)
+with 90 original designs across ten groups, 211 searchable editor entries,
+five shared theme atlases, visual contact sheets and actual Phaser room captures.
+The report records authoritative seating/placement checks and hosted catalog activation.
+
 A multi-tenant 2D virtual office SaaS platform for distributed teams, with private
 pixel-art offices, realtime movement, chat and meeting-zone voice. **Phase 5
 Step 3A prepares Vercel frontend and Railway realtime hosting, preserving Step 3's

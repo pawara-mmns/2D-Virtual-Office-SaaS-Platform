@@ -1,8 +1,9 @@
 import {chairFamilies,type ChairAsset} from './seating-metadata.ts';
 import type {AvatarDirection} from '../avatars.ts';
+import {collectionDefinitions,collectionChairs} from './collection.ts';
 // Content-owned atlas contract. The first 128 tiles retain their existing art;
 // a deterministic shelf packer assigns new assets below those legacy rows.
-export const environmentAtlas = { width: 512, height: 1152, columns: 16, tileCount: 576 } as const;
+export const environmentAtlas = { width: 512, height: 2048, columns: 16, tileCount: 1024 } as const;
 export type AssetCategory = 'workstations'|'seating'|'storage'|'reception'|'meeting'|'pantry'|'lounge'|'decor'|'training'|'structure';
 export type AssetMode = 'blocking'|'wall'|'surface'|'structure';
 export type AssetSpec = { category: AssetCategory; kind: string; width: number; height: number; variant: string; mode: AssetMode; material?: 'solid'|'glass'|'half'|'threshold' };
@@ -32,6 +33,10 @@ export const displaySurfaces={
   wallDisplay:{x:6,y:6,width:84,height:19,interactive:false},
   gameConsole:{x:6,y:6,width:52,height:19,interactive:false},
   presentationPanel:{x:5,y:5,width:54,height:19,interactive:false},
+  smartDisplayWide:{x:8,y:6,width:80,height:17,interactive:false},
+  tvMediaCredenza:{x:12,y:4,width:72,height:27,interactive:false},
+  tvMobileStand:{x:5,y:6,width:54,height:27,interactive:false},
+  digitalEasel:{x:5,y:5,width:22,height:35,interactive:false},
 } as const;
 export const assetDefinitions = {
   deskSingle:asset('workstations','desk',2,2,'single'),deskDual:asset('workstations','desk',2,2,'dual'),deskLaptop:asset('workstations','desk',2,2,'laptop'),deskStanding:asset('workstations','desk',2,2,'standing'),deskCreative:asset('workstations','desk',2,2,'creative'),deskReturn:asset('workstations','desk',3,2,'return'),deskManager:asset('workstations','desk',3,2,'manager'),benchShared:asset('workstations','bench',4,1,'shared'),benchLaptop:asset('workstations','bench',4,1,'laptop'),
@@ -47,13 +52,14 @@ export const assetDefinitions = {
   wallPanelH:structure('panel-h','solid'),wallPanelV:structure('panel-v','solid'),glassFrostH:structure('frost-h','glass'),glassFrostV:structure('frost-v','glass'),halfShelfH:structure('shelf-h','half'),halfShelfV:structure('shelf-v','half'),doorFlushH:structure('door-h','threshold'),doorFlushV:structure('door-v','threshold'),innerCornerNW:structure('inner-nw','solid'),innerCornerNE:structure('inner-ne','solid'),innerCornerSE:structure('inner-se','solid'),innerCornerSW:structure('inner-sw','solid'),wallEdgeH:structure('edge-h','solid'),wallEdgeV:structure('edge-v','solid'),
   directionalSign:asset('decor','wall',2,1,'direction','wall'),companyPoster:asset('decor','wall',2,1,'poster','wall'),wallSconce:asset('decor','wall',1,1,'sconce','wall'),consoleTable:asset('lounge','table',2,1,'console'),magazineStand:asset('reception','storage',1,2,'magazines'),cornerPlanter:asset('decor','plant',1,1,'corner'),
   ...premiumDefinitions,
+  ...collectionDefinitions,
 } as const satisfies Record<string,AssetSpec>;
 export type ExpandedAsset = keyof typeof assetDefinitions;
 export type AtlasRect = readonly [x:number,y:number,width:number,height:number];
 const packed:Partial<Record<ExpandedAsset,AtlasRect>>={};
 let x=0,y=256,rowHeight=0;
 for(const [id,definition]of Object.entries(assetDefinitions)) {
-  if(Object.hasOwn(premiumDefinitions,id))continue;
+  if(Object.hasOwn(premiumDefinitions,id)||Object.hasOwn(collectionDefinitions,id))continue;
   const w=definition.width*32,h=definition.height*32;
   if(x+w>environmentAtlas.width){x=0;y+=rowHeight;rowHeight=0;}
   if(y+h>environmentAtlas.height)throw Error('Office asset atlas capacity exceeded');
@@ -64,6 +70,7 @@ export const expandedFixtures=packed as Record<ExpandedAsset,AtlasRect>;
 // second furniture item. Append it after existing atlas rectangles to retain IDs.
 export const directionalChairRects={} as Record<ChairAsset,Record<AvatarDirection,AtlasRect>>;
 for(const id of Object.keys(chairFamilies) as ChairAsset[]){
+  if(Object.hasOwn(collectionChairs,id))continue;
   const base=id==='chair'?[64,64,32,32] as const:id==='armchair'?[288,64,32,32] as const:expandedFixtures[id as ExpandedAsset];
   const variants={down:base} as Record<AvatarDirection,AtlasRect>;
   for(const direction of ['up','left','right'] as const){
@@ -81,7 +88,27 @@ for(const [id,spec]of Object.entries(premiumDefinitions)){
   if(y+h>environmentAtlas.height)throw Error('Premium atlas capacity exceeded');
   packed[id as ExpandedAsset]=[x,y,w,h];x+=w;rowHeight=Math.max(rowHeight,h);
 }
+// Phase 03 appends below the complete previous atlas, including its spare rows.
+// Existing saved GIDs, crop coordinates and chair frames therefore stay stable.
+x=0;y=1152;rowHeight=0;
+for(const [id,spec]of Object.entries(collectionDefinitions)){
+  const w=spec.width*32,h=spec.height*32;
+  if(x+w>environmentAtlas.width){x=0;y+=rowHeight;rowHeight=0;}
+  if(y+h>environmentAtlas.height)throw Error('Collection atlas capacity exceeded');
+  packed[id as ExpandedAsset]=[x,y,w,h];x+=w;rowHeight=Math.max(rowHeight,h);
+}
+for(const id of Object.keys(collectionChairs) as (keyof typeof collectionChairs)[]){
+  const variants={down:expandedFixtures[id]} as Record<AvatarDirection,AtlasRect>;
+  for(const direction of ['up','left','right'] as const){
+    if(x+32>environmentAtlas.width){x=0;y+=rowHeight;rowHeight=0;}
+    if(y+32>environmentAtlas.height)throw Error('Collection chair atlas capacity exceeded');
+    variants[direction]=[x,y,32,32];x+=32;rowHeight=Math.max(rowHeight,32);
+  }
+  directionalChairRects[id]=variants;
+}
 export const assetTile=(id:ExpandedAsset)=>{const [x,y]=expandedFixtures[id];return 1+y/32*environmentAtlas.columns+x/32;};
+export function assetRenderDepth(id:string){const mode=assetDefinitions[id as ExpandedAsset]?.mode;return Object.hasOwn(chairFamilies,id)?.1:mode==='surface'||mode==='wall'?.05:0;}
+export function isSurfaceSupport(id:string){return ['desk','table','counter','reception','bench'].includes(assetDefinitions[id as ExpandedAsset]?.kind??'')||['desk','executiveDesk','bench','coffee','meeting','reception','pantry','sideTable','coffeeStation','filingLateral','receptionCredenza','storageLow','cupboard','cabinet'].includes(id);}
 export function assetMaterial(gid:number):AssetSpec['material'] {
   for(const [id,spec]of Object.entries(assetDefinitions))if(spec.mode==='structure'&&assetTile(id as ExpandedAsset)===gid)return spec.material;
   return [11,14,21,22,23,24].includes(gid)?'glass':[12,13,25,26,27,28].includes(gid)?'half':'solid';
