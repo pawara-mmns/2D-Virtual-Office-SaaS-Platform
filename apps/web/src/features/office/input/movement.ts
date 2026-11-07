@@ -13,13 +13,13 @@ export function movement(pressed: ReadonlySet<string>, facing: Direction = "down
   result.x = x / length; result.y = y / length;
   return result;
 }
-export function attachMovementInput(target: EventTarget, focus: () => boolean, globalEvents: EventTarget, interact?:()=>void) {
+export function attachMovementInput(target: EventTarget, focus: () => boolean, globalEvents: EventTarget, interact?:()=>void, onMovementInput?:()=>void) {
   const pressed = new Set<string>();
   const down = (event: Event) => {
     const key = event as KeyboardEvent;
     if(focus()&&key.code==='KeyE'&&!key.altKey&&!key.ctrlKey&&!key.metaKey){key.preventDefault();if(!key.repeat){interact?.();pressed.clear();}return;}
     if (!focus() || key.altKey || key.ctrlKey || key.metaKey || !movementKeys.has(key.code)) return;
-    key.preventDefault(); pressed.add(key.code);
+    key.preventDefault(); if(!key.repeat&&!pressed.has(key.code)&&!key.code.startsWith('Shift'))onMovementInput?.(); pressed.add(key.code);
   };
   const up = (event: Event) => { pressed.delete((event as KeyboardEvent).code); };
   const clear = () => pressed.clear();

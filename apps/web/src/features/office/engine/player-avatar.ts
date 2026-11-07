@@ -31,7 +31,7 @@ export class PlayerAvatar {
     this.key = safeAvatarKey(appearance.avatarKey); this.fullName = avatarDisplayName(appearance.displayName);
     this.walkingDirection = null; this.idleDirection = null; this.labelWidth = -1;
   }
-  renderNetwork(state: PlayerSnapshot, delta: number, local: boolean) {
+  renderNetwork(state: PlayerSnapshot, delta: number, local: boolean, presented=false) {
     const identity = `${state.avatarKey}/${state.displayName}`;
     if (this.networkAppearance !== identity) {
       this.networkAppearance = identity;
@@ -43,7 +43,7 @@ export class PlayerAvatar {
     this.sprite.setVelocity(0, 0);
     if (this.sprite.body) this.sprite.body.enable = false;
     const distance = Phaser.Math.Distance.Between(this.sprite.x, this.sprite.y, state.x, state.y);
-    const factor = distance > 96 || distance < .01 || this.seated!==!!state.seatId ? 1 : 1-Math.exp(-Math.min(delta,100)/32);
+    const factor = presented||distance > 96 || distance < .01 || this.seated!==!!state.seatId ? 1 : 1-Math.exp(-Math.min(delta,100)/32);
     this.sprite.setPosition(Phaser.Math.Linear(this.sprite.x, state.x, factor), Phaser.Math.Linear(this.sprite.y, state.y, factor));
     this.facing = state.direction;
     const pose=avatarMotion(state);this.seated=!!state.seatId;

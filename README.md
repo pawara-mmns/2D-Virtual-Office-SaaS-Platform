@@ -357,6 +357,8 @@ original pixel-office illustration; its links navigate to the vision section.
 The existing landing design is preserved, with a sign-in link added. It provides
 no office interaction.
 
+See the [client movement prediction and performance report](docs/client-movement-prediction.md) for local latency comparisons, recovery validation, development diagnostics and the separate Supabase polling investigation. Run `pnpm test:movement:latency` for the isolated two-client browser probe.
+
 ### Operational readiness
 
 Use `/api/health` (web) and `/health` (realtime) for liveness. Use `/api/ready`

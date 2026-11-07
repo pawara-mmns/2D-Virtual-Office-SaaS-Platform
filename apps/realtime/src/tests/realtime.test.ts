@@ -330,7 +330,7 @@ test("real transport: canonical tenants, authority, presence, capacity, reconnec
     a.connection.events.onmessage = onmessage;
     const measuredSeconds = (performance.now() - measureStart) / 1000;
     const tickCount = localMetrics.simulationTicks - ticksBefore;
-    assert.ok(tickCount >= 20 && tickCount <= 28, "Measured server cadence is near 20Hz");
+    assert.ok(tickCount >= 60 && tickCount <= 82, "Measured authoritative movement cadence is near 60Hz");
     const measured = { seconds: Number(measuredSeconds.toFixed(3)), ticks: tickCount, tickHz: Number((tickCount / measuredSeconds).toFixed(1)),
       meanTickWorkMs: Number(((localMetrics.simulationWorkMs - workBefore) / tickCount).toFixed(3)),
       receivedPayloadBytes: bytes, packets, payloadBytesPerSecondOneObserver: Math.round(bytes / measuredSeconds) };
@@ -360,7 +360,7 @@ test("real transport: canonical tenants, authority, presence, capacity, reconnec
     const leaseClient = local.clients.find((client) => client.auth?.userId === id(7))!;
     (leaseClient.auth as Authorization).checkedAt = Date.now() - AUTH_LEASE_MS;
     await until(() => !(local.state as OfficeState).players.has(leaseClient.sessionId), "hard authorization lease expiry");
-    console.info(JSON.stringify({ scope: "isolated real transport, synthetic auth/chat store", firstRemoteMovementMs: Math.round(latency), committedChatObservedMs: chatLatencyMs, stateUpdatesDuringScenario: stateUpdates, configuredTickHz: 20, twoTenantRooms: true, tenPlayerMeasurement: measured }));
+    console.info(JSON.stringify({ scope: "isolated real transport, synthetic auth/chat store", firstRemoteMovementMs: Math.round(latency), committedChatObservedMs: chatLatencyMs, stateUpdatesDuringScenario: stateUpdates, configuredTickHz: 60, twoTenantRooms: true, tenPlayerMeasurement: measured }));
   } finally {
     for (const room of rooms) { room.reconnection.enabled = false; if (room.connection.isOpen) await room.leave(); room.removeAllListeners(); }
     try {
@@ -374,4 +374,21 @@ test("real transport: canonical tenants, authority, presence, capacity, reconnec
       assert.equal(voiceDuringShutdown,503,"Voice admission must also stop at the beginning of drain");
     } finally {releaseAuthorization?.();await closeVoice();}
   }
+});
+
+test('native prediction inputs: exact consumed acknowledgements, server speed budget, and pose/map epoch fences',{timeout:20000},async()=>{
+  const geometry=composeEnvironment(defaultEnvironment),office=id(992),authorize:Authorize=async()=>({userId:id(993),organizationId:id(994),officeId:office,token:'native-fixture',checkedAt:Date.now(),expiresAt:Date.now()+60000,displayName:'Native fixture',avatarKey:'fern'});
+  const server=createRealtimeServer({authorize,map:geometry,origins:[origin]});await server.listen(0,'127.0.0.1');const address=server.transport.server!.address();assert.ok(address&&typeof address==='object');const url=`http://127.0.0.1:${address.port}`;let room:SDKRoom|undefined;
+  try{
+    const reservation=await fetch(url+'/office/join',{method:'POST',headers:{Origin:origin,'Content-Type':'application/json',Authorization:'Bearer native-fixture'},body:JSON.stringify({officeId:office,mapVersion:mapVersion(geometry)})});assert.equal(reservation.status,200);
+    room=await new Client(url,{headers:{Origin:origin}}).consumeSeatReservation<OfficeState>(await reservation.json());room.onMessage('voice.state',()=>{});room.onMessage('proximity.state',()=>{});
+    await until(()=>room!.state.players?.has(room!.sessionId),'native state');const live=matchMaker.getLocalRoomById(room.roomId),p=(live.state as OfficeState).players.get(room.sessionId)!;
+    let start:{x:number;y:number}|undefined;for(let y=32;y<geometry.height*32-64&&!start;y+=32)for(let x=64;x<geometry.width*32-260&&!start;x+=32)if(Array.from({length:240},(_,n)=>canStand(geometry,x+n,y)).every(Boolean))start={x,y};assert.ok(start);Object.assign(p,start);p.movementEpoch++;await delay(80);
+    const input=room.input<{x:number;y:number;run:boolean;epoch:number;revision:number}>({mode:'reliable'});assert.equal(input.tickRate,60);
+    const send=(x:number,epoch=p.movementEpoch,revision=0,run=false)=>{Object.assign(input.data,{x,y:0,run,epoch,revision});return input.send();};
+    for(let n=0;n<20;n++){send(1);await delay(17);}await until(()=>input.lastProcessed===input.sentCount,'processed native ack');assert.ok(p.x>start.x+20&&p.x<=start.x+40.01,'server applies only 20 deterministic 1/60-second walk steps');
+    const walk=p.x-start.x,beforeRun=p.x;for(let n=0;n<20;n++){send(1,p.movementEpoch,0,true);await delay(17);}await until(()=>input.lastProcessed===input.sentCount,'run ack');assert.ok(Math.abs((p.x-beforeRun)/walk-1.6)<.02,'run remains 1.6× walking');
+    const frozen=p.x;p.movementEpoch++;for(let n=0;n<3;n++){send(1,p.movementEpoch-1);await delay(17);}for(let n=0;n<3;n++){send(1,p.movementEpoch,1);await delay(17);}send(127);await until(()=>input.lastProcessed===input.sentCount,'rejected intent ack');assert.equal(p.x,frozen,'old pose, wrong map revision and out-of-domain vectors cannot move authority');
+    const burstStart=p.x;for(let n=0;n<12;n++)send(1);await until(()=>input.lastProcessed===input.sentCount,'bounded overflow ack');assert.ok(p.x-burstStart<=12,'a burst cannot fast-forward 12 movement steps');await delay(150);assert.equal(p.isMoving,false,'absence of fresh native inputs does not retain a held command');
+  }finally{if(room)await room.leave();await server.gracefullyShutdown(false);}
 });

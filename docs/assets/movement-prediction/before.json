@@ -1,0 +1,105 @@
+{
+  "phase": "before",
+  "scope": "actual local two-client Phaser/Colyseus over ordered delayed WebSocket proxy; synthetic identities, no hosted service",
+  "profiles": [
+    {
+      "rtt": 0,
+      "jitter": 0,
+      "samples": [
+        {
+          "visibleMs": 103.79999999888241,
+          "authoritativeMs": 103.79999999888241
+        },
+        {
+          "visibleMs": 153.7000000011176,
+          "authoritativeMs": 153.7000000011176
+        },
+        {
+          "visibleMs": 142.09999999962747,
+          "authoritativeMs": 142.09999999962747
+        },
+        {
+          "visibleMs": 129.2999999988824,
+          "authoritativeMs": 129.2999999988824
+        }
+      ],
+      "visibleMeanMs": 132.22499999962747,
+      "authoritativeMeanMs": 132.22499999962747
+    },
+    {
+      "rtt": 80,
+      "jitter": 10,
+      "samples": [
+        {
+          "visibleMs": 211,
+          "authoritativeMs": 211
+        },
+        {
+          "visibleMs": 248.40000000037253,
+          "authoritativeMs": 248.40000000037253
+        },
+        {
+          "visibleMs": 181.69999999925494,
+          "authoritativeMs": 181.69999999925494
+        },
+        {
+          "visibleMs": 175.5,
+          "authoritativeMs": 175.5
+        }
+      ],
+      "visibleMeanMs": 204.14999999990687,
+      "authoritativeMeanMs": 204.14999999990687
+    },
+    {
+      "rtt": 180,
+      "jitter": 35,
+      "samples": [
+        {
+          "visibleMs": 264.5,
+          "authoritativeMs": 264.5
+        },
+        {
+          "visibleMs": 290.59999999962747,
+          "authoritativeMs": 290.59999999962747
+        },
+        {
+          "visibleMs": 312.2999999988824,
+          "authoritativeMs": 312.2999999988824
+        },
+        {
+          "visibleMs": 297.09999999962747,
+          "authoritativeMs": 297.09999999962747
+        }
+      ],
+      "visibleMeanMs": 291.12499999953434,
+      "authoritativeMeanMs": 291.12499999953434
+    },
+    {
+      "rtt": 300,
+      "jitter": 60,
+      "samples": [
+        {
+          "visibleMs": 410.30000000074506,
+          "authoritativeMs": 410.30000000074506
+        },
+        {
+          "visibleMs": 353.5,
+          "authoritativeMs": 353.5
+        },
+        {
+          "visibleMs": 375,
+          "authoritativeMs": 375
+        },
+        {
+          "visibleMs": 355.59999999962747,
+          "authoritativeMs": 355.59999999962747
+        }
+      ],
+      "visibleMeanMs": 373.60000000009313,
+      "authoritativeMeanMs": 373.60000000009313
+    }
+  ],
+  "simulationTicks": 392,
+  "serverMeanWorkMs": 0.2008943877550448,
+  "runtimeErrors": []
+}
