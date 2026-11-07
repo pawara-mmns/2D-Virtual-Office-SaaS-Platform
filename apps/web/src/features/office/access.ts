@@ -16,5 +16,5 @@ export async function resolveOfficeAccess(id: string, source: OfficeAccessSource
   if (!organization || organization.id !== id || organization.status !== "ACTIVE" || !membership || membership.organization_id !== id || membership.status !== "ACTIVE" || !["OWNER", "ADMIN", "MEMBER"].includes(membership.role)) return { status: "denied" } as const;
   const office = await source.office(id);
   if (!office || office.organization_id !== id || !isOrganizationId(office.id)) return { status: "unavailable" } as const;
-  return { status: "allowed", organization, office } as const;
+  return { status: "allowed", organization, office, isOwner:membership.role==='OWNER' } as const;
 }

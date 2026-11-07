@@ -13,6 +13,10 @@ import type { VoiceService } from "../voice/service.ts";
 import { createProximity } from '../voice/proximity.ts';
 import { conversationSpace } from '../voice/space.ts';
 import type { ProximitySettings } from '../../../../packages/shared/src/proximity.ts';
+import { parseInteraction } from '../../../../packages/shared/src/interactions.ts';
+import { createSeating } from '../interactions/seating.ts';
+import {LiveOffice,type LiveStore} from '../environment/live.ts';
+import {structureVersion,type LiveDelta} from '../../../../packages/shared/src/environment/live-decoration.ts';
 
 type OfficeClient = Client<{ auth: Authorization }>;
 type Control = { input: MoveInput; lastInput: number; window: number; messages: number; refreshing: boolean; nextCheck: number };
@@ -22,6 +26,7 @@ export type RoomServices = {
   voice?: VoiceService;
   proximity?:Partial<ProximitySettings>;
   loadMap?: EnvironmentMaps;
+  liveStore?:LiveStore;
   claimed(officeId: string, userId: string, sessionId: string): boolean;
   release(officeId: string, userId: string, sessionId: string): void;
   disposed(officeId: string, roomId: string): void;
@@ -44,12 +49,21 @@ export function officeRoomClass(services: RoomServices) {
     private proximity!:ReturnType<typeof createProximity>;
     private proximityAt=new Map<string,number>();
     private proximityRevision=new Map<string,number>();
+    private seating!:ReturnType<typeof createSeating>;
+    private interactionAt=new Map<string,number>();
+    private interactionSeq=new Map<string,number>();
+    private live?:LiveOffice;
+    private liveStarting?:Promise<void>;
+    private editPending=new Set<string>();
+    private editAt=new Map<string,number>();
+    private editWindows=new Map<string,{at:number;count:number}>();
     // All default matchmaking paths fail closed. Only our authorized endpoint
     // can reserve seats with trusted authData. Never inherit bundle JWT defaults.
     static async onAuth(): Promise<never> { throw new ServerError(403, "Use authorized office admission."); }
     onCreate(options: { officeId: string; map?: OfficeMap }) {
       this.officeMap = options.map ?? services.map;
       this.state.officeId = options.officeId;
+      this.seating=createSeating(this.officeMap,this.state.seats);
       this.proximity=createProximity(options.officeId,services.voice,services.proximity,Date.now,conversationSpace(this.officeMap));
       this.state.mapVersion = mapVersion(this.officeMap);
       this.seatReservationTimeout = 10;
@@ -64,6 +78,22 @@ export function officeRoomClass(services: RoomServices) {
         if (value.seq <= control.input.seq) return;
         control.input = value; control.lastInput = now;
       });
+      this.onMessage('object.interact',(client,value:unknown)=>{
+        const now=Date.now(),player=this.state.players.get(client.sessionId),request=parseInteraction(value),auth=client.auth;
+        const reject=(code:string)=>client.send('object.error',{code});
+        if(!player?.connected||!auth||now>=auth.expiresAt||now-auth.checkedAt>=AUTH_LEASE_MS){reject('DENIED');return;}
+        if(!request||request.seq<=(this.interactionSeq.get(client.sessionId)??-1)){reject('INVALID');return;}
+        this.interactionSeq.set(client.sessionId,request.seq);
+        if(now-(this.interactionAt.get(client.sessionId)??0)<250){reject('RATE_LIMIT');return;}
+        this.interactionAt.set(client.sessionId,now);
+        const result=this.seating.act(client.sessionId,player,request,now);
+        if(result!=='OK'){reject(result);return;}
+        const control=this.controls.get(client.sessionId);
+        // Explicit E/touch stand clears cached input; only fresh intent may walk.
+        if(control){control.input={seq:control.input.seq,x:0,y:0};control.lastInput=0;}
+      });
+      this.onMessage('environment.sync',client=>{const now=Date.now();if(now-(this.editAt.get('sync/'+client.sessionId)??0)<300)return;this.editAt.set('sync/'+client.sessionId,now);if(this.live&&this.state.players.get(client.sessionId)?.connected)client.send('environment.snapshot',this.live.snapshot);});
+      this.onMessage('environment.edit',(client,value:unknown)=>{void this.editEnvironment(client,value);});
       this.onMessage("credential", (client, value: unknown) => {
         const control = this.controls.get(client.sessionId);
         if (!control || control.refreshing || typeof value !== "string" || value.length > 8192) return;
@@ -85,9 +115,34 @@ export function officeRoomClass(services: RoomServices) {
       try {
         const fresh = await services.authorize(auth.token, this.state.officeId);
         const current = await services.loadMap(fresh);
-        if (this.clients.length && mapVersion(current) !== this.state.mapVersion) await this.disconnect(ENVIRONMENT_CHANGED_CODE);
+        if (this.clients.length && mapVersion(current) !== this.state.mapVersion && (!this.live||structureVersion(current)!==this.state.structureVersion)) await this.disconnect(ENVIRONMENT_CHANGED_CODE);
       } catch { /* Never substitute geometry on an outage; normal auth leases still apply. */ }
       finally { this.checkingEnvironment = false; }
+    }
+    private async editEnvironment(client:OfficeClient,value:unknown){
+      const operationId=value&&typeof value==='object'&&'operationId'in value&&typeof value.operationId==='string'?value.operationId.slice(0,36):'';
+      const fail=(message:string)=>client.send('environment.reply',{operationId,ok:false,message,snapshot:this.live?.snapshot});
+      if(!this.live||!services.liveStore){fail('Live editing is unavailable. Check the realtime editor configuration.');return;}
+      const now=Date.now(),previous=this.editWindows.get(client.sessionId),window=previous&&now-previous.at<1000?previous:{at:now,count:0};this.editWindows.set(client.sessionId,window);
+      if(this.editPending.has(client.sessionId)||++window.count>20){fail('Wait for the previous edit to finish.');return;}
+      this.editAt.set(client.sessionId,Date.now());this.editPending.add(client.sessionId);
+      try{
+        const auth=await this.actionIdentity(client);
+        const result=await this.live.run(value,auth,services.liveStore,()=>this.state.players.values(),()=>new Map([...this.controls].map(([id,c])=>[id,Date.now()-c.lastInput<250?c.input:{x:0,y:0}])),(map,delta)=>this.applyLiveMap(map,delta));
+        client.send('environment.reply',{operationId,ok:true,snapshot:result.snapshot});
+      }catch(error){fail(error instanceof Error?error.message:'The edit could not be accepted.');}
+      finally{this.editPending.delete(client.sessionId);}
+    }
+    private applyLiveMap(map:OfficeMap,delta:LiveDelta){
+      this.officeMap=map;this.seating.updateMap(map);
+      this.state.environmentRevision=delta.revision;
+      if(delta.saved)this.state.mapVersion=mapVersion(map);
+      this.broadcast('environment.delta',delta);
+    }
+    private async startLive(auth:Authorization){
+      if(!services.liveStore)return;
+      if(!this.liveStarting)this.liveStarting=(async()=>{const seed=await services.liveStore!.read(auth);const live=new LiveOffice(seed.config,seed.workspace,this.state.officeId);if(mapVersion(live.map)!==this.state.mapVersion)throw Error('Office setup changed during admission.');this.live=live;this.state.structureVersion=live.snapshot.structureVersion;this.state.environmentEpoch=live.snapshot.epoch;})();
+      try{await this.liveStarting;}catch{this.liveStarting=undefined;/* Movement remains available when editing storage is unavailable. */}
     }
     private async actionIdentity(client: OfficeClient) {
       const auth = client.auth;
@@ -144,6 +199,7 @@ export function officeRoomClass(services: RoomServices) {
         const fresh = await services.authorize(auth.token, this.state.officeId);
         if (client.state === ClientState.LEAVING || client.state === ClientState.CLOSED || fresh.userId !== auth.userId || fresh.organizationId !== auth.organizationId || this.state.players.size >= 10 || [...this.state.players.values()].some((p) => p.userId === fresh.userId)) throw new Error();
         client.auth = fresh;
+        await this.startLive(fresh);
         const spawn = mapMarkers(this.officeMap).find((m) => m.type === "spawn")!;
         let spawnX = spawn.x;
         for (let i = 0; i < 20; i++) {
@@ -154,12 +210,14 @@ export function officeRoomClass(services: RoomServices) {
         Object.assign(player, { sessionId: client.sessionId, userId: fresh.userId, avatarKey: fresh.avatarKey, displayName: fresh.displayName, x: spawnX, y: spawn.y });
         this.state.players.set(client.sessionId, player);
         this.controls.set(client.sessionId, { input: { seq: -1, x: 0, y: 0 }, lastInput: 0, window: Date.now(), messages: 0, refreshing: false, nextCheck: Date.now() + AUTH_CHECK_MS });
+        const pending=this.live?.pendingFor(fresh.userId);if(pending)void this.editEnvironment(client,pending);
       } catch {
         if (client.auth) services.release(this.state.officeId, client.auth.userId, client.sessionId);
         throw new ServerError(403, "Office access denied.");
       }
     }
     private deny(client: OfficeClient) {
+      this.seating.release(client.sessionId,this.state.players.get(client.sessionId));
       this.proximity.leave(client.sessionId);
       services.voice?.leave(client.sessionId);
       this.revoked.add(client.sessionId);
@@ -191,13 +249,14 @@ export function officeRoomClass(services: RoomServices) {
         if (!control || !player) continue;
         if (!client.auth || now >= client.auth.expiresAt || now - client.auth.checkedAt >= AUTH_LEASE_MS) { this.deny(client); continue; }
         if (now >= control.nextCheck && !control.refreshing) void this.revalidate(client);
-        simulate(this.officeMap, player, now - control.lastInput < 250 && player.connected ? control.input : { x: 0, y: 0 });
+        if(!this.seating.transitioning(client.sessionId,now))simulate(this.officeMap, player, now - control.lastInput < 250 && player.connected ? control.input : { x: 0, y: 0 });
       }
       this.proximity.sync(this.clients.flatMap(client=>{const p=this.state.players.get(client.sessionId);return p?.connected&&client.auth?[{sessionId:client.sessionId,auth:client.auth,x:p.x,y:p.y,meeting:!!meetingZone(this.officeMap,p.x,p.y)}]:[];}),
         (id,value)=>this.clients.find(c=>c.sessionId===id)?.send('proximity.state',value),(id,value)=>this.clients.find(c=>c.sessionId===id)?.send('voice.state',value));
       this.simulationWorkMs += performance.now() - began;
     }
     onDrop(client: OfficeClient) {
+      this.seating.release(client.sessionId,this.state.players.get(client.sessionId));
       this.proximityRevision.set(client.sessionId,(this.proximityRevision.get(client.sessionId)??0)+1);
       this.proximity.leave(client.sessionId);
       services.voice?.leave(client.sessionId);
@@ -216,8 +275,13 @@ export function officeRoomClass(services: RoomServices) {
       this.state.players.get(client.sessionId)!.connected = true;
       const control = this.controls.get(client.sessionId)!;
       control.input = { seq: control.input.seq, x: 0, y: 0 }; control.lastInput = 0; control.nextCheck = Date.now() + AUTH_CHECK_MS;
+      if(this.live)client.send('environment.snapshot',this.live.snapshot);
+      const pending=this.live?.pendingFor(fresh.userId);if(pending)void this.editEnvironment(client,pending);
     }
     onLeave(client: OfficeClient) {
+      this.editAt.delete(client.sessionId);this.editAt.delete('sync/'+client.sessionId);this.editPending.delete(client.sessionId);
+      this.editWindows.delete(client.sessionId);
+      this.seating.release(client.sessionId,this.state.players.get(client.sessionId));this.interactionAt.delete(client.sessionId);this.interactionSeq.delete(client.sessionId);
       this.proximityRevision.delete(client.sessionId);
       this.proximity.leave(client.sessionId);this.proximityAt.delete(client.sessionId);
       services.voice?.leave(client.sessionId);
@@ -225,6 +289,6 @@ export function officeRoomClass(services: RoomServices) {
       this.state.players.delete(client.sessionId); this.controls.delete(client.sessionId); this.revoked.delete(client.sessionId);
       if (client.auth) services.release(this.state.officeId, client.auth.userId, client.sessionId);
     }
-    onDispose() { this.proximity.close();this.proximityAt.clear();for (const id of this.state.players.keys()) services.voice?.leave(id); this.controls.clear(); this.revoked.clear(); this.chatPending.clear(); this.statusPending.clear(); this.statusAt.clear(); services.disposed(this.state.officeId, this.roomId); }
+    onDispose() { this.seating.clear();this.interactionAt.clear();this.interactionSeq.clear();this.proximity.close();this.proximityAt.clear();for (const id of this.state.players.keys()) services.voice?.leave(id); this.controls.clear(); this.revoked.clear(); this.chatPending.clear(); this.statusPending.clear(); this.statusAt.clear(); services.disposed(this.state.officeId, this.roomId); }
   };
 }

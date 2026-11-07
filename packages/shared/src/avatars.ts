@@ -17,6 +17,14 @@ export function safeAvatarKey(value: unknown): AvatarKey { return isAvatarKey(va
 export function avatarBaseFrame(key: AvatarKey) { return avatarPresets.find((preset) => preset.key === key)!.index * 12; }
 export function avatarIdleFrame(key: AvatarKey, direction: AvatarDirection) { return avatarBaseFrame(key) + avatarDirections.indexOf(direction) * 3; }
 export function avatarAnimationKey(key: AvatarKey, direction: AvatarDirection) { return `avatar-${key}-${direction}-walk`; }
+export function avatarSittingFrame(key:AvatarKey,direction:AvatarDirection){return avatarPresets.length*12+avatarIdleFrame(key,direction);}
+export type AvatarMotionState='IDLE'|'WALKING'|'RUNNING'|'SITTING'|'STANDING';
+export function avatarMotion(state:{seatId?:string;isMoving:boolean;isRunning?:boolean;motionState?:string;connected:boolean}):AvatarMotionState {
+  if(state.seatId&&state.connected)return 'SITTING';
+  if(!state.connected)return 'IDLE';
+  if(state.motionState==='STANDING')return 'STANDING';
+  return state.isMoving?state.isRunning?'RUNNING':'WALKING':'IDLE';
+}
 export function avatarDisplayName(value: unknown) {
   if (typeof value !== "string") return "Member";
   const normalized = value.normalize("NFKC");

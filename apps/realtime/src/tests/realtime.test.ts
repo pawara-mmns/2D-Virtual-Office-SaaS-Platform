@@ -17,6 +17,10 @@ import { createVoiceService } from "../voice/service.ts";
 import type { VoiceProvider } from "../voice/provider.ts";
 import type { VoiceZoneState } from "../../../../packages/shared/src/voice.ts";
 import type { ProximityState, VoiceBubble } from '../../../../packages/shared/src/proximity.ts';
+import { composeEnvironment } from '../../../../packages/shared/src/environment/compose.ts';
+import { defaultEnvironment } from '../../../../packages/shared/src/environment/catalog.ts';
+import { interactionRegistry, seatApproach } from '../../../../packages/shared/src/interactions.ts';
+import { canStand } from '../movement/simulation.ts';
 
 // Real HTTP/WebSockets and Schema synchronization; synthetic authorization only.
 // Never contacts Supabase or represents live-account validation.
@@ -34,6 +38,44 @@ const origin = "http://localhost:3000";
 async function until(check: () => boolean, message: string, timeout = 6000) {
   const start = Date.now(); while (!check()) { if (Date.now() - start > timeout) throw new Error(`Timed out: ${message}`); await delay(20); }
 }
+
+test('real transport: running replication, contested and multi-slot seats, disconnect and environment retirement', {timeout:30000},async()=>{
+  const office=id(880),geometry=composeEnvironment(defaultEnvironment);let changed=false;
+  const authorize:Authorize=async(token,requested)=>{const n=Number(String(token).replace('seat-',''));if(!n||requested!==office)throw new AccessDenied();return{userId:id(n),organizationId:id(881),officeId:office,token:String(token),checkedAt:Date.now(),expiresAt:Date.now()+60000,displayName:'Seat fixture',avatarKey:n===1?'fern':'plum'};};
+  const server=createRealtimeServer({authorize,map:geometry,origins:[origin],loadMap:async()=>changed?composeEnvironment({...defaultEnvironment,theme:'minimal-light'}):geometry});
+  await server.listen(0,'127.0.0.1');const address=server.transport.server!.address();assert.ok(address&&typeof address==='object');const url=`http://127.0.0.1:${address.port}`,rooms:SDKRoom[]=[],errors:string[]=[],transports:(()=>void)[]=[];
+  const join=async(n:number)=>{const response=await fetch(url+'/office/join',{method:'POST',headers:{Origin:origin,'Content-Type':'application/json',Authorization:`Bearer seat-${n}`},body:JSON.stringify({officeId:office,mapVersion:mapVersion(geometry)})});assert.equal(response.status,200);const room=await new Client(url,{headers:{Origin:origin}}).consumeSeatReservation<OfficeState>(await response.json());rooms.push(room);transports.push(protectReconnectUrl(room.connection,(address,protocol)=>{const Socket=NodeSocket as unknown as new(address:string,protocol:string,options:{headers:{Origin:string}})=>WebSocket;return new Socket(address,protocol,{headers:{Origin:origin}});}));room.onMessage('proximity.state',()=>{});room.onMessage('voice.state',()=>{});room.onMessage('object.error',(v:{code:string})=>errors.push(v.code));await until(()=>room.state.players?.has(room.sessionId),'initial seat fixture state');return room;};
+  try{
+    const a=await join(1),b=await join(2),local=matchMaker.getLocalRoomById(a.roomId),state=local.state as OfficeState;
+    let runway:{x:number;y:number}|undefined;
+    for(let y=32;y<geometry.height*32-32&&!runway;y+=32)for(let x=48;x<geometry.width*32-100;x+=32)if(Array.from({length:70},(_,n)=>canStand(geometry,x+n,y)).every(Boolean)){runway={x,y};break;}
+    assert.ok(runway);Object.assign(state.players.get(a.sessionId)!,runway);
+    a.send('input',{seq:0,x:1,y:0,run:true});await until(()=>b.state.players.get(a.sessionId)?.motionState==='RUNNING','remote running animation');assert.equal(b.state.players.get(a.sessionId)!.isRunning,true);
+    a.send('input',{seq:1,x:1,y:0,run:false});await until(()=>b.state.players.get(a.sessionId)?.motionState==='WALKING','remote walking transition');
+    a.send('input',{seq:2,x:0,y:0,run:false});await until(()=>!b.state.players.get(a.sessionId)!.isMoving,'stop');
+    const objects=interactionRegistry(geometry),sofa=objects.find(o=>o.objectType==='sofa'&&o.slots.filter(s=>s.approaches.some(p=>seatApproach(geometry,o,s,p))).length>=2)!;
+    const slots=sofa.slots.filter(s=>s.approaches.some(p=>seatApproach(geometry,sofa,s,p))),first=slots[0]!,second=slots[1]!;
+    const start=first.approaches.find(p=>seatApproach(geometry,sofa,first,p))!;
+    Object.assign(state.players.get(a.sessionId)!,start);Object.assign(state.players.get(b.sessionId)!,start);
+    const sit={action:'SIT',objectId:sofa.instanceId,slotId:first.id,seq:0};a.send('object.interact',sit);b.send('object.interact',sit);
+    await until(()=>a.state.seats.size===1&&errors.includes('OCCUPIED'),'one atomic winner');
+    const winner=a.state.seats.get(first.id)===a.sessionId?a:b,loser=winner===a?b:a;
+    assert.equal(a.state.players.get(winner.sessionId)!.motionState,'SITTING');
+    const anchor={x:state.players.get(winner.sessionId)!.x,y:state.players.get(winner.sessionId)!.y};winner.send('input',{seq:50,x:1,y:1,run:true});await delay(150);assert.equal(state.players.get(winner.sessionId)!.x,anchor.x);assert.equal(state.players.get(winner.sessionId)!.y,anchor.y);
+    const approach=second.approaches.find(p=>seatApproach(geometry,sofa,second,p))!;Object.assign(state.players.get(loser.sessionId)!,approach);
+    await delay(280);loser.send('object.interact',{action:'SIT',objectId:sofa.instanceId,slotId:second.id,seq:1});await until(()=>a.state.seats.size===2,'sofa has two owners');
+    winner.send('object.interact',{action:'STAND',objectId:sofa.instanceId,slotId:first.id,seq:1});await until(()=>a.state.seats.size===1,'stand releases occupancy');assert.ok(canStand(geometry,state.players.get(winner.sessionId)!.x,state.players.get(winner.sessionId)!.y));
+    loser.reconnection.enabled=false;loser.connection.close();await until(()=>state.seats.size===0,'drop immediately releases before reconnect timeout');
+    Object.assign(state.players.get(winner.sessionId)!,start);await delay(280);winner.send('object.interact',{...sit,seq:2});await until(()=>state.seats.size===1,'seat before reload');
+    winner.reconnection.minUptime=0;winner.reconnection.maxRetries=4;winner.reconnection.maxDelay=500;
+    winner.connection.close();await until(()=>state.seats.size===0&&!state.players.get(winner.sessionId)!.connected,'seated drop releases occupancy');
+    await until(()=>state.players.get(winner.sessionId)!.connected&&winner.connection.isOpen,'seated user reconnects standing');
+    assert.equal(state.players.get(winner.sessionId)!.seatId,'');assert.ok(canStand(geometry,state.players.get(winner.sessionId)!.x,state.players.get(winner.sessionId)!.y));
+    Object.assign(state.players.get(winner.sessionId)!,start);await delay(280);winner.send('object.interact',{...sit,seq:3});await until(()=>state.seats.size===1,'reclaim after reconnect');
+    let code=0;winner.onLeave(value=>{code=value;});changed=true;
+    await until(()=>code===4052,'environment retires room',10000);await until(()=>state.seats.size===0,'retired room has no occupancy');
+  }finally{for(const room of rooms){room.reconnection.enabled=false;if(room.connection.isOpen)await room.leave();room.removeAllListeners();}for(const cleanup of transports)cleanup();await server.gracefullyShutdown(false);}
+});
 
 test('real transport: proximity consent, independent rooms, lock/join races, stale HTTP grants and meeting precedence', {timeout:30_000}, async()=>{
   const officeId=id(501),otherOffice=id(502),members=new Map<string,Set<string>>(),issued:{room:string;identity:string}[]=[],removed:string[]=[];

@@ -1,6 +1,8 @@
 import { layouts, themes, type EnvironmentConfig } from './catalog.ts';
 import type { RoomSpec } from './plans.ts';
 import { expandedFixtures } from './assets.ts';
+import type {AvatarDirection} from '../avatars.ts';
+import {collectionDefinitions,type CollectionAsset} from './collection.ts';
 
 export const fixtures = {
   desk:[0,64,64,64],executiveDesk:[0,192,96,64],bench:[128,128,128,32],divider:[0,128,64,32],chair:[64,64,32,32],plant:[96,64,32,64],ceramic:[448,64,32,64],sofa:[128,64,96,64],coffee:[224,64,64,32],armchair:[288,64,32,32],meeting:[320,64,128,64],books:[0,160,96,32],board:[96,160,64,32],reception:[160,160,96,64],cabinet:[256,160,64,32],lamp:[320,160,32,64],notice:[352,160,64,32],pantry:[448,160,64,64],
@@ -8,7 +10,7 @@ export const fixtures = {
   ...expandedFixtures,
 } as const;
 export type Fixture = keyof typeof fixtures;
-export type PlaceFixture = (name: Fixture, dx: number, dy: number) => boolean;
+export type PlaceFixture = (name: Fixture, dx: number, dy: number, options?:{facing?:AvatarDirection;preserveConnectivity?:boolean}) => boolean;
 export const roomModules = {
   reception:{label:'RECEPTION',floor:6},meeting:{label:'MEETING ROOM',floor:5},pantry:{label:'COFFEE & PANTRY',floor:7},lounge:{label:'LOUNGE',floor:4},work:{label:'WORKSTATIONS',floor:0},collaboration:{label:'COLLABORATION',floor:8},training:{label:'TRAINING',floor:8},'private-office':{label:'PRIVATE OFFICE',floor:5},utility:{label:'PRINT & STORAGE',floor:7},
 } as const;
@@ -38,12 +40,12 @@ export function furnishRoom(room: RoomSpec, config: EnvironmentConfig, density: 
       at('chairVisitor',2,h-5);at('bookcase',w-5,1);
     } else if(config.furniture==='collaborative') {
       if(kind==='collaboration'&&w>=14&&seed%3===0) {
-        const tx=center-1,ty=4;at('collaborationRound',tx,ty);for(const [a,b]of[[tx-1,ty+1],[tx+3,ty+1],[tx,ty+2],[tx+2,ty+2]])at('chairVisitor',a!,b!);
+        const tx=center-1,ty=4;at('collaborationRound',tx,ty);at('chairVisitor',tx-1,ty+1,{facing:'right'});at('chairVisitor',tx+3,ty+1,{facing:'left'});at('chairVisitor',tx,ty+2,{facing:'up'});at('chairVisitor',tx+2,ty+2,{facing:'up'});
         at('mobileBoard',1,1);
       } else {
         const columns=w>=20?[2,center-2,w-6]:w>=14?[2,w-6]:[center-2];
         const rows=kind==='training'&&h>=16?[3,7,11]:[3,h>=13?7:6];
-        for(const [index,row]of rows.entries())for(const col of columns){const bench=pick(['benchShared','benchLaptop'],index+col);if(at(bench,col,row))for(const dx of[0,2])at(kind==='training'?'chairClassroom':chair,col+dx,row+1);}
+        for(const [index,row]of rows.entries())for(const col of columns){const bench=pick(['benchShared','benchLaptop'],index+col);if(at(bench,col,row))for(const dx of[0,2])at(kind==='training'?'chairClassroom':chair,col+dx,row+1,{facing:'up'});}
       }
     } else {
       const columns=w>=14?[2,center-1,w-4]:[1,w-3];
@@ -60,7 +62,7 @@ export function furnishRoom(room: RoomSpec, config: EnvironmentConfig, density: 
     if(at(table,tx,ty))at('conferenceDevice',tx+Math.floor(tw/2),ty);
     at(pick(tech?['wallDisplay','glassBoard']:['whiteboard','glassBoard','wallDisplay']),center-1,0);
     const seat=pick(['chairMeeting','chairVisitor']);
-    for(const dx of[0,tw-1]){at(seat,tx+dx,ty-1);at(seat,tx+dx,ty+2);}at(seat,tx-1,ty+1);at(seat,tx+tw,ty+1);
+    for(const dx of[0,tw-1]){at(seat,tx+dx,ty-1,{facing:'down'});at(seat,tx+dx,ty+2,{facing:'up'});}at(seat,tx-1,ty+1,{facing:'right'});at(seat,tx+tw,ty+1,{facing:'left'});
     if(density>0)at('waterDispenser',w-2,1);
     if(density>1)at('presentationDesk',1,h-3);
   } else if(kind==='lounge') {
@@ -72,7 +74,7 @@ export function furnishRoom(room: RoomSpec, config: EnvironmentConfig, density: 
     const counter=pick(['pantryCounter','pantry']);if(at(counter,1,2)||(counter!=='pantry'&&at('pantry',1,2)))at('microwave',2,2);
     const service=pick(['coffeeStation','espressoMachine','snackShelf']);at(service,w-1-fixtures[service][2]/32,2);
     at('pinboard',center-1,0);at('fridgeMini',1,h-4);
-    const table=pick(['diningTable','barTable']),tw=fixtures[table][2]/32,tx=Math.floor((w-tw)/2);at(table,tx,h-5);at(table==='barTable'?'stool':'chairVisitor',tx-1,h-5);at(table==='barTable'?'stool':'chairVisitor',tx+tw,h-5);
+    const table=pick(['diningTable','barTable']),tw=fixtures[table][2]/32,tx=Math.floor((w-tw)/2);at(table,tx,h-5);at(table==='barTable'?'stool':'chairVisitor',tx-1,h-5,{facing:'right'});at(table==='barTable'?'stool':'chairVisitor',tx+tw,h-5,{facing:'left'});
     if(density>0)at('waterDispenser',w-2,h-4);
   } else if(kind==='reception') {
     const counter=formal?'receptionFormal':pick(['receptionCurve','receptionFormal','reception']);
@@ -97,5 +99,67 @@ export function furnishRoom(room: RoomSpec, config: EnvironmentConfig, density: 
     const dx=wx-room.core[0],dy=wy-room.core[1];
     if(ww>=5&&wh>=4){at('benchWaiting',dx+1,dy+1);at('sideRound',dx+ww-2,dy+1);}
     else if(ww>=4&&wh>=4)at(plant,dx+1,dy+1);
+  }
+  // Additive furnishing pass: never rename, move or replace an existing base
+  // object. Optional placements use the same authoritative support/seat guards.
+  const safeAt:PlaceFixture=(name,x,y)=>at(name,x,y,{preserveConnectivity:true});
+  if(density>0){
+    if(kind==='lounge'){safeAt('gameConsole',1,0);safeAt('beanBag',center+1,h-5);}
+    if(['reception','work','collaboration'].includes(kind))safeAt('livingWall',2,0);
+    if(kind==='meeting')safeAt('windowPanel',1,0);
+    if(kind==='utility')safeAt('trophyShelf',3,0);
+    safeAt('wallSconce',1,0);safeAt('wallSconce',w-3,0);
+  }
+  if(density>1){
+    if(kind==='reception')safeAt('sculpture',1,h-3);
+    if(['work','collaboration'].includes(kind)&&config.furniture==='executive')safeAt('deskTriple',w-5,3);
+    if(['work','collaboration','lounge'].includes(kind))safeAt('planterWide',center-1,h-3);
+    if(['work','collaboration'].includes(kind)&&h>=14)safeAt('planterWide',center-1,6);
+    if(kind==='lounge')safeAt('lampArc',center,3);
+    if(kind==='pantry')safeAt('livingWall',1,0);
+    if(kind==='meeting')safeAt('planterWide',center-1,1);
+  }
+  // One purpose-specific feature per room. Try authored wall slots in priority
+  // order; never replace existing owner/base furniture to force a decoration in.
+  if(density>0){
+    const mounted=(asset:Fixture)=>{for(const column of[center+2,w-5,1,w-7,center-3])if(column>=1&&safeAt(asset,column,0))break;};
+    if(kind==='lounge')mounted('loungeArt');
+    if(kind==='work'||kind==='private-office')mounted('codePanel');
+    if(kind==='meeting')mounted('presentationPanel');
+    if(kind==='reception')mounted('receptionCrest');
+    if(kind==='pantry')mounted('hospitalityShelf');
+    if(kind==='collaboration'||kind==='training')mounted('ideaBoard');
+    if(kind==='utility')safeAt('supplyCubbies',1,1);
+  }
+  // The collection fills a small number of deliberate perimeter/feature slots.
+  // Existing primary furniture/IDs remain intact, and saved owner objects take
+  // priority over these optional additions in resolvedObjects(). Small rooms
+  // simply omit furniture that cannot fit with safe approaches and circulation.
+  if(density>0){
+    const index=layout*17+theme*7+['standard','executive','collaborative'].indexOf(config.furniture)*11+density*19;
+    const eligible=Object.entries(collectionDefinitions).filter(([,s])=>s.rooms.includes(kind));
+    const choose=(mode:'blocking'|'wall'|'surface',offset:number)=>{
+      const candidates=eligible.filter(([,s])=>s.mode===mode);
+      return candidates.map((_,i)=>candidates[(index+offset+i)%candidates.length]!).slice(0,6);
+    };
+    for(const offset of density>1?[0,9]:[0]){
+      let placed=false;
+      for(const [id,s]of choose('blocking',offset)){
+        const columns=[1,w-s.width-1,center-Math.ceil(s.width/2)];
+        for(const [x,y]of [...columns.map(x=>[x,h-s.height-2]),...columns.map(x=>[x,1]),...columns.map(x=>[x,h-s.height-5])]){
+          if(x!>=1&&y!>=1&&safeAt(id as CollectionAsset,x!,y!)){placed=true;break;}
+        }
+        if(placed)break;
+      }
+    }
+    // Mounted art and surface equipment have independent, bounded slots.
+    for(const [id,s]of choose('wall',4)){
+      let placed=false;for(const y of[0,h-1]){for(const x of[center-1,1,w-s.width-1,center+2])if(x>=1&&safeAt(id as CollectionAsset,x,y)){placed=true;break;}if(placed)break;}
+      if(placed)break;
+    }
+    for(const [id]of choose('surface',8)){
+      let placed=false;for(const [x,y]of[[1,2],[2,3],[center-1,3],[w-4,3],[center-1,Math.floor(h/2)-1],[1,h-4],[center-1,h-2],[w-3,h-3]])if(safeAt(id as CollectionAsset,x!,y!)){placed=true;break;}
+      if(placed)break;
+    }
   }
 }

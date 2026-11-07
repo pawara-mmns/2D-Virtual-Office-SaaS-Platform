@@ -1,0 +1,31 @@
+{
+  "scope": "local headless Brave; desktop and 390px emulation at 4x CPU throttle, not physical mobile/GPU certification",
+  "desktop": {
+    "frames": 120,
+    "medianMs": 16.69999999999891,
+    "p95Ms": 16.900000000001455,
+    "maxMs": 17.700000000000728,
+    "renderer": 2,
+    "objects": 169,
+    "textures": 17,
+    "atmosphereTexture": [
+      408,
+      320
+    ],
+    "atmosphereBytes": 522240
+  },
+  "mobile": {
+    "frames": 120,
+    "medianMs": 16.700000000000728,
+    "p95Ms": 33.399999999999636,
+    "maxMs": 50.19999999999891,
+    "renderer": 2,
+    "objects": 169,
+    "textures": 17,
+    "atmosphereTexture": [
+      408,
+      320
+    ],
+    "atmosphereBytes": 522240
+  }
+}

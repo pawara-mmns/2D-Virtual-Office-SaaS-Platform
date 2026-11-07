@@ -1,4 +1,7 @@
 const paths = {
+  seat: 'M7 3v10h11M7 9h10v4M5 13h14v3H5v-3ZM7 16v5M17 16v5',
+  stand: 'M12 3v12M8 7l4-4 4 4M5 20h14',
+  follow: 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8ZM12 2v3M12 19v3M2 12h3M19 12h3',
   lock:'M6 11h12v10H6V11ZM8 11V7a4 4 0 0 1 8 0v4M12 15v3',
   unlock:'M6 11h12v10H6V11ZM8 11V7a4 4 0 0 1 7.5-2M12 15v3',
   people: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75M13 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z",

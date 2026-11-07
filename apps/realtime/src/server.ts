@@ -2,7 +2,7 @@ import type { EnvironmentMaps } from "./environment/maps.ts";
 import { defineServer, defineRoom, matchMaker } from "colyseus";
 import { OfficeTransport } from "./transport.ts";
 import type { OfficeMap } from "../../../packages/shared/src/map.ts";
-import { mapVersion } from "../../../packages/shared/src/protocol.ts";
+import { isId, mapVersion } from "../../../packages/shared/src/protocol.ts";
 import { AccessDenied, type Authorize } from "./auth/authorize.ts";
 import { createAdmission } from "./rooms/admission.ts";
 import { officeRoomClass } from "./rooms/office-room.ts";
@@ -12,10 +12,12 @@ import { VoiceError, type VoiceService } from "./voice/service.ts";
 import { validVoiceRequest } from "../../../packages/shared/src/voice.ts";
 import type { ReadinessReport } from "../../../packages/shared/src/readiness.ts";
 import type { ProximitySettings } from '../../../packages/shared/src/proximity.ts';
+import { timingSafeEqual } from 'node:crypto';
+import type {LiveStore} from './environment/live.ts';
 
-export function createRealtimeServer(options: { authorize: Authorize; map: OfficeMap; loadMap?: EnvironmentMaps; origins: string[]; chat?: ChatStore; voice?: VoiceService; proximity?:Partial<ProximitySettings>; readiness?: () => Promise<ReadinessReport> }) {
+export function createRealtimeServer(options: { authorize: Authorize; map: OfficeMap; loadMap?: EnvironmentMaps;liveStore?:LiveStore; origins: string[]; chat?: ChatStore; voice?: VoiceService; proximity?:Partial<ProximitySettings>; readiness?: () => Promise<ReadinessReport> }) {
   const admission = createAdmission();
-  const OfficeRoom = officeRoomClass({ ...admission, authorize: options.authorize, map: options.map, chat: options.chat, voice: options.voice, proximity:options.proximity, loadMap: options.loadMap });
+  const OfficeRoom = officeRoomClass({ ...admission, authorize: options.authorize, map: options.map, chat: options.chat, voice: options.voice, proximity:options.proximity, loadMap: options.loadMap,liveStore:options.liveStore });
   const origins = new Set(options.origins);
   matchMaker.controller.exposedMethods = [];
   matchMaker.controller.DEFAULT_CORS_HEADERS = {
@@ -40,7 +42,7 @@ export function createRealtimeServer(options: { authorize: Authorize; map: Offic
     // Library error objects can include request data: never forward them to logs.
     logger: { debug() {}, trace() {}, info() {}, warn() { console.warn("Realtime library warning."); }, error() { console.error("Realtime library error."); } },
     transport: new OfficeTransport({
-      maxPayload: 12_288, pingInterval: 3000, pingMaxRetries: 2,
+      maxPayload: 65_536, pingInterval: 3000, pingMaxRetries: 2,
       beforeUpgrade(request) {
         if (shuttingDown) return new Response(null, { status: 503 });
         if (!origins.has(request.headers.get("origin") ?? "")) return new Response(null, { status: 403 });
@@ -51,6 +53,36 @@ export function createRealtimeServer(options: { authorize: Authorize; map: Offic
     rooms: { office: defineRoom(OfficeRoom) },
     express(app) {
       app.disable("x-powered-by");
+      const operationalCaller = (req: Request) => {
+        const key = process.env.PLATFORM_OPERATIONS_KEY, header = req.get('authorization');
+        const candidate = header?.startsWith('Bearer ') ? header.slice(7) : '';
+        return !!key && key.length >= 43 && Buffer.byteLength(candidate) === Buffer.byteLength(key)
+          && timingSafeEqual(Buffer.from(candidate), Buffer.from(key));
+      };
+      app.get('/platform/metrics', async (req: Request, res: Response) => {
+        res.setHeader('Cache-Control', 'private, no-store');
+        if (!operationalCaller(req)) {
+          res.status(403).json({ error: 'Denied' }); return;
+        }
+        try {
+          const report = await options.readiness?.();
+          res.json({ ...admission.metrics(), voiceSessions: options.voice?.metrics().observedSessions ?? null,
+            readiness: !shuttingDown && report?.status === 'ready' ? 'ready' : 'not_ready' });
+        } catch { res.status(503).json({ error: 'Unavailable' }); }
+      });
+      app.post('/platform/office-retire', async (req: Request, res: Response) => {
+        res.setHeader('Cache-Control', 'private, no-store');
+        if (!operationalCaller(req)) { res.status(403).json({ error: 'Denied' }); return; }
+        if (rejectDuringShutdown(res)) return;
+        if (!req.is('application/json')) { res.status(415).json({ error: 'JSON required' }); return; }
+        try {
+          let text = '', bytes = 0;
+          for await (const chunk of req) { bytes += Buffer.byteLength(chunk); if (bytes > 512) { res.status(413).end(); return; } text += chunk.toString(); }
+          const body = JSON.parse(text);
+          if (!body || Object.keys(body).join() !== 'officeId' || !isId(body.officeId)) { res.status(400).json({ error: 'Invalid office' }); return; }
+          res.json({ retired: await admission.retireOffice(body.officeId) });
+        } catch { res.status(503).json({ error: 'Retirement could not be confirmed' }); }
+      });
       app.get("/health", (_req: Request, res: Response) => { res.setHeader("Cache-Control", "no-store"); res.json({ status: "ok" }); });
       app.get("/ready", async (_req: Request, res: Response) => {
         res.setHeader("Cache-Control", "no-store, max-age=0"); res.setHeader("X-Robots-Tag", "noindex, nofollow");

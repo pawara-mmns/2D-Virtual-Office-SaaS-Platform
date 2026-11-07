@@ -1,4 +1,5 @@
 import { drawArchitectureAtlas } from './architecture-art.mjs';
+import {drawDirectionalChair} from './seating-art.mjs';
 // Original, deterministic pixel drawing. Every asset keeps the shared 32px scale.
 export function polishEnvironmentAtlas(art,theme) {
   const rgb=h=>h.match(/../g).map(v=>parseInt(v,16));
@@ -41,7 +42,7 @@ export function polishEnvironmentAtlas(art,theme) {
     r(x+8,y+24,9,6,shade(fabric,-4));l(x+9,y+24,7,shade(fabric,25));e(x+w-15,y+25,6,6,wall);e(x+w-13,y+26,2,2,'775b45');
     if(eco){r(x+w-13,y+13,6,7,wall);e(x+w-15,y+7,10,9,'547851');l(x+w-12,y+8,4,'94ad7a');}
     if(executive){r(x+w-22,y+29,17,12,shade(wood,8));r(x+7,y+36,16,8,shade(wood,-8));l(x+11,y+39,6,shade(wall,-8));}
-    chair(x+w/2-16,y+34);
+    drawDirectionalChair(art,theme,x+w/2-16,y+32,'task','up',false);
   }
   desk(0,64,64);desk(0,192,96,true);
   // Four-seat collaboration bench, with separate movable chair tiles.

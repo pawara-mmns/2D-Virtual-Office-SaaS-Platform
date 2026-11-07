@@ -5,11 +5,30 @@ import type { VoiceZoneState } from "../../../../../../packages/shared/src/voice
 import { proximityDefaults, type ProximityState } from '../../../../../../packages/shared/src/proximity.ts';
 import { connectOffice, realtimeUrl } from "./connection.ts";
 import type { Presence, OfficeSnapshot, Participant } from "../../../../../../packages/shared/src/protocol.ts";
+import {defaultEnvironment} from '../../../../../../packages/shared/src/environment/catalog.ts';
+import {emptyDecoration} from '../../../../../../packages/shared/src/environment/decoration.ts';
+import type {LiveSnapshot,LiveDelta} from '../../../../../../packages/shared/src/environment/live-decoration.ts';
 test("realtime endpoint accepts exact HTTP origins, requiring HTTPS in production", () => {
   assert.equal(realtimeUrl("http://localhost:2567", false), "http://localhost:2567");
   assert.equal(realtimeUrl("https://realtime.example.test", true), "https://realtime.example.test");
   for (const url of [undefined, "ws://localhost:2567", "http://localhost:2567/path", "http://name:password@localhost:2567", "https://realtime.example.test?token=bad"]) assert.throws(() => realtimeUrl(url, false));
   assert.throws(() => realtimeUrl("http://localhost:2567", true));
+});
+
+test('live deltas ignore duplicates, recover revision gaps with a bounded snapshot and keep media/camera transport owners connected',async()=>{
+ const original=globalThis.fetch,messages=new Map<string,(v:unknown)=>void>(),commands:string[]=[],voice:unknown[]=[];let changed!:(s:OfficeSnapshot)=>void,leaves=0;
+ const fake={sessionId:'self',connection:{transport:{isOpen:true,send(){},sendUnreliable(){},connect(){},close(){}},events:{}},reconnection:{},onStateChange(fn:typeof changed){changed=fn;},onMessage(t:string,fn:(v:unknown)=>void){messages.set(t,fn);},onDrop(){},onReconnect(){},onLeave(){},onError(){},send(type:string){commands.push(type);},async leave(){leaves++;},removeAllListeners(){}};
+ const consume=mock.method(Client.prototype,'consumeSeatReservation',async()=>fake as unknown as Awaited<ReturnType<Client['consumeSeatReservation']>>);globalThis.fetch=async()=>new Response('{}');
+ const office='00000000-0000-4000-8000-000000000001',epoch='00000000-0000-4000-8000-000000000002';
+ const network=connectOffice({url:'http://localhost:2567',officeId:office,mapVersion:'old',structureVersion:'structure',environment:defaultEnvironment,getToken:async()=> 'synthetic-proof',onPresence(){},onVoice:v=>voice.push(v)});
+ try{
+  await new Promise(r=>setImmediate(r));const snapshot:LiveSnapshot={officeId:office,epoch,structureVersion:'structure',revision:0,savedRevision:0,publishedRevision:0,baseRevision:0,document:emptyDecoration(),published:emptyDecoration()};messages.get('environment.snapshot')!(snapshot);
+  messages.get('voice.state')!({sessionId:'self',zone:'Meeting Room',configured:true,participants:1});
+  const delta:LiveDelta={officeId:office,epoch,structureVersion:'structure',revision:1,previousRevision:0,savedRevision:0,publishedRevision:0,baseRevision:0,operationId:'00000000-0000-4000-8000-000000000003',changes:[],saved:false};messages.get('environment.delta')!(delta);messages.get('environment.delta')!(delta);assert.equal(network.environment?.()?.revision,1);
+  messages.get('environment.delta')!({...delta,revision:3,previousRevision:2});assert.equal(network.environment?.()?.revision,1,'a missing change is never guessed');
+  messages.get('environment.snapshot')!({...snapshot,revision:3});assert.equal(network.environment?.()?.revision,3);messages.get('environment.snapshot')!({...snapshot,revision:2});assert.equal(network.environment?.()?.revision,3,'stale snapshots cannot roll geometry backward');
+  changed({officeId:office,mapVersion:'new-saved-fingerprint',structureVersion:'structure',environmentEpoch:epoch,environmentRevision:3,players:new Map()});assert.equal(leaves,0);assert.equal(voice.length,1,'furniture changes never emit a media disconnect');assert.ok(commands.filter(t=>t==='environment.sync').length<=2);
+ }finally{network.close();consume.mock.restore();globalThis.fetch=original;}
 });
 test("admission sends bearer only in headers, surfaces denial, and releases lifecycle timers", async () => {
   const original = globalThis.fetch;

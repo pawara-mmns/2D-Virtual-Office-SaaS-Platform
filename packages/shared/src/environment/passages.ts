@@ -5,7 +5,7 @@ import type { FloorPlan, Rect } from './plans.ts';
 import { fixtures, type Fixture } from './rooms.ts';
 
 export type PassageRole = 'straight-wall'|'corner'|'junction'|'entrance'|'threshold';
-export type PassagePlacement = { asset: Fixture; x: number; y: number; role: PassageRole; wall: boolean };
+export type PassagePlacement = { asset: Fixture; x: number; y: number; role: PassageRole; wall: boolean; optionalDecoration?:boolean };
 export type PassageGeometry = {
   width: number; height: number; walkable: ReadonlySet<number>; lanes: ReadonlySet<number>;
   clearance: ReadonlySet<number>; walls: readonly number[]; components: readonly number[][];
@@ -105,6 +105,13 @@ export function passageRecipe(geometry:PassageGeometry,config:EnvironmentConfig)
       if(indices.some(index=>!walls[index]||assetMaterial(walls[index]!)!=='solid'||wallOccupied.has(index)||!neighbors(index,width).some(next=>walkable.has(next))))continue;
       props.push({asset,x,y,role,wall:true});wallRects.push(rect);for(const index of indices)wallOccupied.add(index);counts.set(asset,(counts.get(asset)??0)+1);break;
     }
+  }
+  // One additional mounted wayfinding light. Existing wall/floor recipes retain
+  // their identities; this adds no floor occupancy or collision.
+  if(density>0&&props.length<15)for(const i of [...wallCandidates].sort((a,b)=>a-b)){
+    const x=i%width,y=Math.floor(i/width),rect:Rect=[x,y,1,1];
+    if(wallOccupied.has(i)||!wallRects.every(other=>separated(rect,other,3)))continue;
+    props.push({asset:'wayfindingLight',x,y,role:'straight-wall',wall:true,optionalDecoration:true});break;
   }
   // Pick short straight runs on the protected lane. Rugs are paint, not props;
   // they never change collision, thresholds or the owner's Bare floor setting.

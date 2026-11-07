@@ -12,17 +12,26 @@ const palettes = [
   { shirt: "424f65", light: "71859a", skin: "c18b68", shade: "9b6b50", hair: "8e9692", highlight: "c4c8b7", pants: "454f4d", style: "glasses" },
 ];
 export function generateAvatars() {
-  const avatar = picture(96, avatarPresets.length * 128);
+  const avatar = picture(96, avatarPresets.length * 256);
   const { rect: p, ellipse: oval } = avatar;
-  for (const preset of avatarPresets) {
+  for (const seated of [false,true]) for (const preset of avatarPresets) {
     const color = palettes[preset.index];
     for (let direction = 0; direction < 4; direction++) for (let frame = 0; frame < 3; frame++) {
-      const x = frame * 32, y = preset.index * 128 + direction * 32;
-      const step = frame === 1 ? -1 : frame === 2 ? 1 : 0;
+      const x = frame * 32, y = preset.index * 128 + direction * 32 + (seated ? avatarPresets.length*128 : 0);
+      const step = seated?0:frame === 1 ? -1 : frame === 2 ? 1 : 0;
       oval(x + 7, y + 27, 19, 4, "253d3b40");
       if (color.style === "long") { p(x + 9, y + 5, 15, 16, color.hair); p(x + 10, y + 10, 2, 10, color.highlight); }
-      p(x + 11, y + 21, 5, 6 + step, color.pants); p(x + 17, y + 21, 5, 6 - step, color.pants);
-      p(x + 10, y + 26 + step, 6, 3, "293b42"); p(x + 17, y + 26 - step, 6, 3, "293b42");
+      if(seated) {
+        // Separately authored cardinal poses. Facing changes knee projection,
+        // leg occlusion and shoes; no sprite rotation or horizontal mirroring.
+        if(direction===0){p(x+10,y+22,6,4,color.pants);p(x+18,y+22,6,4,color.pants);p(x+9,y+26,7,3,'293b42');p(x+18,y+26,7,3,'293b42');}
+        else if(direction===3){p(x+11,y+21,5,4,color.pants);p(x+18,y+21,5,4,color.pants);p(x+11,y+25,5,2,'293b42');p(x+18,y+25,5,2,'293b42');}
+        else if(direction===1){p(x+6,y+22,14,4,color.pants);p(x+6,y+24,4,4,color.pants);p(x+3,y+27,8,2,'293b42');p(x+10,y+25,5,3,'293b42');}
+        else{p(x+14,y+22,13,4,color.pants);p(x+24,y+24,4,4,color.pants);p(x+24,y+27,7,2,'293b42');p(x+18,y+25,6,3,'293b42');}
+      } else {
+        p(x + 11, y + 21, 5, 6 + step, color.pants); p(x + 17, y + 21, 5, 6 - step, color.pants);
+        p(x + 10, y + 26 + step, 6, 3, "293b42"); p(x + 17, y + 26 - step, 6, 3, "293b42");
+      }
       p(x + 10, y + 13, 13, 11, color.shirt); p(x + 12, y + 14, 9, 8, color.light);
       if (["short", "waves", "long"].includes(color.style)) { p(x + 16, y + 15, 1, 8, color.shirt); p(x + 19, y + 17, 1, 1, "ded4b6"); }
       else { p(x + 13, y + 14, 8, 2, color.shirt); p(x + 11, y + 22, 12, 2, color.shirt); }
@@ -43,6 +52,6 @@ export function generateAvatars() {
     }
   }
   avatar.png("avatar.png");
-  console.log("Generated six original avatar presets in one 96x768 sprite sheet.");
+  console.log("Generated six original presets with walking and seated poses in one 96x1536 sprite sheet; original frames preserved.");
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) generateAvatars();

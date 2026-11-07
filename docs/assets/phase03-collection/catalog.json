@@ -1,0 +1,5600 @@
+[
+  {
+    "id": "crescentDesk",
+    "label": "Crescent concierge desk",
+    "category": "reception",
+    "collection": "Reception & welcome",
+    "rooms": [
+      "reception"
+    ],
+    "width": 128,
+    "height": 64,
+    "footprint": {
+      "width": 128,
+      "height": 64
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      0,
+      1152,
+      128,
+      64
+    ],
+    "frames": {
+      "down": [
+        0,
+        1152,
+        128,
+        64
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "conciergeDesk",
+    "label": "Stone executive reception desk",
+    "category": "reception",
+    "collection": "Reception & welcome",
+    "rooms": [
+      "reception"
+    ],
+    "width": 128,
+    "height": 64,
+    "footprint": {
+      "width": 128,
+      "height": 64
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      128,
+      1152,
+      128,
+      64
+    ],
+    "frames": {
+      "down": [
+        128,
+        1152,
+        128,
+        64
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "visitorKiosk",
+    "label": "Visitor check-in kiosk",
+    "category": "reception",
+    "collection": "Reception & welcome",
+    "rooms": [
+      "reception"
+    ],
+    "width": 32,
+    "height": 64,
+    "footprint": {
+      "width": 32,
+      "height": 64
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      256,
+      1152,
+      32,
+      64
+    ],
+    "frames": {
+      "down": [
+        256,
+        1152,
+        32,
+        64
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": "screen",
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "waitingSettee",
+    "label": "Channel waiting settee",
+    "category": "reception",
+    "collection": "Reception & welcome",
+    "rooms": [
+      "reception"
+    ],
+    "width": 96,
+    "height": 64,
+    "footprint": {
+      "width": 96,
+      "height": 64
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      288,
+      1152,
+      96,
+      64
+    ],
+    "frames": {
+      "down": [
+        288,
+        1152,
+        96,
+        64
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [
+        "SIT",
+        "STAND"
+      ],
+      "future": null,
+      "enabled": true
+    },
+    "seats": [
+      {
+        "key": "0",
+        "type": "sofa",
+        "anchor": {
+          "x": 24,
+          "y": 42
+        },
+        "footprint": {
+          "x": 0,
+          "y": 0,
+          "width": 96,
+          "height": 64
+        },
+        "facing": "down",
+        "exit": "down"
+      },
+      {
+        "key": "1",
+        "type": "sofa",
+        "anchor": {
+          "x": 72,
+          "y": 42
+        },
+        "footprint": {
+          "x": 0,
+          "y": 0,
+          "width": 96,
+          "height": 64
+        },
+        "facing": "down",
+        "exit": "down"
+      }
+    ],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "cantileverChair",
+    "label": "Cantilever visitor chair",
+    "category": "seating",
+    "collection": "Reception & welcome",
+    "rooms": [
+      "reception"
+    ],
+    "width": 32,
+    "height": 32,
+    "footprint": {
+      "width": 32,
+      "height": 32
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down",
+      "left",
+      "up",
+      "right"
+    ],
+    "atlas": [
+      384,
+      1152,
+      32,
+      32
+    ],
+    "frames": {
+      "down": [
+        384,
+        1152,
+        32,
+        32
+      ],
+      "up": [
+        320,
+        1888,
+        32,
+        32
+      ],
+      "left": [
+        352,
+        1888,
+        32,
+        32
+      ],
+      "right": [
+        384,
+        1888,
+        32,
+        32
+      ]
+    },
+    "render": {
+      "depth": 0.1,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [
+        "SIT",
+        "STAND"
+      ],
+      "future": null,
+      "enabled": true
+    },
+    "seats": [
+      {
+        "key": "0",
+        "type": "chair",
+        "anchor": {
+          "x": 16,
+          "y": 10
+        },
+        "footprint": {
+          "x": 0,
+          "y": 0,
+          "width": 32,
+          "height": 32
+        },
+        "facing": "down",
+        "exit": "up"
+      }
+    ],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "brochureCarousel",
+    "label": "Rotating brochure carousel",
+    "category": "reception",
+    "collection": "Reception & welcome",
+    "rooms": [
+      "reception"
+    ],
+    "width": 32,
+    "height": 64,
+    "footprint": {
+      "width": 32,
+      "height": 64
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      416,
+      1152,
+      32,
+      64
+    ],
+    "frames": {
+      "down": [
+        416,
+        1152,
+        32,
+        64
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "welcomeTotem",
+    "label": "Welcome directory totem",
+    "category": "reception",
+    "collection": "Reception & welcome",
+    "rooms": [
+      "reception"
+    ],
+    "width": 32,
+    "height": 64,
+    "footprint": {
+      "width": 32,
+      "height": 64
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      448,
+      1152,
+      32,
+      64
+    ],
+    "frames": {
+      "down": [
+        448,
+        1152,
+        32,
+        64
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": "warm",
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "receptionCredenza",
+    "label": "Reception mail credenza",
+    "category": "reception",
+    "collection": "Reception & welcome",
+    "rooms": [
+      "reception"
+    ],
+    "width": 96,
+    "height": 32,
+    "footprint": {
+      "width": 96,
+      "height": 32
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      0,
+      1216,
+      96,
+      32
+    ],
+    "frames": {
+      "down": [
+        0,
+        1216,
+        96,
+        32
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "umbrellaStand",
+    "label": "Umbrella and coat stand",
+    "category": "reception",
+    "collection": "Reception & welcome",
+    "rooms": [
+      "reception"
+    ],
+    "width": 32,
+    "height": 64,
+    "footprint": {
+      "width": 32,
+      "height": 64
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      96,
+      1216,
+      32,
+      64
+    ],
+    "frames": {
+      "down": [
+        96,
+        1216,
+        32,
+        64
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "devUltrawideDesk",
+    "label": "Ultrawide developer desk",
+    "category": "workstations",
+    "collection": "Developer workstations",
+    "rooms": [
+      "work",
+      "private-office"
+    ],
+    "width": 96,
+    "height": 64,
+    "footprint": {
+      "width": 96,
+      "height": 64
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      128,
+      1216,
+      96,
+      64
+    ],
+    "frames": {
+      "down": [
+        128,
+        1216,
+        96,
+        64
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "desk-front-strip",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [
+        "SIT",
+        "STAND"
+      ],
+      "future": null,
+      "enabled": true
+    },
+    "seats": [
+      {
+        "key": "0",
+        "type": "chair",
+        "anchor": {
+          "x": 48,
+          "y": 44
+        },
+        "footprint": {
+          "x": 32,
+          "y": 32,
+          "width": 32,
+          "height": 32
+        },
+        "facing": "up",
+        "exit": "down"
+      }
+    ],
+    "display": null,
+    "lighting": "screen",
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "devDualArmDesk",
+    "label": "Dual monitor arm station",
+    "category": "workstations",
+    "collection": "Developer workstations",
+    "rooms": [
+      "work",
+      "private-office"
+    ],
+    "width": 96,
+    "height": 64,
+    "footprint": {
+      "width": 96,
+      "height": 64
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      224,
+      1216,
+      96,
+      64
+    ],
+    "frames": {
+      "down": [
+        224,
+        1216,
+        96,
+        64
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "desk-front-strip",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [
+        "SIT",
+        "STAND"
+      ],
+      "future": null,
+      "enabled": true
+    },
+    "seats": [
+      {
+        "key": "0",
+        "type": "chair",
+        "anchor": {
+          "x": 48,
+          "y": 44
+        },
+        "footprint": {
+          "x": 32,
+          "y": 32,
+          "width": 32,
+          "height": 32
+        },
+        "facing": "up",
+        "exit": "down"
+      }
+    ],
+    "display": null,
+    "lighting": "screen",
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "devCornerDesk",
+    "label": "L-shaped engineering desk",
+    "category": "workstations",
+    "collection": "Developer workstations",
+    "rooms": [
+      "work",
+      "private-office"
+    ],
+    "width": 96,
+    "height": 64,
+    "footprint": {
+      "width": 96,
+      "height": 64
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      320,
+      1216,
+      96,
+      64
+    ],
+    "frames": {
+      "down": [
+        320,
+        1216,
+        96,
+        64
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "desk-front-strip",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [
+        "SIT",
+        "STAND"
+      ],
+      "future": null,
+      "enabled": true
+    },
+    "seats": [
+      {
+        "key": "0",
+        "type": "chair",
+        "anchor": {
+          "x": 48,
+          "y": 44
+        },
+        "footprint": {
+          "x": 32,
+          "y": 32,
+          "width": 32,
+          "height": 32
+        },
+        "facing": "up",
+        "exit": "down"
+      }
+    ],
+    "display": null,
+    "lighting": "screen",
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "sitStandStation",
+    "label": "Raised standing workstation",
+    "category": "workstations",
+    "collection": "Developer workstations",
+    "rooms": [
+      "work",
+      "private-office"
+    ],
+    "width": 64,
+    "height": 64,
+    "footprint": {
+      "width": 64,
+      "height": 64
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      416,
+      1216,
+      64,
+      64
+    ],
+    "frames": {
+      "down": [
+        416,
+        1216,
+        64,
+        64
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": "screen",
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "chairErgoHeadrest",
+    "label": "Headrest ergonomic chair",
+    "category": "seating",
+    "collection": "Developer workstations",
+    "rooms": [
+      "work",
+      "private-office"
+    ],
+    "width": 32,
+    "height": 32,
+    "footprint": {
+      "width": 32,
+      "height": 32
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down",
+      "left",
+      "up",
+      "right"
+    ],
+    "atlas": [
+      480,
+      1216,
+      32,
+      32
+    ],
+    "frames": {
+      "down": [
+        480,
+        1216,
+        32,
+        32
+      ],
+      "up": [
+        416,
+        1888,
+        32,
+        32
+      ],
+      "left": [
+        448,
+        1888,
+        32,
+        32
+      ],
+      "right": [
+        480,
+        1888,
+        32,
+        32
+      ]
+    },
+    "render": {
+      "depth": 0.1,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [
+        "SIT",
+        "STAND"
+      ],
+      "future": null,
+      "enabled": true
+    },
+    "seats": [
+      {
+        "key": "0",
+        "type": "chair",
+        "anchor": {
+          "x": 16,
+          "y": 10
+        },
+        "footprint": {
+          "x": 0,
+          "y": 0,
+          "width": 32,
+          "height": 32
+        },
+        "facing": "down",
+        "exit": "up"
+      }
+    ],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "chairDrafting",
+    "label": "Drafting chair with foot ring",
+    "category": "seating",
+    "collection": "Developer workstations",
+    "rooms": [
+      "work",
+      "private-office"
+    ],
+    "width": 32,
+    "height": 32,
+    "footprint": {
+      "width": 32,
+      "height": 32
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down",
+      "left",
+      "up",
+      "right"
+    ],
+    "atlas": [
+      0,
+      1280,
+      32,
+      32
+    ],
+    "frames": {
+      "down": [
+        0,
+        1280,
+        32,
+        32
+      ],
+      "up": [
+        0,
+        1952,
+        32,
+        32
+      ],
+      "left": [
+        32,
+        1952,
+        32,
+        32
+      ],
+      "right": [
+        64,
+        1952,
+        32,
+        32
+      ]
+    },
+    "render": {
+      "depth": 0.1,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [
+        "SIT",
+        "STAND"
+      ],
+      "future": null,
+      "enabled": true
+    },
+    "seats": [
+      {
+        "key": "0",
+        "type": "chair",
+        "anchor": {
+          "x": 16,
+          "y": 10
+        },
+        "footprint": {
+          "x": 0,
+          "y": 0,
+          "width": 32,
+          "height": 32
+        },
+        "facing": "down",
+        "exit": "up"
+      }
+    ],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "laptopDock",
+    "label": "Elevated laptop and docking hub",
+    "category": "workstations",
+    "collection": "Developer workstations",
+    "rooms": [
+      "work",
+      "private-office"
+    ],
+    "width": 32,
+    "height": 32,
+    "footprint": {
+      "width": 32,
+      "height": 32
+    },
+    "mode": "surface",
+    "collision": "existing-support-only",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      32,
+      1280,
+      32,
+      32
+    ],
+    "frames": {
+      "down": [
+        32,
+        1280,
+        32,
+        32
+      ]
+    },
+    "render": {
+      "depth": 0.05,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": "screen",
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "deskAcousticDivider",
+    "label": "Desk acoustic privacy divider",
+    "category": "workstations",
+    "collection": "Developer workstations",
+    "rooms": [
+      "work",
+      "private-office"
+    ],
+    "width": 64,
+    "height": 32,
+    "footprint": {
+      "width": 64,
+      "height": 32
+    },
+    "mode": "surface",
+    "collision": "existing-support-only",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      64,
+      1280,
+      64,
+      32
+    ],
+    "frames": {
+      "down": [
+        64,
+        1280,
+        64,
+        32
+      ]
+    },
+    "render": {
+      "depth": 0.05,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "rollingPedestal",
+    "label": "Rolling drawer pedestal",
+    "category": "workstations",
+    "collection": "Developer workstations",
+    "rooms": [
+      "work",
+      "private-office"
+    ],
+    "width": 32,
+    "height": 32,
+    "footprint": {
+      "width": 32,
+      "height": 32
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      128,
+      1280,
+      32,
+      32
+    ],
+    "frames": {
+      "down": [
+        128,
+        1280,
+        32,
+        32
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "conferenceOval4",
+    "label": "Four-place oval meeting table",
+    "category": "meeting",
+    "collection": "Meeting & conference",
+    "rooms": [
+      "meeting"
+    ],
+    "width": 96,
+    "height": 64,
+    "footprint": {
+      "width": 96,
+      "height": 64
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      160,
+      1280,
+      96,
+      64
+    ],
+    "frames": {
+      "down": [
+        160,
+        1280,
+        96,
+        64
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "conferenceBoat6",
+    "label": "Six-place boat conference table",
+    "category": "meeting",
+    "collection": "Meeting & conference",
+    "rooms": [
+      "meeting"
+    ],
+    "width": 128,
+    "height": 64,
+    "footprint": {
+      "width": 128,
+      "height": 64
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      256,
+      1280,
+      128,
+      64
+    ],
+    "frames": {
+      "down": [
+        256,
+        1280,
+        128,
+        64
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "conferenceBoardroom10",
+    "label": "Ten-place boardroom table",
+    "category": "meeting",
+    "collection": "Meeting & conference",
+    "rooms": [
+      "meeting"
+    ],
+    "width": 192,
+    "height": 64,
+    "footprint": {
+      "width": 192,
+      "height": 64
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      0,
+      1344,
+      192,
+      64
+    ],
+    "frames": {
+      "down": [
+        0,
+        1344,
+        192,
+        64
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "chairConferenceLeather",
+    "label": "Leather conference chair",
+    "category": "seating",
+    "collection": "Meeting & conference",
+    "rooms": [
+      "meeting"
+    ],
+    "width": 32,
+    "height": 32,
+    "footprint": {
+      "width": 32,
+      "height": 32
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down",
+      "left",
+      "up",
+      "right"
+    ],
+    "atlas": [
+      192,
+      1344,
+      32,
+      32
+    ],
+    "frames": {
+      "down": [
+        192,
+        1344,
+        32,
+        32
+      ],
+      "up": [
+        96,
+        1952,
+        32,
+        32
+      ],
+      "left": [
+        128,
+        1952,
+        32,
+        32
+      ],
+      "right": [
+        160,
+        1952,
+        32,
+        32
+      ]
+    },
+    "render": {
+      "depth": 0.1,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [
+        "SIT",
+        "STAND"
+      ],
+      "future": null,
+      "enabled": true
+    },
+    "seats": [
+      {
+        "key": "0",
+        "type": "chair",
+        "anchor": {
+          "x": 16,
+          "y": 10
+        },
+        "footprint": {
+          "x": 0,
+          "y": 0,
+          "width": 32,
+          "height": 32
+        },
+        "facing": "down",
+        "exit": "up"
+      }
+    ],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "smartDisplayWide",
+    "label": "Wide presentation smart display",
+    "category": "meeting",
+    "collection": "Meeting & conference",
+    "rooms": [
+      "meeting"
+    ],
+    "width": 96,
+    "height": 32,
+    "footprint": {
+      "width": 96,
+      "height": 32
+    },
+    "mode": "wall",
+    "collision": "existing-support-only",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      224,
+      1344,
+      96,
+      32
+    ],
+    "frames": {
+      "down": [
+        224,
+        1344,
+        96,
+        32
+      ]
+    },
+    "render": {
+      "depth": 0.05,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": "display",
+      "enabled": false
+    },
+    "seats": [],
+    "display": {
+      "x": 8,
+      "y": 6,
+      "width": 80,
+      "height": 17,
+      "interactive": false
+    },
+    "lighting": "screen",
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "conferenceCameraBar",
+    "label": "Conference camera and sound bar",
+    "category": "meeting",
+    "collection": "Meeting & conference",
+    "rooms": [
+      "meeting"
+    ],
+    "width": 64,
+    "height": 32,
+    "footprint": {
+      "width": 64,
+      "height": 32
+    },
+    "mode": "wall",
+    "collision": "existing-support-only",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      320,
+      1344,
+      64,
+      32
+    ],
+    "frames": {
+      "down": [
+        320,
+        1344,
+        64,
+        32
+      ]
+    },
+    "render": {
+      "depth": 0.05,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "speakerTriangle",
+    "label": "Triangular conference speakerphone",
+    "category": "meeting",
+    "collection": "Meeting & conference",
+    "rooms": [
+      "meeting"
+    ],
+    "width": 32,
+    "height": 32,
+    "footprint": {
+      "width": 32,
+      "height": 32
+    },
+    "mode": "surface",
+    "collision": "existing-support-only",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      384,
+      1344,
+      32,
+      32
+    ],
+    "frames": {
+      "down": [
+        384,
+        1344,
+        32,
+        32
+      ]
+    },
+    "render": {
+      "depth": 0.05,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "whiteboardRolling",
+    "label": "Double-sided rolling whiteboard",
+    "category": "meeting",
+    "collection": "Meeting & conference",
+    "rooms": [
+      "meeting"
+    ],
+    "width": 64,
+    "height": 64,
+    "footprint": {
+      "width": 64,
+      "height": 64
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      416,
+      1344,
+      64,
+      64
+    ],
+    "frames": {
+      "down": [
+        416,
+        1344,
+        64,
+        64
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "glassPartition",
+    "label": "Low framed glass divider",
+    "category": "meeting",
+    "collection": "Meeting & conference",
+    "rooms": [
+      "meeting"
+    ],
+    "width": 64,
+    "height": 32,
+    "footprint": {
+      "width": 64,
+      "height": 32
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      0,
+      1408,
+      64,
+      32
+    ],
+    "frames": {
+      "down": [
+        0,
+        1408,
+        64,
+        32
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "sofaChaise",
+    "label": "Chaise sectional sofa",
+    "category": "lounge",
+    "collection": "Lounge & relaxation",
+    "rooms": [
+      "lounge"
+    ],
+    "width": 128,
+    "height": 64,
+    "footprint": {
+      "width": 128,
+      "height": 64
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      64,
+      1408,
+      128,
+      64
+    ],
+    "frames": {
+      "down": [
+        64,
+        1408,
+        128,
+        64
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [
+        "SIT",
+        "STAND"
+      ],
+      "future": null,
+      "enabled": true
+    },
+    "seats": [
+      {
+        "key": "0",
+        "type": "sofa",
+        "anchor": {
+          "x": 21.333333333333332,
+          "y": 42
+        },
+        "footprint": {
+          "x": 0,
+          "y": 0,
+          "width": 128,
+          "height": 64
+        },
+        "facing": "down",
+        "exit": "down"
+      },
+      {
+        "key": "1",
+        "type": "sofa",
+        "anchor": {
+          "x": 64,
+          "y": 42
+        },
+        "footprint": {
+          "x": 0,
+          "y": 0,
+          "width": 128,
+          "height": 64
+        },
+        "facing": "down",
+        "exit": "down"
+      },
+      {
+        "key": "2",
+        "type": "sofa",
+        "anchor": {
+          "x": 106.66666666666667,
+          "y": 42
+        },
+        "footprint": {
+          "x": 0,
+          "y": 0,
+          "width": 128,
+          "height": 64
+        },
+        "facing": "down",
+        "exit": "down"
+      }
+    ],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "sofaLoveseat",
+    "label": "Scalloped two-seat loveseat",
+    "category": "lounge",
+    "collection": "Lounge & relaxation",
+    "rooms": [
+      "lounge"
+    ],
+    "width": 96,
+    "height": 64,
+    "footprint": {
+      "width": 96,
+      "height": 64
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      192,
+      1408,
+      96,
+      64
+    ],
+    "frames": {
+      "down": [
+        192,
+        1408,
+        96,
+        64
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [
+        "SIT",
+        "STAND"
+      ],
+      "future": null,
+      "enabled": true
+    },
+    "seats": [
+      {
+        "key": "0",
+        "type": "sofa",
+        "anchor": {
+          "x": 24,
+          "y": 42
+        },
+        "footprint": {
+          "x": 0,
+          "y": 0,
+          "width": 96,
+          "height": 64
+        },
+        "facing": "down",
+        "exit": "down"
+      },
+      {
+        "key": "1",
+        "type": "sofa",
+        "anchor": {
+          "x": 72,
+          "y": 42
+        },
+        "footprint": {
+          "x": 0,
+          "y": 0,
+          "width": 96,
+          "height": 64
+        },
+        "facing": "down",
+        "exit": "down"
+      }
+    ],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "sofaChesterfield",
+    "label": "Tufted Chesterfield sofa",
+    "category": "lounge",
+    "collection": "Lounge & relaxation",
+    "rooms": [
+      "lounge"
+    ],
+    "width": 96,
+    "height": 64,
+    "footprint": {
+      "width": 96,
+      "height": 64
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      288,
+      1408,
+      96,
+      64
+    ],
+    "frames": {
+      "down": [
+        288,
+        1408,
+        96,
+        64
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [
+        "SIT",
+        "STAND"
+      ],
+      "future": null,
+      "enabled": true
+    },
+    "seats": [
+      {
+        "key": "0",
+        "type": "sofa",
+        "anchor": {
+          "x": 24,
+          "y": 42
+        },
+        "footprint": {
+          "x": 0,
+          "y": 0,
+          "width": 96,
+          "height": 64
+        },
+        "facing": "down",
+        "exit": "down"
+      },
+      {
+        "key": "1",
+        "type": "sofa",
+        "anchor": {
+          "x": 72,
+          "y": 42
+        },
+        "footprint": {
+          "x": 0,
+          "y": 0,
+          "width": 96,
+          "height": 64
+        },
+        "facing": "down",
+        "exit": "down"
+      }
+    ],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "chairWingback",
+    "label": "Wingback lounge chair",
+    "category": "seating",
+    "collection": "Lounge & relaxation",
+    "rooms": [
+      "lounge"
+    ],
+    "width": 32,
+    "height": 32,
+    "footprint": {
+      "width": 32,
+      "height": 32
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down",
+      "left",
+      "up",
+      "right"
+    ],
+    "atlas": [
+      384,
+      1408,
+      32,
+      32
+    ],
+    "frames": {
+      "down": [
+        384,
+        1408,
+        32,
+        32
+      ],
+      "up": [
+        192,
+        1952,
+        32,
+        32
+      ],
+      "left": [
+        224,
+        1952,
+        32,
+        32
+      ],
+      "right": [
+        256,
+        1952,
+        32,
+        32
+      ]
+    },
+    "render": {
+      "depth": 0.1,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [
+        "SIT",
+        "STAND"
+      ],
+      "future": null,
+      "enabled": true
+    },
+    "seats": [
+      {
+        "key": "0",
+        "type": "chair",
+        "anchor": {
+          "x": 16,
+          "y": 14
+        },
+        "footprint": {
+          "x": 0,
+          "y": 0,
+          "width": 32,
+          "height": 32
+        },
+        "facing": "down",
+        "exit": "down"
+      }
+    ],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "poufKnitted",
+    "label": "Knitted round pouf",
+    "category": "lounge",
+    "collection": "Lounge & relaxation",
+    "rooms": [
+      "lounge"
+    ],
+    "width": 32,
+    "height": 32,
+    "footprint": {
+      "width": 32,
+      "height": 32
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      416,
+      1408,
+      32,
+      32
+    ],
+    "frames": {
+      "down": [
+        416,
+        1408,
+        32,
+        32
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [
+        "SIT",
+        "STAND"
+      ],
+      "future": null,
+      "enabled": true
+    },
+    "seats": [
+      {
+        "key": "0",
+        "type": "sofa",
+        "anchor": {
+          "x": 16,
+          "y": 10
+        },
+        "footprint": {
+          "x": 0,
+          "y": 0,
+          "width": 32,
+          "height": 32
+        },
+        "facing": "down",
+        "exit": "down"
+      }
+    ],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "nestingTables",
+    "label": "Nesting coffee tables",
+    "category": "lounge",
+    "collection": "Lounge & relaxation",
+    "rooms": [
+      "lounge"
+    ],
+    "width": 64,
+    "height": 32,
+    "footprint": {
+      "width": 64,
+      "height": 32
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      448,
+      1408,
+      64,
+      32
+    ],
+    "frames": {
+      "down": [
+        448,
+        1408,
+        64,
+        32
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "bookcaseLadder",
+    "label": "Leaning ladder bookcase",
+    "category": "lounge",
+    "collection": "Lounge & relaxation",
+    "rooms": [
+      "lounge"
+    ],
+    "width": 64,
+    "height": 64,
+    "footprint": {
+      "width": 64,
+      "height": 64
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      0,
+      1472,
+      64,
+      64
+    ],
+    "frames": {
+      "down": [
+        0,
+        1472,
+        64,
+        64
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "lampTripod",
+    "label": "Tripod floor lamp",
+    "category": "lounge",
+    "collection": "Lounge & relaxation",
+    "rooms": [
+      "lounge"
+    ],
+    "width": 32,
+    "height": 64,
+    "footprint": {
+      "width": 32,
+      "height": 64
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      64,
+      1472,
+      32,
+      64
+    ],
+    "frames": {
+      "down": [
+        64,
+        1472,
+        32,
+        64
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": "warm",
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "magazineRackLow",
+    "label": "Wire magazine basket",
+    "category": "lounge",
+    "collection": "Lounge & relaxation",
+    "rooms": [
+      "lounge"
+    ],
+    "width": 32,
+    "height": 32,
+    "footprint": {
+      "width": 32,
+      "height": 32
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      96,
+      1472,
+      32,
+      32
+    ],
+    "frames": {
+      "down": [
+        96,
+        1472,
+        32,
+        32
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "espressoBar",
+    "label": "Commercial espresso bar",
+    "category": "pantry",
+    "collection": "Coffee & pantry",
+    "rooms": [
+      "pantry"
+    ],
+    "width": 64,
+    "height": 64,
+    "footprint": {
+      "width": 64,
+      "height": 64
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      128,
+      1472,
+      64,
+      64
+    ],
+    "frames": {
+      "down": [
+        128,
+        1472,
+        64,
+        64
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": "warm",
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "coffeeGrinder",
+    "label": "Burr coffee grinder",
+    "category": "pantry",
+    "collection": "Coffee & pantry",
+    "rooms": [
+      "pantry"
+    ],
+    "width": 32,
+    "height": 32,
+    "footprint": {
+      "width": 32,
+      "height": 32
+    },
+    "mode": "surface",
+    "collision": "existing-support-only",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      192,
+      1472,
+      32,
+      32
+    ],
+    "frames": {
+      "down": [
+        192,
+        1472,
+        32,
+        32
+      ]
+    },
+    "render": {
+      "depth": 0.05,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "refrigeratorTall",
+    "label": "Full-height refrigerator",
+    "category": "pantry",
+    "collection": "Coffee & pantry",
+    "rooms": [
+      "pantry"
+    ],
+    "width": 32,
+    "height": 64,
+    "footprint": {
+      "width": 32,
+      "height": 64
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      224,
+      1472,
+      32,
+      64
+    ],
+    "frames": {
+      "down": [
+        224,
+        1472,
+        32,
+        64
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "microwaveShelf",
+    "label": "Microwave wall shelf",
+    "category": "pantry",
+    "collection": "Coffee & pantry",
+    "rooms": [
+      "pantry"
+    ],
+    "width": 64,
+    "height": 32,
+    "footprint": {
+      "width": 64,
+      "height": 32
+    },
+    "mode": "wall",
+    "collision": "existing-support-only",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      256,
+      1472,
+      64,
+      32
+    ],
+    "frames": {
+      "down": [
+        256,
+        1472,
+        64,
+        32
+      ]
+    },
+    "render": {
+      "depth": 0.05,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "sinkIsland",
+    "label": "Sink and preparation island",
+    "category": "pantry",
+    "collection": "Coffee & pantry",
+    "rooms": [
+      "pantry"
+    ],
+    "width": 96,
+    "height": 64,
+    "footprint": {
+      "width": 96,
+      "height": 64
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      320,
+      1472,
+      96,
+      64
+    ],
+    "frames": {
+      "down": [
+        320,
+        1472,
+        96,
+        64
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "snackVending",
+    "label": "Glass-front snack vending machine",
+    "category": "pantry",
+    "collection": "Coffee & pantry",
+    "rooms": [
+      "pantry"
+    ],
+    "width": 64,
+    "height": 64,
+    "footprint": {
+      "width": 64,
+      "height": 64
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      416,
+      1472,
+      64,
+      64
+    ],
+    "frames": {
+      "down": [
+        416,
+        1472,
+        64,
+        64
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": "screen",
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "cafePedestal",
+    "label": "Round cafe pedestal table",
+    "category": "pantry",
+    "collection": "Coffee & pantry",
+    "rooms": [
+      "pantry"
+    ],
+    "width": 64,
+    "height": 32,
+    "footprint": {
+      "width": 64,
+      "height": 32
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      0,
+      1536,
+      64,
+      32
+    ],
+    "frames": {
+      "down": [
+        0,
+        1536,
+        64,
+        32
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "stoolSaddle",
+    "label": "Saddle cafe stool",
+    "category": "seating",
+    "collection": "Coffee & pantry",
+    "rooms": [
+      "pantry"
+    ],
+    "width": 32,
+    "height": 32,
+    "footprint": {
+      "width": 32,
+      "height": 32
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down",
+      "left",
+      "up",
+      "right"
+    ],
+    "atlas": [
+      64,
+      1536,
+      32,
+      32
+    ],
+    "frames": {
+      "down": [
+        64,
+        1536,
+        32,
+        32
+      ],
+      "up": [
+        288,
+        1952,
+        32,
+        32
+      ],
+      "left": [
+        320,
+        1952,
+        32,
+        32
+      ],
+      "right": [
+        352,
+        1952,
+        32,
+        32
+      ]
+    },
+    "render": {
+      "depth": 0.1,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [
+        "SIT",
+        "STAND"
+      ],
+      "future": null,
+      "enabled": true
+    },
+    "seats": [
+      {
+        "key": "0",
+        "type": "chair",
+        "anchor": {
+          "x": 16,
+          "y": 10
+        },
+        "footprint": {
+          "x": 0,
+          "y": 0,
+          "width": 32,
+          "height": 32
+        },
+        "facing": "down",
+        "exit": "up"
+      }
+    ],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "teaTrolley",
+    "label": "Tea service trolley",
+    "category": "pantry",
+    "collection": "Coffee & pantry",
+    "rooms": [
+      "pantry"
+    ],
+    "width": 64,
+    "height": 64,
+    "footprint": {
+      "width": 64,
+      "height": 64
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      96,
+      1536,
+      64,
+      64
+    ],
+    "frames": {
+      "down": [
+        96,
+        1536,
+        64,
+        64
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "teamIsland",
+    "label": "Four-person collaboration island",
+    "category": "training",
+    "collection": "Collaboration & creative",
+    "rooms": [
+      "collaboration",
+      "training"
+    ],
+    "width": 128,
+    "height": 64,
+    "footprint": {
+      "width": 128,
+      "height": 64
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      160,
+      1536,
+      128,
+      64
+    ],
+    "frames": {
+      "down": [
+        160,
+        1536,
+        128,
+        64
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": "screen",
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "brainstormingHex",
+    "label": "Hexagonal brainstorming table",
+    "category": "training",
+    "collection": "Collaboration & creative",
+    "rooms": [
+      "collaboration",
+      "training"
+    ],
+    "width": 96,
+    "height": 64,
+    "footprint": {
+      "width": 96,
+      "height": 64
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      288,
+      1536,
+      96,
+      64
+    ],
+    "frames": {
+      "down": [
+        288,
+        1536,
+        96,
+        64
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "sofaModular",
+    "label": "Modular discussion sofa",
+    "category": "training",
+    "collection": "Collaboration & creative",
+    "rooms": [
+      "collaboration",
+      "training"
+    ],
+    "width": 96,
+    "height": 64,
+    "footprint": {
+      "width": 96,
+      "height": 64
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      384,
+      1536,
+      96,
+      64
+    ],
+    "frames": {
+      "down": [
+        384,
+        1536,
+        96,
+        64
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [
+        "SIT",
+        "STAND"
+      ],
+      "future": null,
+      "enabled": true
+    },
+    "seats": [
+      {
+        "key": "0",
+        "type": "sofa",
+        "anchor": {
+          "x": 24,
+          "y": 42
+        },
+        "footprint": {
+          "x": 0,
+          "y": 0,
+          "width": 96,
+          "height": 64
+        },
+        "facing": "down",
+        "exit": "down"
+      },
+      {
+        "key": "1",
+        "type": "sofa",
+        "anchor": {
+          "x": 72,
+          "y": 42
+        },
+        "footprint": {
+          "x": 0,
+          "y": 0,
+          "width": 96,
+          "height": 64
+        },
+        "facing": "down",
+        "exit": "down"
+      }
+    ],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "chairScoop",
+    "label": "Scoop discussion chair",
+    "category": "seating",
+    "collection": "Collaboration & creative",
+    "rooms": [
+      "collaboration",
+      "training"
+    ],
+    "width": 32,
+    "height": 32,
+    "footprint": {
+      "width": 32,
+      "height": 32
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down",
+      "left",
+      "up",
+      "right"
+    ],
+    "atlas": [
+      480,
+      1536,
+      32,
+      32
+    ],
+    "frames": {
+      "down": [
+        480,
+        1536,
+        32,
+        32
+      ],
+      "up": [
+        384,
+        1952,
+        32,
+        32
+      ],
+      "left": [
+        416,
+        1952,
+        32,
+        32
+      ],
+      "right": [
+        448,
+        1952,
+        32,
+        32
+      ]
+    },
+    "render": {
+      "depth": 0.1,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [
+        "SIT",
+        "STAND"
+      ],
+      "future": null,
+      "enabled": true
+    },
+    "seats": [
+      {
+        "key": "0",
+        "type": "chair",
+        "anchor": {
+          "x": 16,
+          "y": 14
+        },
+        "footprint": {
+          "x": 0,
+          "y": 0,
+          "width": 32,
+          "height": 32
+        },
+        "facing": "down",
+        "exit": "down"
+      }
+    ],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "stickyWallLarge",
+    "label": "Planning wall with sticky notes",
+    "category": "training",
+    "collection": "Collaboration & creative",
+    "rooms": [
+      "collaboration",
+      "training"
+    ],
+    "width": 96,
+    "height": 32,
+    "footprint": {
+      "width": 96,
+      "height": 32
+    },
+    "mode": "wall",
+    "collision": "existing-support-only",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      0,
+      1600,
+      96,
+      32
+    ],
+    "frames": {
+      "down": [
+        0,
+        1600,
+        96,
+        32
+      ]
+    },
+    "render": {
+      "depth": 0.05,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "mobileAcousticScreen",
+    "label": "Mobile felt privacy screen",
+    "category": "training",
+    "collection": "Collaboration & creative",
+    "rooms": [
+      "collaboration",
+      "training"
+    ],
+    "width": 64,
+    "height": 64,
+    "footprint": {
+      "width": 64,
+      "height": 64
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      96,
+      1600,
+      64,
+      64
+    ],
+    "frames": {
+      "down": [
+        96,
+        1600,
+        64,
+        64
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "materialsLibrary",
+    "label": "Creative materials sample library",
+    "category": "training",
+    "collection": "Collaboration & creative",
+    "rooms": [
+      "collaboration",
+      "training"
+    ],
+    "width": 64,
+    "height": 64,
+    "footprint": {
+      "width": 64,
+      "height": 64
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      160,
+      1600,
+      64,
+      64
+    ],
+    "frames": {
+      "down": [
+        160,
+        1600,
+        64,
+        64
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "draftingTable",
+    "label": "Angled drafting table",
+    "category": "training",
+    "collection": "Collaboration & creative",
+    "rooms": [
+      "collaboration",
+      "training"
+    ],
+    "width": 64,
+    "height": 64,
+    "footprint": {
+      "width": 64,
+      "height": 64
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      224,
+      1600,
+      64,
+      64
+    ],
+    "frames": {
+      "down": [
+        224,
+        1600,
+        64,
+        64
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "digitalEasel",
+    "label": "Digital presentation easel",
+    "category": "training",
+    "collection": "Collaboration & creative",
+    "rooms": [
+      "collaboration",
+      "training"
+    ],
+    "width": 32,
+    "height": 64,
+    "footprint": {
+      "width": 32,
+      "height": 64
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      288,
+      1600,
+      32,
+      64
+    ],
+    "frames": {
+      "down": [
+        288,
+        1600,
+        32,
+        64
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": "display",
+      "enabled": false
+    },
+    "seats": [],
+    "display": {
+      "x": 5,
+      "y": 5,
+      "width": 22,
+      "height": 35,
+      "interactive": false
+    },
+    "lighting": "screen",
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "printerProduction",
+    "label": "Production copier and finisher",
+    "category": "storage",
+    "collection": "Print, storage & IT",
+    "rooms": [
+      "utility"
+    ],
+    "width": 96,
+    "height": 64,
+    "footprint": {
+      "width": 96,
+      "height": 64
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      320,
+      1600,
+      96,
+      64
+    ],
+    "frames": {
+      "down": [
+        320,
+        1600,
+        96,
+        64
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "scannerFlatbed",
+    "label": "Open-lid flatbed scanner",
+    "category": "storage",
+    "collection": "Print, storage & IT",
+    "rooms": [
+      "utility"
+    ],
+    "width": 32,
+    "height": 32,
+    "footprint": {
+      "width": 32,
+      "height": 32
+    },
+    "mode": "surface",
+    "collision": "existing-support-only",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      416,
+      1600,
+      32,
+      32
+    ],
+    "frames": {
+      "down": [
+        416,
+        1600,
+        32,
+        32
+      ]
+    },
+    "render": {
+      "depth": 0.05,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "paperOrganizer",
+    "label": "Paper ream organizer",
+    "category": "storage",
+    "collection": "Print, storage & IT",
+    "rooms": [
+      "utility"
+    ],
+    "width": 64,
+    "height": 64,
+    "footprint": {
+      "width": 64,
+      "height": 64
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      448,
+      1600,
+      64,
+      64
+    ],
+    "frames": {
+      "down": [
+        448,
+        1600,
+        64,
+        64
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "filingLateral",
+    "label": "Lateral filing cabinet",
+    "category": "storage",
+    "collection": "Print, storage & IT",
+    "rooms": [
+      "utility"
+    ],
+    "width": 96,
+    "height": 32,
+    "footprint": {
+      "width": 96,
+      "height": 32
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      0,
+      1664,
+      96,
+      32
+    ],
+    "frames": {
+      "down": [
+        0,
+        1664,
+        96,
+        32
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "lockerTower",
+    "label": "Personal locker tower",
+    "category": "storage",
+    "collection": "Print, storage & IT",
+    "rooms": [
+      "utility"
+    ],
+    "width": 64,
+    "height": 64,
+    "footprint": {
+      "width": 64,
+      "height": 64
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      96,
+      1664,
+      64,
+      64
+    ],
+    "frames": {
+      "down": [
+        96,
+        1664,
+        64,
+        64
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "rackNetwork",
+    "label": "Network rack and patch panels",
+    "category": "storage",
+    "collection": "Print, storage & IT",
+    "rooms": [
+      "utility"
+    ],
+    "width": 64,
+    "height": 64,
+    "footprint": {
+      "width": 64,
+      "height": 64
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      160,
+      1664,
+      64,
+      64
+    ],
+    "frames": {
+      "down": [
+        160,
+        1664,
+        64,
+        64
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": "screen",
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "recyclingStation",
+    "label": "Three-stream recycling station",
+    "category": "storage",
+    "collection": "Print, storage & IT",
+    "rooms": [
+      "utility"
+    ],
+    "width": 64,
+    "height": 32,
+    "footprint": {
+      "width": 64,
+      "height": 32
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      224,
+      1664,
+      64,
+      32
+    ],
+    "frames": {
+      "down": [
+        224,
+        1664,
+        64,
+        32
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "supplyCart",
+    "label": "Utility supply cart",
+    "category": "storage",
+    "collection": "Print, storage & IT",
+    "rooms": [
+      "utility"
+    ],
+    "width": 64,
+    "height": 64,
+    "footprint": {
+      "width": 64,
+      "height": 64
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      288,
+      1664,
+      64,
+      64
+    ],
+    "frames": {
+      "down": [
+        288,
+        1664,
+        64,
+        64
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "upsTower",
+    "label": "UPS battery tower",
+    "category": "storage",
+    "collection": "Print, storage & IT",
+    "rooms": [
+      "utility"
+    ],
+    "width": 32,
+    "height": 32,
+    "footprint": {
+      "width": 32,
+      "height": 32
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      352,
+      1664,
+      32,
+      32
+    ],
+    "frames": {
+      "down": [
+        352,
+        1664,
+        32,
+        32
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "plantMonstera",
+    "label": "Monstera in stone planter",
+    "category": "decor",
+    "collection": "Corridors & greenery",
+    "rooms": [
+      "reception",
+      "lounge",
+      "work",
+      "collaboration"
+    ],
+    "width": 32,
+    "height": 64,
+    "footprint": {
+      "width": 32,
+      "height": 64
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      384,
+      1664,
+      32,
+      64
+    ],
+    "frames": {
+      "down": [
+        384,
+        1664,
+        32,
+        64
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "plantFiddleLeaf",
+    "label": "Fiddle-leaf fig tree",
+    "category": "decor",
+    "collection": "Corridors & greenery",
+    "rooms": [
+      "reception",
+      "lounge",
+      "work",
+      "collaboration"
+    ],
+    "width": 32,
+    "height": 64,
+    "footprint": {
+      "width": 32,
+      "height": 64
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      416,
+      1664,
+      32,
+      64
+    ],
+    "frames": {
+      "down": [
+        416,
+        1664,
+        32,
+        64
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "planterTrough",
+    "label": "Long layered foliage trough",
+    "category": "decor",
+    "collection": "Corridors & greenery",
+    "rooms": [
+      "reception",
+      "lounge",
+      "work",
+      "collaboration"
+    ],
+    "width": 96,
+    "height": 32,
+    "footprint": {
+      "width": 96,
+      "height": 32
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      0,
+      1728,
+      96,
+      32
+    ],
+    "frames": {
+      "down": [
+        0,
+        1728,
+        96,
+        32
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "hangingPothos",
+    "label": "Hanging pothos shelf",
+    "category": "decor",
+    "collection": "Corridors & greenery",
+    "rooms": [
+      "reception",
+      "lounge",
+      "work",
+      "collaboration"
+    ],
+    "width": 64,
+    "height": 32,
+    "footprint": {
+      "width": 64,
+      "height": 32
+    },
+    "mode": "wall",
+    "collision": "existing-support-only",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      96,
+      1728,
+      64,
+      32
+    ],
+    "frames": {
+      "down": [
+        96,
+        1728,
+        64,
+        32
+      ]
+    },
+    "render": {
+      "depth": 0.05,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "artTriptych",
+    "label": "Landscape art triptych",
+    "category": "decor",
+    "collection": "Corridors & greenery",
+    "rooms": [
+      "reception",
+      "lounge",
+      "work",
+      "collaboration"
+    ],
+    "width": 96,
+    "height": 32,
+    "footprint": {
+      "width": 96,
+      "height": 32
+    },
+    "mode": "wall",
+    "collision": "existing-support-only",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      160,
+      1728,
+      96,
+      32
+    ],
+    "frames": {
+      "down": [
+        160,
+        1728,
+        96,
+        32
+      ]
+    },
+    "render": {
+      "depth": 0.05,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "clockFlip",
+    "label": "Split-flap office clock",
+    "category": "decor",
+    "collection": "Corridors & greenery",
+    "rooms": [
+      "reception",
+      "lounge",
+      "work",
+      "collaboration"
+    ],
+    "width": 64,
+    "height": 32,
+    "footprint": {
+      "width": 64,
+      "height": 32
+    },
+    "mode": "wall",
+    "collision": "existing-support-only",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      256,
+      1728,
+      64,
+      32
+    ],
+    "frames": {
+      "down": [
+        256,
+        1728,
+        64,
+        32
+      ]
+    },
+    "render": {
+      "depth": 0.05,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "signDirectory",
+    "label": "Illuminated room directory",
+    "category": "decor",
+    "collection": "Corridors & greenery",
+    "rooms": [
+      "reception",
+      "lounge",
+      "work",
+      "collaboration"
+    ],
+    "width": 64,
+    "height": 32,
+    "footprint": {
+      "width": 64,
+      "height": 32
+    },
+    "mode": "wall",
+    "collision": "existing-support-only",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      320,
+      1728,
+      64,
+      32
+    ],
+    "frames": {
+      "down": [
+        320,
+        1728,
+        64,
+        32
+      ]
+    },
+    "render": {
+      "depth": 0.05,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": "warm",
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "benchSlatted",
+    "label": "Slatted hallway bench",
+    "category": "seating",
+    "collection": "Corridors & greenery",
+    "rooms": [
+      "reception",
+      "lounge",
+      "work",
+      "collaboration"
+    ],
+    "width": 96,
+    "height": 32,
+    "footprint": {
+      "width": 96,
+      "height": 32
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      384,
+      1728,
+      96,
+      32
+    ],
+    "frames": {
+      "down": [
+        384,
+        1728,
+        96,
+        32
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [
+        "SIT",
+        "STAND"
+      ],
+      "future": null,
+      "enabled": true
+    },
+    "seats": [
+      {
+        "key": "0",
+        "type": "bench",
+        "anchor": {
+          "x": 16,
+          "y": 10
+        },
+        "footprint": {
+          "x": 0,
+          "y": 0,
+          "width": 96,
+          "height": 32
+        },
+        "facing": "down",
+        "exit": "down"
+      },
+      {
+        "key": "1",
+        "type": "bench",
+        "anchor": {
+          "x": 48,
+          "y": 10
+        },
+        "footprint": {
+          "x": 0,
+          "y": 0,
+          "width": 96,
+          "height": 32
+        },
+        "facing": "down",
+        "exit": "down"
+      },
+      {
+        "key": "2",
+        "type": "bench",
+        "anchor": {
+          "x": 80,
+          "y": 10
+        },
+        "footprint": {
+          "x": 0,
+          "y": 0,
+          "width": 96,
+          "height": 32
+        },
+        "facing": "down",
+        "exit": "down"
+      }
+    ],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "achievementCase",
+    "label": "Glass achievement display case",
+    "category": "decor",
+    "collection": "Corridors & greenery",
+    "rooms": [
+      "reception",
+      "lounge",
+      "work",
+      "collaboration"
+    ],
+    "width": 64,
+    "height": 64,
+    "footprint": {
+      "width": 64,
+      "height": 64
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      0,
+      1760,
+      64,
+      64
+    ],
+    "frames": {
+      "down": [
+        0,
+        1760,
+        64,
+        64
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "sconceTwin",
+    "label": "Twin-cylinder warm wall sconce",
+    "category": "decor",
+    "collection": "Lighting & architecture",
+    "rooms": [
+      "reception",
+      "meeting",
+      "lounge",
+      "work",
+      "pantry",
+      "collaboration"
+    ],
+    "width": 32,
+    "height": 32,
+    "footprint": {
+      "width": 32,
+      "height": 32
+    },
+    "mode": "wall",
+    "collision": "existing-support-only",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      64,
+      1760,
+      32,
+      32
+    ],
+    "frames": {
+      "down": [
+        64,
+        1760,
+        32,
+        32
+      ]
+    },
+    "render": {
+      "depth": 0.05,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": "warm",
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "pendantLinear",
+    "label": "Linear architectural pendant",
+    "category": "decor",
+    "collection": "Lighting & architecture",
+    "rooms": [
+      "reception",
+      "meeting",
+      "lounge",
+      "work",
+      "pantry",
+      "collaboration"
+    ],
+    "width": 96,
+    "height": 32,
+    "footprint": {
+      "width": 96,
+      "height": 32
+    },
+    "mode": "wall",
+    "collision": "existing-support-only",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      96,
+      1760,
+      96,
+      32
+    ],
+    "frames": {
+      "down": [
+        96,
+        1760,
+        96,
+        32
+      ]
+    },
+    "render": {
+      "depth": 0.05,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": "warm",
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "lampArchitect",
+    "label": "Articulated task lamp",
+    "category": "workstations",
+    "collection": "Lighting & architecture",
+    "rooms": [
+      "reception",
+      "meeting",
+      "lounge",
+      "work",
+      "pantry",
+      "collaboration"
+    ],
+    "width": 32,
+    "height": 32,
+    "footprint": {
+      "width": 32,
+      "height": 32
+    },
+    "mode": "surface",
+    "collision": "existing-support-only",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      192,
+      1760,
+      32,
+      32
+    ],
+    "frames": {
+      "down": [
+        192,
+        1760,
+        32,
+        32
+      ]
+    },
+    "render": {
+      "depth": 0.05,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": "desk",
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "lampHalo",
+    "label": "Halo reading floor lamp",
+    "category": "decor",
+    "collection": "Lighting & architecture",
+    "rooms": [
+      "reception",
+      "meeting",
+      "lounge",
+      "work",
+      "pantry",
+      "collaboration"
+    ],
+    "width": 32,
+    "height": 64,
+    "footprint": {
+      "width": 32,
+      "height": 64
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      224,
+      1760,
+      32,
+      64
+    ],
+    "frames": {
+      "down": [
+        224,
+        1760,
+        32,
+        64
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": "warm",
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "lightCoveCorner",
+    "label": "Corner cove light feature",
+    "category": "decor",
+    "collection": "Lighting & architecture",
+    "rooms": [
+      "reception",
+      "meeting",
+      "lounge",
+      "work",
+      "pantry",
+      "collaboration"
+    ],
+    "width": 64,
+    "height": 32,
+    "footprint": {
+      "width": 64,
+      "height": 32
+    },
+    "mode": "wall",
+    "collision": "existing-support-only",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      256,
+      1760,
+      64,
+      32
+    ],
+    "frames": {
+      "down": [
+        256,
+        1760,
+        64,
+        32
+      ]
+    },
+    "render": {
+      "depth": 0.05,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": "warm",
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "floorLantern",
+    "label": "Fluted floor lantern",
+    "category": "decor",
+    "collection": "Lighting & architecture",
+    "rooms": [
+      "reception",
+      "meeting",
+      "lounge",
+      "work",
+      "pantry",
+      "collaboration"
+    ],
+    "width": 32,
+    "height": 32,
+    "footprint": {
+      "width": 32,
+      "height": 32
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      320,
+      1760,
+      32,
+      32
+    ],
+    "frames": {
+      "down": [
+        320,
+        1760,
+        32,
+        32
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": "warm",
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "archWoodSlats",
+    "label": "Freestanding oak slat screen",
+    "category": "decor",
+    "collection": "Lighting & architecture",
+    "rooms": [
+      "reception",
+      "meeting",
+      "lounge",
+      "work",
+      "pantry",
+      "collaboration"
+    ],
+    "width": 64,
+    "height": 64,
+    "footprint": {
+      "width": 64,
+      "height": 64
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      352,
+      1760,
+      64,
+      64
+    ],
+    "frames": {
+      "down": [
+        352,
+        1760,
+        64,
+        64
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "archGlassScreen",
+    "label": "Arched fluted glass screen",
+    "category": "decor",
+    "collection": "Lighting & architecture",
+    "rooms": [
+      "reception",
+      "meeting",
+      "lounge",
+      "work",
+      "pantry",
+      "collaboration"
+    ],
+    "width": 64,
+    "height": 64,
+    "footprint": {
+      "width": 64,
+      "height": 64
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      416,
+      1760,
+      64,
+      64
+    ],
+    "frames": {
+      "down": [
+        416,
+        1760,
+        64,
+        64
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "acousticHexTiles",
+    "label": "Hexagonal acoustic wall tiles",
+    "category": "decor",
+    "collection": "Lighting & architecture",
+    "rooms": [
+      "reception",
+      "meeting",
+      "lounge",
+      "work",
+      "pantry",
+      "collaboration"
+    ],
+    "width": 64,
+    "height": 32,
+    "footprint": {
+      "width": 64,
+      "height": 32
+    },
+    "mode": "wall",
+    "collision": "existing-support-only",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      0,
+      1824,
+      64,
+      32
+    ],
+    "frames": {
+      "down": [
+        0,
+        1824,
+        64,
+        32
+      ]
+    },
+    "render": {
+      "depth": 0.05,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "tvMediaCredenza",
+    "label": "TV and media storage credenza",
+    "category": "lounge",
+    "collection": "TV & recreation",
+    "rooms": [
+      "lounge",
+      "collaboration"
+    ],
+    "width": 96,
+    "height": 64,
+    "footprint": {
+      "width": 96,
+      "height": 64
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      64,
+      1824,
+      96,
+      64
+    ],
+    "frames": {
+      "down": [
+        64,
+        1824,
+        96,
+        64
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": "display",
+      "enabled": false
+    },
+    "seats": [],
+    "display": {
+      "x": 12,
+      "y": 4,
+      "width": 72,
+      "height": 27,
+      "interactive": false
+    },
+    "lighting": "screen",
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "tvMobileStand",
+    "label": "Mobile TV presentation stand",
+    "category": "lounge",
+    "collection": "TV & recreation",
+    "rooms": [
+      "lounge",
+      "collaboration"
+    ],
+    "width": 64,
+    "height": 64,
+    "footprint": {
+      "width": 64,
+      "height": 64
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      160,
+      1824,
+      64,
+      64
+    ],
+    "frames": {
+      "down": [
+        160,
+        1824,
+        64,
+        64
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": "display",
+      "enabled": false
+    },
+    "seats": [],
+    "display": {
+      "x": 5,
+      "y": 6,
+      "width": 54,
+      "height": 27,
+      "interactive": false
+    },
+    "lighting": "screen",
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "consoleArcade",
+    "label": "Upright arcade cabinet",
+    "category": "lounge",
+    "collection": "TV & recreation",
+    "rooms": [
+      "lounge",
+      "collaboration"
+    ],
+    "width": 32,
+    "height": 64,
+    "footprint": {
+      "width": 32,
+      "height": 64
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      224,
+      1824,
+      32,
+      64
+    ],
+    "frames": {
+      "down": [
+        224,
+        1824,
+        32,
+        64
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": "game",
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": "screen",
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "chessTable",
+    "label": "Chess discussion table",
+    "category": "lounge",
+    "collection": "TV & recreation",
+    "rooms": [
+      "lounge",
+      "collaboration"
+    ],
+    "width": 64,
+    "height": 32,
+    "footprint": {
+      "width": 64,
+      "height": 32
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      256,
+      1824,
+      64,
+      32
+    ],
+    "frames": {
+      "down": [
+        256,
+        1824,
+        64,
+        32
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": "game",
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "foosballTable",
+    "label": "Foosball recreation table",
+    "category": "lounge",
+    "collection": "TV & recreation",
+    "rooms": [
+      "lounge",
+      "collaboration"
+    ],
+    "width": 96,
+    "height": 64,
+    "footprint": {
+      "width": 96,
+      "height": 64
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      320,
+      1824,
+      96,
+      64
+    ],
+    "frames": {
+      "down": [
+        320,
+        1824,
+        96,
+        64
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": "game",
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "pingPongTable",
+    "label": "Table tennis station",
+    "category": "lounge",
+    "collection": "TV & recreation",
+    "rooms": [
+      "lounge",
+      "collaboration"
+    ],
+    "width": 128,
+    "height": 64,
+    "footprint": {
+      "width": 128,
+      "height": 64
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      0,
+      1888,
+      128,
+      64
+    ],
+    "frames": {
+      "down": [
+        0,
+        1888,
+        128,
+        64
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": "game",
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "boardGameShelf",
+    "label": "Board game library shelving",
+    "category": "lounge",
+    "collection": "TV & recreation",
+    "rooms": [
+      "lounge",
+      "collaboration"
+    ],
+    "width": 64,
+    "height": 64,
+    "footprint": {
+      "width": 64,
+      "height": 64
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      128,
+      1888,
+      64,
+      64
+    ],
+    "frames": {
+      "down": [
+        128,
+        1888,
+        64,
+        64
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": "game",
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "recordConsole",
+    "label": "Record player and vinyl console",
+    "category": "lounge",
+    "collection": "TV & recreation",
+    "rooms": [
+      "lounge",
+      "collaboration"
+    ],
+    "width": 64,
+    "height": 32,
+    "footprint": {
+      "width": 64,
+      "height": 32
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      192,
+      1888,
+      64,
+      32
+    ],
+    "frames": {
+      "down": [
+        192,
+        1888,
+        64,
+        32
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": null,
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  },
+  {
+    "id": "aquariumCabinet",
+    "label": "Planted aquarium cabinet",
+    "category": "lounge",
+    "collection": "TV & recreation",
+    "rooms": [
+      "lounge",
+      "collaboration"
+    ],
+    "width": 64,
+    "height": 64,
+    "footprint": {
+      "width": 64,
+      "height": 64
+    },
+    "mode": "blocking",
+    "collision": "solid-footprint",
+    "orientations": [
+      "down"
+    ],
+    "atlas": [
+      256,
+      1888,
+      64,
+      64
+    ],
+    "frames": {
+      "down": [
+        256,
+        1888,
+        64,
+        64
+      ]
+    },
+    "render": {
+      "depth": 0,
+      "foreground": "none",
+      "sampling": "nearest"
+    },
+    "interaction": {
+      "actions": [],
+      "future": null,
+      "enabled": false
+    },
+    "seats": [],
+    "display": null,
+    "lighting": "screen",
+    "themes": [
+      "warm-wood",
+      "minimal-light",
+      "scandinavian",
+      "dark-tech",
+      "eco-green"
+    ]
+  }
+]

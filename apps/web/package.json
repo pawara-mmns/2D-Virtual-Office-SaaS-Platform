@@ -20,17 +20,22 @@
   "dependencies": {
     "@colyseus/sdk": "0.18.5",
     "@livekit/components-react": "2.9.24",
+    "@node-rs/argon2": "^2.2.2",
     "@supabase/ssr": "0.12.7",
     "@supabase/supabase-js": "2.118.0",
     "livekit-client": "2.23.0",
+    "lucide-react": "^1.69.0",
     "next": "16.4.2",
+    "pg": "^8.23.1",
     "phaser": "4.2.1",
     "react": "19.3.1",
-    "react-dom": "19.3.1"
+    "react-dom": "19.3.1",
+    "server-only": "^0.0.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "4.3.3",
     "@types/node": "24.19.2",
+    "@types/pg": "^8.23.1",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "eslint": "9.39.5",

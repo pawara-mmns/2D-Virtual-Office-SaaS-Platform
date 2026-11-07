@@ -1,5 +1,25 @@
 # Virtual Office
 
+The owner-only in-game [Live Office Editor](docs/live-office-editing.md)
+supports direct furniture editing, immediate multiplayer updates, Save without reloads,
+versioned recovery drafts and protected interactive seating. Its additive live-commit
+migration is prepared locally; see the report for activation and validation.
+
+The [pixel-art visual overhaul](docs/premium-office-visuals.md) adds detailed original
+sprites, seven editable assets, warm baked lighting and an offline artwork import
+pipeline. The report includes actual Phaser comparisons, performance measurements
+and the local catalog migration required before saving new assets to hosted Supabase.
+
+The follow-up [room and UI polish](docs/room-polish.md) refines the glass HUD,
+interaction chips and editor, adds eight original room accents, and improves
+reception and corridor lighting. The report includes actual playable screenshots,
+regression results and the additional local catalog migration.
+
+[Phase 03 expands the premium asset collection](docs/phase03-premium-collection.md)
+with 90 original designs across ten groups, 211 searchable editor entries,
+five shared theme atlases, visual contact sheets and actual Phaser room captures.
+The report records authoritative seating/placement checks and hosted catalog activation.
+
 A multi-tenant 2D virtual office SaaS platform for distributed teams, with private
 pixel-art offices, realtime movement, chat and meeting-zone voice. **Phase 5
 Step 3A prepares Vercel frontend and Railway realtime hosting, preserving Step 3's
@@ -28,6 +48,10 @@ invitation email and authenticated team workflows remain unverified; see
 [Step 4 validation](docs/team-invitations-validation.md).
 
 ## Technology stack
+
+Phase 01 adds Shift-to-run, authoritative chair/sofa/bench seating, contextual E/touch interactions, mobile movement controls, and shared object metadata. See the [implementation, screenshots, validation, and Phase 02 editor guidance](docs/phase01-movement-seating.md). No database migration or production deployment is required.
+
+The [workstation/four-direction seating fix](docs/workstation-directional-seating.md) registers chairs embedded in desk artwork, faces chairs toward their tables, preserves safe access, and supplies directional screenshots and regression results.
 
 - Next.js 16 App Router and React 19
 - TypeScript in strict mode, with unchecked indexed access enabled
@@ -568,3 +592,17 @@ The invitation link captures proof into an HttpOnly cookie, then uses clean
 email acceptance. Token-bearing paths need redaction in deployment access logs.
 See [architecture/configuration/test instructions](docs/team-invitations.md) and
 [actual PASS/NOT TESTED results and approval status](docs/team-invitations-validation.md).
+
+## Platform administrator console
+
+The separate username/password and mandatory MFA console lives at `/superadmin/login`.
+Start with [local setup, architecture, bootstrap and recovery](docs/platform-admin.md)
+and [validation results](docs/platform-admin-validation.md). Its additive migration
+has not been applied remotely. Reconcile the documented environment migration-history
+discrepancy before activation. Normal workspace accounts continue using Supabase Auth.
+
+The [hosted Supabase data integration report](docs/platform-admin-data-integration.md)
+documents the separate administrator/tenant stores, actual observed counts,
+read-only inspection, telemetry, tests and regression screenshots. Use
+`pnpm admin:connect:data` to configure the matching server-only tenant reader and
+`pnpm admin:check:data` for aggregate read-only diagnostics.

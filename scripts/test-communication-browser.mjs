@@ -1,3 +1,4 @@
+import {unusedDecorationActions} from './unused-decoration-fixture.mjs';
 // Actual office composition, React and Phaser; synthetic identity/transport and
 // profile/history actions. No app debug route, live account, microphone or DB.
 import assert from "node:assert/strict";
@@ -41,7 +42,7 @@ test("office communication composition: responsive panels, focus, drafts, engine
       f.refresh=()=>{Object.assign(f.people[0],f.profile);Object.assign(f.snapshot.players.get('self'),f.profile);f.options.onParticipants(f.people.map(p=>({...p})));};
       function App(){const[version,setVersion]=useState(0),[office,setOffice]=useState(id(3));useEffect(()=>{f.remount=()=>setVersion(v=>v+1);f.switchOffice=()=>{f.snapshot={...f.snapshot,officeId:id(4),players:new Map([['self',f.snapshot.players.get('self')]])};f.people=[f.people[0]];setOffice(id(4));}},[]);return <main className="office-page"><Profiler id="office" onRender={()=>f.commits++}><OfficeCanvas key={office+'/'+version} appearance={f.profile} officeId={office} userId={id(1)} context={{workspaceName:'Synthetic workspace · isolated verification',officeName:'Oak & Fern Studio',workspaceHref:'#workspace'}}/></Profiler></main>}
       const mounted=createRoot(document.getElementById('root'));f.unmount=()=>mounted.unmount();mounted.render(<StrictMode><App/></StrictMode>);
-    `},plugins:[{name:"isolated-office-boundaries",setup(plugin){
+    `},plugins:[{name:"isolated-office-boundaries",setup(plugin){unusedDecorationActions(plugin);
       plugin.onResolve({filter:/network\/connection$/},()=>({path:"network",namespace:"fixture"}));
       plugin.onResolve({filter:/engine\/create-game$/},()=>({path:"engine",namespace:"fixture"}));
       plugin.onResolve({filter:/lib\/supabase\/client$/},()=>({path:"auth",namespace:"fixture"}));
@@ -65,7 +66,7 @@ test("office communication composition: responsive panels, focus, drafts, engine
   if(process.env.OFFICE_TEST_EXPORT_PREVIEW==="1"){
     const preview=resolve(root,".cache/navigation-preview");mkdirSync(preview,{recursive:true});writeFileSync(resolve(preview,"index.html"),fixtureHtml);writeFileSync(resolve(preview,"fixture.js"),built.outputFiles[0].contents);
   }
-  const server=createServer((req,res)=>{const path=new URL(req.url,"http://localhost").pathname;if(path==="/fixture.js"){res.setHeader("Content-Type","text/javascript");res.end(built.outputFiles[0].contents);}else if(path.startsWith("/office/")&&["studio.json","avatar.png","office-tiles.png"].includes(path.slice(8))){res.setHeader("Content-Type",path.endsWith("png")?"image/png":"application/json");res.end(readFileSync(resolve(web,"public",path.slice(1))));}else{res.setHeader("Content-Type","text/html");res.end(fixtureHtml);}});
+  const server=createServer((req,res)=>{const path=new URL(req.url,"http://localhost").pathname;if(path==="/fixture.js"){res.setHeader("Content-Type","text/javascript");res.end(built.outputFiles[0].contents);}else if(path.startsWith("/office/")&&["studio.json","avatar.png","office-tiles.png","environments/warm-wood.png"].includes(path.slice(8))){res.setHeader("Content-Type",path.endsWith("png")?"image/png":"application/json");res.end(readFileSync(resolve(web,"public",path.slice(1))));}else{res.setHeader("Content-Type","text/html");res.end(fixtureHtml);}});
   await new Promise(done=>server.listen(0,"127.0.0.1",done));const cache=resolve(root,".cache");mkdirSync(cache,{recursive:true});const profile=mkdtempSync(resolve(cache,"communication-browser-"));
   const child=spawn(browser,["--headless=new","--remote-debugging-port=0",`--user-data-dir=${profile}`,"--no-first-run","--no-default-browser-check",...(nativeRendering?[]:["--enable-unsafe-swiftshader","--use-angle=swiftshader"]),"--window-size=1440,900","about:blank"],{stdio:"ignore",windowsHide:true});let tools;
   try{
@@ -224,7 +225,7 @@ test("office communication composition: responsive panels, focus, drafts, engine
     await evaluate("document.getElementById('office-chat-draft').focus()");await command("Input.insertText",{text:"Unsent draft"});const history=await evaluate("communicationFixture.history");await command("Input.dispatchKeyEvent",{type:"keyDown",key:"Escape",code:"Escape"});assert.equal(await evaluate("document.getElementById('office-chat').inert"),true,"Closing window becomes inert immediately");await until(()=>evaluate("getComputedStyle(document.getElementById('office-chat')).visibility==='hidden'"));await button("Office Chat");assert.equal(await evaluate("document.getElementById('office-chat-draft').value"),"Unsent draft");assert.equal(await evaluate("communicationFixture.history"),history,"Toggling must not reload history");
     await until(()=>evaluate("communicationFixture.panelTransitions.entry>0 && communicationFixture.panelTransitions.exit>0"));
     await snapshot("communication-chat-desktop.png");
-    await until(()=>evaluate("(()=>{const a=document.querySelector('.office-dock-selection').getBoundingClientRect(),b=[...document.querySelectorAll('.office-panel-controls button')].find(n=>n.textContent==='Office Chat').getBoundingClientRect();return Math.abs(a.top-b.top)<1&&Math.abs(a.left-b.left)<1})()"));
+    await until(()=>evaluate("(()=>{const buttons=[...document.querySelectorAll('.office-panel-controls button')],chat=buttons.find(n=>n.textContent==='Office Chat'),other=buttons.find(n=>n!==chat);return chat.getAttribute('aria-expanded')==='true'&&getComputedStyle(chat).backgroundColor!==getComputedStyle(other).backgroundColor})()"));
     await media([{name:"prefers-color-scheme",value:"dark"}]);await delay(100);await snapshot("apple-chat-dark.png");
     const darkContrast=await evaluate(`(()=>{const s=getComputedStyle(document.querySelector('.office-identity')),c=v=>v.match(/[\\d.]+/g).map(Number),lum=a=>a.slice(0,3).map(n=>{n/=255;return n<=.04045?n/12.92:((n+.055)/1.055)**2.4}).reduce((sum,n,i)=>sum+n*[.2126,.7152,.0722][i],0),bg=c(s.backgroundColor),back=bg.slice(0,3).map(v=>(v*bg[3]+255*(1-bg[3]))*.85+255*.15),ratio=a=>(Math.max(lum(a),lum(back))+.05)/(Math.min(lum(a),lum(back))+.05);return{ink:ratio(c(s.color)),muted:ratio(c(getComputedStyle(document.querySelector('.office-context > p')).color))}})()`);
     assert.ok(darkContrast.ink>=4.5 && darkContrast.muted>=4.5,"Dark material stays readable over a white backdrop plus a conservative reflection allowance");

@@ -1,5 +1,6 @@
 export type Direction = "down" | "left" | "right" | "up";
-const movementKeys = new Set(["KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowLeft", "ArrowDown", "ArrowRight"]);
+const movementKeys = new Set(["KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowLeft", "ArrowDown", "ArrowRight",'ShiftLeft','ShiftRight']);
+export const runningIntent=(pressed:ReadonlySet<string>)=>pressed.has('ShiftLeft')||pressed.has('ShiftRight')||pressed.has('TouchRun');
 export type Movement = { x: number; y: number; facing: Direction };
 export function movement(pressed: ReadonlySet<string>, facing: Direction = "down", result: Movement = { x: 0, y: 0, facing }) {
   const x = Number(pressed.has("KeyD") || pressed.has("ArrowRight")) - Number(pressed.has("KeyA") || pressed.has("ArrowLeft"));
@@ -12,10 +13,11 @@ export function movement(pressed: ReadonlySet<string>, facing: Direction = "down
   result.x = x / length; result.y = y / length;
   return result;
 }
-export function attachMovementInput(target: EventTarget, focus: () => boolean, globalEvents: EventTarget) {
+export function attachMovementInput(target: EventTarget, focus: () => boolean, globalEvents: EventTarget, interact?:()=>void) {
   const pressed = new Set<string>();
   const down = (event: Event) => {
     const key = event as KeyboardEvent;
+    if(focus()&&key.code==='KeyE'&&!key.altKey&&!key.ctrlKey&&!key.metaKey){key.preventDefault();if(!key.repeat){interact?.();pressed.clear();}return;}
     if (!focus() || key.altKey || key.ctrlKey || key.metaKey || !movementKeys.has(key.code)) return;
     key.preventDefault(); pressed.add(key.code);
   };

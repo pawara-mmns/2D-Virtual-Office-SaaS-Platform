@@ -1,4 +1,5 @@
 import { supabaseEnvironmentMaps } from "./environment/maps.ts";
+import {supabaseLiveStore} from './environment/live-store.ts';
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { validateOfficeMap } from "../../../packages/shared/src/map.ts";
@@ -27,7 +28,9 @@ try {
     ...supabaseReadiness(config),
     voice: () => voice.available(),
   });
-  const server = createRealtimeServer({ authorize, chat: supabaseChatStore(config.url, config.key), map, loadMap: supabaseEnvironmentMaps(config.url, config.key, map), origins: config.origins, voice, readiness });
+  const writerUrl=process.env.OFFICE_DECORATION_SUPABASE_URL?.trim()||config.url;
+  if(writerUrl!==config.url)throw Error('Live office writer must use the workspace project.');
+  const server = createRealtimeServer({ authorize, chat: supabaseChatStore(config.url, config.key), map,liveStore:supabaseLiveStore(config.url,config.key,process.env.OFFICE_DECORATION_SUPABASE_SECRET_KEY), loadMap: supabaseEnvironmentMaps(config.url, config.key, map), origins: config.origins, voice, readiness });
   await server.listen(config.port, "0.0.0.0");
   console.info(`Realtime office server listening on port ${config.port}.`);
 } catch {

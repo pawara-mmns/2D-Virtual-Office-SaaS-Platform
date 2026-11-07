@@ -118,7 +118,7 @@ test("actual voice UI: no auto capture, explicit join, cancellation, real SDK de
   }finally{
     const exited=child.exitCode!==null?Promise.resolve():new Promise((done)=>child.once("exit",done));
     if(tools)try{await Promise.race([tools.command("Browser.close"),delay(1500)]);}catch{/* Own isolated browser may already be closed. */}
-    tools?.close();if(child.exitCode===null)child.kill();await Promise.race([exited,delay(2000)]);server.close();await delay(400);
-    if(resolve(profile).startsWith(cache+sep+"voice-browser-"))rmSync(profile,{recursive:true,force:true,maxRetries:5,retryDelay:200});
+    tools?.close();await Promise.race([exited,delay(5000)]);if(child.exitCode===null)child.kill();await Promise.race([exited,delay(2000)]);server.close();await delay(400);
+    if(resolve(profile).startsWith(cache+sep+"voice-browser-"))try{rmSync(profile,{recursive:true,force:true,maxRetries:5,retryDelay:200});}catch(error){if(!['EPERM','EBUSY'].includes(error.code))throw error;console.warn('Isolated voice browser profile retained in ignored .cache because Windows still holds a file lock.');}
   }
 });
