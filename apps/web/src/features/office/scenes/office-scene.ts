@@ -1,4 +1,4 @@
-import { environmentPaint } from "../../../../../../packages/shared/src/environment/visuals.ts";
+import { environmentPaint,environmentAtmosphere } from "../../../../../../packages/shared/src/environment/visuals.ts";
 import type { EnvironmentConfig } from "../../../../../../packages/shared/src/environment/catalog.ts";
 import Phaser from "phaser";
 import { mapMarkers, TILE_SIZE, validateOfficeMap, type OfficeMap } from "../maps/map-data.ts";
@@ -13,12 +13,14 @@ import { interactionRegistry, closestInteraction, type Interactable, type Primar
 import { advanceMovement } from '../../../../../../packages/shared/src/movement.ts';
 import { createSeating } from '../../../../../../packages/shared/src/seating.ts';
 import {isChairAsset} from '../../../../../../packages/shared/src/environment/seating-metadata.ts';
-import {directionalChairRects} from '../../../../../../packages/shared/src/environment/assets.ts';
-import {composeOfficeEnvironment,type PublishedDecoration} from '../../../../../../packages/shared/src/environment/decoration.ts';
+import {directionalChairRects,assetRenderDepth} from '../../../../../../packages/shared/src/environment/assets.ts';
+import {composeOfficeEnvironment,composeDecoratedEnvironment,editorAsset,assetRect,type PublishedDecoration} from '../../../../../../packages/shared/src/environment/decoration.ts';
+import {structureVersion,type LiveSnapshot} from '../../../../../../packages/shared/src/environment/live-decoration.ts';
 import {tileLayer} from '../../../../../../packages/shared/src/map.ts';
-import {DecorationOverlay,type EditorView,type EditorEvent} from '../../decoration/overlay.ts';
+import {DecorationOverlay,type EditorView,type EditorEvent,type EditorPointer} from '../../decoration/overlay.ts';
+import type {EditorCommand} from '../../decoration/manipulation.ts';
 
-export type OfficeCallbacks = { onReady(mapVersion?: string): void; onError(): void; onNavigation?(state: NavigationState): void; onReducedEffects?(reduced: boolean): void; onBubbleAnchors?(anchors: BubbleAnchor[]): void; onInteraction?(value:PrimaryInteraction|null):void;onDecoration?(event:EditorEvent):void };
+export type OfficeCallbacks = { onReady(mapVersion?: string,structureVersion?:string): void; onError(): void; onNavigation?(state: NavigationState): void; onReducedEffects?(reduced: boolean): void; onBubbleAnchors?(anchors: BubbleAnchor[]): void; onInteraction?(value:PrimaryInteraction|null):void;onDecoration?(event:EditorEvent):void };
 export class OfficeScene extends Phaser.Scene {
   player!: Phaser.Physics.Arcade.Sprite;
   avatar!: PlayerAvatar;
@@ -56,6 +58,13 @@ export class OfficeScene extends Phaser.Scene {
   private rugVisual?:Phaser.GameObjects.Graphics;
   private editor?:DecorationOverlay;
   private editing=false;
+  private furnitureImages=new Map<string,Phaser.GameObjects.Image>();
+  private furnitureTilesCleared=false;
+  private liveSnapshot?:LiveSnapshot;
+  private rugKey='';
+  private atmosphere?:Phaser.GameObjects.Image;
+  private atmosphereTexture?:Phaser.Textures.CanvasTexture;
+  private atmosphereKey='';
   constructor(private readonly pressed: ReadonlySet<string>, private readonly callbacks: OfficeCallbacks, private appearance: AvatarAppearance, private readonly multiplayer = false, private readonly officeId?: string, private readonly environment?: EnvironmentConfig,private readonly decoration?:PublishedDecoration) { super("Office"); }
   preload() {
     this.load.once(Phaser.Loader.Events.FILE_LOAD_ERROR, () => { this.failed = true; this.callbacks.onError(); });
@@ -78,6 +87,11 @@ export class OfficeScene extends Phaser.Scene {
       if (this.environment) {
         const paint = environmentPaint(data, this.environment), graphics = this.add.graphics();this.rugVisual=graphics;
         for (const rect of paint.rugs) graphics.fillStyle(parseInt(rect.color, 16), rect.alpha).fillRect(rect.x, rect.y, rect.width, rect.height);
+        // Light is rasterized at one texel per 4 world pixels, then sampled
+        // nearest-neighbor. One batched sprite replaces thousands of draw commands.
+        this.atmosphereTexture=this.textures.createCanvas('office-atmosphere',Math.ceil(data.width*8),Math.ceil(data.height*8))??undefined;
+        if(this.atmosphereTexture){this.atmosphereTexture.setFilter(Phaser.Textures.FilterMode.NEAREST);this.atmosphere=this.add.image(0,0,'office-atmosphere').setOrigin(0).setScale(4);}
+        this.events.once(Phaser.Scenes.Events.SHUTDOWN,()=>{this.atmosphere?.destroy();this.textures.remove('office-atmosphere');this.atmosphereTexture=undefined;});
         this.cameras.main.setBackgroundColor("#" + paint.theme.background);
       }
       for (const name of ["Architecture", "Furniture"]) if (!map.createLayer(name, tiles, 0, 0)) throw new Error("Office layer unavailable");
@@ -91,18 +105,17 @@ export class OfficeScene extends Phaser.Scene {
           this.seatingVisuals.push(this.add.image(object.position.x,object.position.y,chairTexture,key).setOrigin(0).setDepth(.1));
         }
         for(const [index,rect]of object.foreground.entries()){
-          const key=`seat-edge-${object.instanceId}-${index}`,texture=this.textures.get('office-tiles');
+          const key=`seat-edge-${object.assetId}-${index}`,texture=this.textures.get('office-tiles');
           if(!texture.has(key))texture.add(key,0,rect.sourceX,rect.sourceY,rect.width,rect.height);
           this.seatingVisuals.push(this.add.image(rect.x,rect.y,'office-tiles',key).setOrigin(0).setDepth(3.1).setData('seatingForeground',true));
         }
       }
       if (this.environment) {
         const paint = environmentPaint(data, this.environment), graphics = this.add.graphics();
+        for(const r of paint.brandPanels)graphics.fillStyle(parseInt(r.color,16),r.alpha).fillRect(r.x,r.y,r.width,r.height);
         for (const sign of paint.signs) {
-          graphics.fillStyle(parseInt(paint.theme.background,16), 1).fillRoundedRect(sign.x, sign.y, sign.width!, sign.height!, 3);
-          graphics.fillStyle(parseInt(paint.accent,16), 1).fillRect(sign.x, sign.y, 4, sign.height!);
-          const title = this.add.text(sign.x+10, sign.y+10, sign.name, {fontFamily:"Arial, sans-serif",fontSize:"10px",color:"#ffffff"});
-          if (title.width > sign.width!-14) title.setScale((sign.width!-14)/title.width, 1);
+          const title = this.add.text(sign.x+sign.width!/2, sign.y+sign.height!/2, sign.name, {fontFamily:"Arial, sans-serif",fontSize:"10px",color:"#fff1db"}).setOrigin(.5);
+          if (title.width > sign.width!-68) title.setScale((sign.width!-68)/title.width, 1);
         }
       }
       const collision = map.createLayer("Collision", tiles, 0, 0);
@@ -133,10 +146,12 @@ export class OfficeScene extends Phaser.Scene {
       this.scale.on(Phaser.Scale.Events.RESIZE, this.resize, this);
       this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => { this.wheelZoomTarget = null; this.scale.off(Phaser.Scale.Events.RESIZE, this.resize, this); camera.stopFollow(); this.teammate = null; this.areaId = null; this.network?.close(); this.remotes.clear(); });
       this.events.once(Phaser.Scenes.Events.DESTROY, () => { this.network?.close(); this.remotes.clear(); });
-      this.callbacks.onReady(mapVersion(data));
+      if(this.environment)this.renderFurniture(data);
+      this.callbacks.onReady(mapVersion(data),structureVersion(data));
     } catch { this.failed = true; this.callbacks.onError(); }
   }
   private resize() {
+    this.editor?.invalidateView();
     this.wheelZoomTarget = null;
     this.setZoom(this.fitMode ? fitOfficeZoom(this.scale.width, this.scale.height, this.mapWidth, this.mapHeight) : this.cameras.main.zoom);
     if (this.mode === "overview") this.cameras.main.centerOn(this.mapWidth / 2, this.mapHeight / 2);
@@ -250,22 +265,47 @@ export class OfficeScene extends Phaser.Scene {
   }
   setAppearance(appearance: AvatarAppearance) { this.appearance = appearance; if (!this.multiplayer) {this.avatar?.setAppearance(appearance);if(this.preview)Object.assign(this.preview,appearance);} }
   setNetwork(network: OfficeNetwork) { this.network = network; }
+  applyEnvironment(snapshot:LiveSnapshot){
+    if(!this.environment||snapshot===this.liveSnapshot||snapshot.structureVersion!==structureVersion(this.geometry!))return;
+    const map=composeDecoratedEnvironment(this.environment,snapshot.document,snapshot.publishedRevision);
+    const before=this.geometry!;this.geometry=map;this.liveSnapshot=snapshot;this.interactables=interactionRegistry(map);this.previewSeating?.updateMap(map);this.publishInteraction(null);
+    const collision=this.worldMap?.getLayer('Collision')?.tilemapLayer,a=tileLayer(before,'Collision').data,b=tileLayer(map,'Collision').data;
+    if(collision)for(let i=0;i<b.length;i++)if(a[i]!==b[i]){const x=i%map.width,y=Math.floor(i/map.width);if(b[i])collision.putTileAt(1,x,y,false)?.setCollision(true,true,true,true);else collision.removeTileAt(x,y,true,false);collision.calculateFacesWithin(x-1,y-1,3,3);}
+    this.editor?.setLive(map);if(!this.editing)this.renderFurniture(map);
+  }
   setEditor(view:EditorView|null){
     this.editing=!!view;this.editor?.configure(view);this.publishInteraction(null);
     if(view){this.cameras.main.stopFollow();this.highlight?.setVisible(false);this.network?.input(0,0,false);}else this.followSelf(true);
   }
-  editorPointer(type:'down'|'move'|'up'|'cancel',x:number,y:number){if(this.editing)this.editor?.pointer(type,x,y);}
+  editorPointer(type:'down'|'move'|'up'|'cancel'|'leave',x:number,y:number,options?:EditorPointer){if(this.editing)this.editor?.pointer(type,x,y,options);}
+  editorCommand(command:EditorCommand){return this.editing&&(this.editor?.command(command)??false);}
+  editorWorldPoint(x:number,y:number){const p=this.cameras.main.getWorldPoint(x,y);return{x:p.x,y:p.y};}
+  editorGesture(x:number,y:number,zoom:number,anchor:{x:number;y:number}){if(!this.editing)return;this.setZoom(zoom);const c=this.cameras.main;c.setScroll(anchor.x-c.width/2-(x-c.x-c.width/2)/c.zoom,anchor.y-c.height/2-(y-c.y-c.height/2)/c.zoom);}
   editorDrop(assetId:string,x:number,y:number){if(this.editing)this.editor?.drop(assetId,x,y);}
   isEditing(){return this.editing;}
   private renderFurniture(map:OfficeMap){
     if(!this.worldMap)return;
-    for(const image of this.seatingVisuals)image.destroy();this.seatingVisuals=[];
-    for(const name of ['Furniture','Details']){const layer=this.worldMap.getLayer(name)?.tilemapLayer;if(!layer)continue;const data=tileLayer(map,name).data;for(let y=0;y<map.height;y++)for(let x=0;x<map.width;x++){const gid=data[y*map.width+x]!;if(gid)layer.putTileAt(gid,x,y,false);else layer.removeTileAt(x,y,false,false);}}
-    for(const object of interactionRegistry(map)){
-      if(isChairAsset(object.assetId)){const facing=object.slots[0]!.facingDirection,[sx,sy,w,h]=directionalChairRects[object.assetId][facing],key=`chair-${object.assetId}-${facing}`,texture=this.textures.get('office-tiles');if(!texture.has(key))texture.add(key,0,sx,sy,w,h);this.worldMap.getLayer('Furniture')!.tilemapLayer.removeTileAt(object.position.x/32,object.position.y/32);this.seatingVisuals.push(this.add.image(object.position.x,object.position.y,'office-tiles',key).setOrigin(0).setDepth(.1));}
-      for(const [index,rect]of object.foreground.entries()){const key=`seat-edge-${object.instanceId}-${index}`,texture=this.textures.get('office-tiles');if(!texture.has(key))texture.add(key,0,rect.sourceX,rect.sourceY,rect.width,rect.height);this.seatingVisuals.push(this.add.image(rect.x,rect.y,'office-tiles',key).setOrigin(0).setDepth(3.1).setData('seatingForeground',true));}
+    const placements=map.layers.flatMap(l=>l.type==='objectgroup'&&['Placements','Decorations'].includes(l.name)?l.objects:[]).filter(o=>editorAsset(o.name));
+    if(!this.furnitureTilesCleared){
+      for(const image of this.seatingVisuals)image.destroy();this.seatingVisuals=[];
+      for(const o of placements){const a=editorAsset(o.name)!,layer=this.worldMap.getLayer(a.mode==='surface'||a.mode==='wall'?'Details':'Furniture')?.tilemapLayer;
+        for(let y=0;y<a.height;y+=32)for(let x=0;x<a.width;x+=32)layer?.removeTileAt((o.x+x)/32,(o.y+y)/32,false,false);
+      }this.furnitureTilesCleared=true;
     }
-    if(this.environment&&this.rugVisual){this.rugVisual.clear();for(const r of environmentPaint(map,this.environment).rugs)this.rugVisual.fillStyle(parseInt(r.color,16),r.alpha).fillRect(r.x,r.y,r.width,r.height);}
+    const wanted=new Set<string>(),texture=this.textures.get('office-tiles');
+    const image=(id:string,key:string,rect:readonly number[],x:number,y:number,depth:number,foreground=false)=>{
+      wanted.add(id);if(!texture.has(key))texture.add(key,0,rect[0]!,rect[1]!,rect[2]!,rect[3]!);
+      let sprite=this.furnitureImages.get(id);if(!sprite){sprite=this.add.image(x,y,'office-tiles',key).setOrigin(0).setData('decorationId',id);this.furnitureImages.set(id,sprite);}
+      if(sprite.frame.name!==key)sprite.setTexture('office-tiles',key);if(sprite.x!==x||sprite.y!==y)sprite.setPosition(x,y);if(sprite.depth!==depth)sprite.setDepth(depth);sprite.setData('seatingForeground',foreground);
+    };
+    for(const o of placements){const facing=o.facing??'down',id=o.instanceId??`base/${o.type}/${o.name}/${o.x}:${o.y}`,rect=assetRect(o.name,facing);if(!rect)continue;
+      const key=isChairAsset(o.name)?`chair-${o.name}-${facing}`:`furniture-${o.name}-${facing}`;image(id,key,rect,o.x,o.y,assetRenderDepth(o.name));
+    }
+    for(const object of interactionRegistry(map))for(const [index,rect]of object.foreground.entries())image(object.instanceId+'/edge/'+index,`seat-edge-${object.assetId}-${index}`,[rect.sourceX,rect.sourceY,rect.width,rect.height],rect.x,rect.y,3.1,true);
+    for(const [id,sprite]of this.furnitureImages)if(!wanted.has(id)){sprite.destroy();this.furnitureImages.delete(id);}
+    this.seatingVisuals=[...this.furnitureImages.values()].filter(s=>s.getData('seatingForeground')||String(s.frame.name).startsWith('chair-'));
+    if(this.environment&&this.rugVisual){const rugs=environmentPaint(map,this.environment).rugs,key=JSON.stringify(rugs);if(key!==this.rugKey){this.rugKey=key;this.rugVisual.clear();for(const r of rugs)this.rugVisual.fillStyle(parseInt(r.color,16),r.alpha).fillRect(r.x,r.y,r.width,r.height);}}
+    if(this.environment&&this.atmosphereTexture){const key=JSON.stringify(placements.map(p=>[p.name,p.x,p.y]));if(key!==this.atmosphereKey){this.atmosphereKey=key;const ctx=this.atmosphereTexture.context;ctx.clearRect(0,0,this.atmosphereTexture.width,this.atmosphereTexture.height);for(const r of environmentAtmosphere(map,this.environment)){ctx.fillStyle='#'+r.color;ctx.globalAlpha=r.alpha;ctx.fillRect(Math.round(r.x/4),Math.round(r.y/4),Math.max(1,Math.round(r.width/4)),Math.max(1,Math.round(r.height/4)));}ctx.globalAlpha=1;this.atmosphereTexture.refresh();}}
   }
   interact() {
     if(this.editing)return false;
@@ -285,7 +325,9 @@ export class OfficeScene extends Phaser.Scene {
   }
   update(_time: number, delta: number) {
     if (!this.player || this.failed) return;
+    const live=this.network?.environment?.();if(live&&live!==this.liveSnapshot)this.applyEnvironment(live);
     this.advanceWheelZoom(delta);
+    if(this.editing)this.editor?.update();
     if (this.multiplayer) {
       const current = this.network?.snapshot(), sessionId = this.network?.sessionId();
       const snapshot = !this.officeId || current?.officeId === this.officeId ? current : undefined;

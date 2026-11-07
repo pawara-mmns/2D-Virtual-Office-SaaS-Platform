@@ -3,7 +3,7 @@ import { decorPacks, parseEnvironment, type EnvironmentConfig } from './catalog.
 import { boundaryCells, cellKey, doorClearance, doorVestibule, doorway, rectangleCells, roomCells, wallMaterial, wallTile } from './architecture.ts';
 import { floorPlans } from './plans.ts';
 import { fixtures, furnishRoom, roomModules, type Fixture } from './rooms.ts';
-import { assetDefinitions, assetTile, environmentAtlas, directionalChairRects, type AssetSpec, type ExpandedAsset } from './assets.ts';
+import { assetDefinitions, assetTile, environmentAtlas, directionalChairRects, isSurfaceSupport, type AssetSpec, type ExpandedAsset } from './assets.ts';
 import {isChairAsset,catalogSeats,seatExits} from './seating-metadata.ts';
 import {bodyCorners} from '../movement.ts';
 import { passageGeometry, passageLaneRects, passageRecipe } from './passages.ts';
@@ -13,6 +13,9 @@ export type ComposedMap = OfficeMap & {type:string;version:string;orientation:st
 // Content-owned geometry is prepared once per layout/theme, never per frame.
 // Cached arrays/sets are private; every returned map owns its mutable layers.
 const structures = new Map<string, ReturnType<typeof buildStructure>>();
+// Owner drag validation repeatedly resolves the same base recipe. Keep a small
+// bounded cache, and clone at the boundary so no caller can mutate another map.
+const composedRecipes=new Map<string,ComposedMap>();
 function architectureVariant(gid:number,config:EnvironmentConfig,x:number,y:number) {
   const stripe=(x+y)%3===0,tech=config.theme==='dark-tech',natural=['eco-green','scandinavian','warm-wood'].includes(config.theme);
   if(gid===9)return assetTile(tech&&!stripe?'wallEdgeH':'wallPanelH');
@@ -59,7 +62,9 @@ function buildStructure(config: EnvironmentConfig) {
 }
 
 export function composeEnvironment(input: EnvironmentConfig): ComposedMap {
-  const config=parseEnvironment(input),plan=floorPlans[config.layout],{width,height}=plan,key=config.layout+':'+config.theme;
+  const config=parseEnvironment(input),recipeKey=JSON.stringify(config),cached=composedRecipes.get(recipeKey);
+  if(cached)return structuredClone(cached);
+  const plan=floorPlans[config.layout],{width,height}=plan,key=config.layout+':'+config.theme;
   let structure=structures.get(key);if(!structure){structure=buildStructure(config);structures.set(key,structure);}
   const floor=[...structure.floor],walls=[...structure.walls],collision=[...structure.collision],furniture=Array<number>(width*height).fill(0),details=Array<number>(width*height).fill(0);
   const markers:Marker[]=[{name:'Entrance',type:'spawn',x:plan.spawn[0]*32,y:plan.spawn[1]*32}];
@@ -68,10 +73,11 @@ export function composeEnvironment(input: EnvironmentConfig): ComposedMap {
   const seatingClearance=new Set<string>();
   for(const {spec,cells}of structure.rooms) {
     const [x,y,w,h]=spec.core,center=Math.floor(w/2);
-    const at=(name:Fixture,dx:number,dy:number,options?:{facing:import('../avatars.ts').AvatarDirection})=>{
+    const at=(name:Fixture,dx:number,dy:number,options?:{facing?:import('../avatars.ts').AvatarDirection;preserveConnectivity?:boolean})=>{
       const [sx,sy,pw,ph]=isChairAsset(name)&&options?.facing?directionalChairRects[name][options.facing]:fixtures[name],px=x+dx,py=y+dy;
       const definition=assetDefinitions[name as ExpandedAsset] as AssetSpec|undefined,mode=definition?.mode??'blocking',decorative=mode==='wall'||mode==='surface';
       if(mode==='structure')return false;
+      if(mode==='surface'&&!placements.some(p=>isSurfaceSupport(p.name)&&px*32>=p.x&&py*32>=p.y&&(px*32+pw)<=p.x+p.width!&&(py*32+ph)<=p.y+Math.min(p.height!,32)))return false;
       for(let j=0;j<ph/32;j++)for(let i=0;i<pw/32;i++){
         const index=(py+j)*width+px+i;
         if(!cells.has(cellKey(px+i,py+j))||structure.reserved.has(cellKey(px+i,py+j))||!decorative&&seatingClearance.has(cellKey(px+i,py+j)))return false;
@@ -80,19 +86,49 @@ export function composeEnvironment(input: EnvironmentConfig): ComposedMap {
       const access:string[]=[];
       for(const seat of catalogSeats(name,pw,ph,options?.facing)){
         const ax=px*32+seat.anchor.x,ay=py*32+seat.anchor.y,r={...seat.footprint,x:px*32+seat.footprint.x,y:py*32+seat.footprint.y};
-        const approach=seatExits(r,{x:ax,y:ay},seat.exit).map(p=>bodyCorners(p.x,p.y)).find(points=>points.every(([a,b])=>{
-          const tx=Math.floor(a/32),ty=Math.floor(b/32);
-          return tx>=0&&ty>=0&&tx<width&&ty<height&&!collision[ty*width+tx]&&!(a>=px*32&&a<(px*32+pw)&&b>=py*32&&b<(py*32+ph));
-        }));
+        const approach=seatExits(r,{x:ax,y:ay},seat.exit).find(p=>{
+          const distance=Math.hypot(p.x-ax,p.y-ay);if(distance>64)return false;
+          const steps=Math.max(1,Math.ceil(distance));
+          for(let step=0;step<=steps;step++)for(const [a,b]of bodyCorners(ax+(p.x-ax)*step/steps,ay+(p.y-ay)*step/steps)){
+            const tx=Math.floor(a/32),ty=Math.floor(b/32),insideSeat=a>=r.x&&a<r.x+r.width&&b>=r.y&&b<r.y+r.height;
+            if(tx<0||ty<0||tx>=width||ty>=height||walls[ty*width+tx])return false;
+            if(!insideSeat&&(collision[ty*width+tx]||a>=px*32&&a<px*32+pw&&b>=py*32&&b<py*32+ph))return false;
+          }
+          return bodyCorners(p.x,p.y).every(([a,b])=>!collision[Math.floor(b/32)*width+Math.floor(a/32)]&&!(a>=px*32&&a<px*32+pw&&b>=py*32&&b<py*32+ph));
+        });
         if(!approach)return false;
-        for(const [a,b]of approach)access.push(cellKey(Math.floor(a/32),Math.floor(b/32)));
+        // Reserve the full approach route, not just its endpoint; later furniture
+        // must not make a previously placed chair or sofa impossible to enter.
+        const steps=Math.max(1,Math.ceil(Math.hypot(approach.x-ax,approach.y-ay)));
+        for(let step=0;step<=steps;step++)for(const [a,b]of bodyCorners(ax+(approach.x-ax)*step/steps,ay+(approach.y-ay)*step/steps))if(!(a>=px*32&&a<px*32+pw&&b>=py*32&&b<py*32+ph))access.push(cellKey(Math.floor(a/32),Math.floor(b/32)));
+      }
+      if(options?.preserveConnectivity&&!decorative){
+        const excluded=new Set(rectangleCells([px,py,pw/32,ph/32]).map(([a,b])=>b*width+a));
+        const neighbors=(i:number)=>[i%width?i-1:-1,i%width<width-1?i+1:-1,i-width,i+width];
+        const free=(i:number)=>i>=0&&i<collision.length&&!collision[i]&&!excluded.has(i);
+        // Connectivity alone does not stop a new object surrounding an existing
+        // cabinet. Every earlier furniture item must retain perimeter access.
+        for(const p of placements){
+          const left=p.x/32,top=p.y/32,ow=p.width!/32,oh=p.height!/32;
+          if(left+ow<px||left>px+pw/32||top+oh<py||top>py+ph/32)continue;
+          const perimeter:number[]=[];for(let i=0;i<ow;i++)perimeter.push((top-1)*width+left+i,(top+oh)*width+left+i);for(let j=0;j<oh;j++)perimeter.push((top+j)*width+left-1,(top+j)*width+left+ow);
+          if(!perimeter.some(free))return false;
+        }
+        // Removing a rectangle can split circulation only at its boundary.
+        // Stop once all surviving boundary neighbors are connected, instead of
+        // flood-filling the entire building for every optional planter.
+        const boundary=new Set([...excluded].flatMap(neighbors).filter(free)),start=boundary.values().next().value;
+        if(start===undefined)return false;
+        const seen=new Set<number>([start]),queue=[start];boundary.delete(start);
+        for(let q=0;q<queue.length&&boundary.size;q++)for(const n of neighbors(queue[q]!))if(free(n)&&!seen.has(n)){seen.add(n);queue.push(n);boundary.delete(n);}
+        if(boundary.size)return false;
       }
       for(let j=0;j<ph/32;j++)for(let i=0;i<pw/32;i++){
         const index=(py+j)*width+px+i,gid=1+(sy/32+j)*16+sx/32+i;
         if(decorative)details[index]=gid;else{furniture[index]=gid;collision[index]=1;}
       }
       for(const key of access)seatingClearance.add(key);
-      (decorative?decorations:placements).push({name,type:spec.id,x:px*32,y:py*32,width:pw,height:ph,...(options?{facing:options.facing}:{})});return true;
+      (decorative?decorations:placements).push({name,type:spec.id,x:px*32,y:py*32,width:pw,height:ph,...(options?.facing?{facing:options.facing}:{}),...(options?.preserveConnectivity?{optionalDecoration:true}:{})});return true;
     };
     furnishRoom(spec,config,density,at);
     if(spec.kind==='meeting')voices.push({name:'Meeting Room',type:'voice',x:(x+1)*32,y:(y+1)*32,width:(w-2)*32,height:(h-2)*32});
@@ -112,7 +148,7 @@ export function composeEnvironment(input: EnvironmentConfig): ComposedMap {
       const index=(prop.y+j)*width+prop.x+i,gid=1+(sy/32+j)*16+sx/32+i;
       if(prop.wall)details[index]=gid;else{furniture[index]=gid;collision[index]=1;}
     }
-    const marker={name:prop.asset,type:'passage',x:prop.x*32,y:prop.y*32,width:pw,height:ph};
+    const marker={name:prop.asset,type:'passage',x:prop.x*32,y:prop.y*32,width:pw,height:ph,...(prop.optionalDecoration?{optionalDecoration:true}:{})};
     (prop.wall?decorations:placements).push(marker);passageDecor.push({...marker,type:prop.role});
   }
   if(config.overrides.rug!=='none')for(const [x,y,w,h]of passage.runners)rugs.push({name:config.overrides.rug,type:'passage-runner',x:x*32+4,y:y*32+4,width:w*32-8,height:h*32-8});
@@ -124,5 +160,7 @@ export function composeEnvironment(input: EnvironmentConfig): ComposedMap {
     tilesets:[{firstgid:1,name:'office',tilewidth:32,tileheight:32,tilecount:environmentAtlas.tileCount,columns:environmentAtlas.columns,spacing:0,margin:0,image:config.theme+'.png',imagewidth:environmentAtlas.width,imageheight:environmentAtlas.height}]};
   map.layers.push(layer(15,'Details',details),objects(16,'Decorations',decorations,false));
   map.layers.push(objects(17,'PassageLanes',structure.laneRects.map((r,i)=>rectMarker('Clear lane '+i,'circulation',r)),false),objects(18,'PassageDecor',passageDecor,false));
-  validateOfficeMap(map);return map;
+  validateOfficeMap(map);
+  if(composedRecipes.size>=16)composedRecipes.delete(composedRecipes.keys().next().value!);
+  composedRecipes.set(recipeKey,structuredClone(map));return map;
 }

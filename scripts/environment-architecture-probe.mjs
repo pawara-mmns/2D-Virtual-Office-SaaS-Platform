@@ -22,7 +22,15 @@ export function probeArchitecture(scene,config) {
     assert(image.width===environmentAtlas.width&&image.height===environmentAtlas.height,'Expanded atlas loads at native dimensions');
     const detailLayer=scene.children.list.find(child=>child.type==='TilemapLayer'&&child.layer.name==='Details');
     const detailTiles=map.layers.find(layer=>layer.name==='Details').data.filter(Boolean).length;
-    assert(detailTiles>0&&detailLayer?.getTilesWithin().filter(tile=>tile&&tile.index>0).length===detailTiles,'Actual Phaser detail tiles match the shared preview recipe');
+    const recipe=map.layers.find(layer=>layer.name==='Details').data;
+    assert(detailTiles>0&&!!detailLayer,'The shared detail recipe and actual layer are present');
+    // Editable details now live in stable images. Verify actual atlas frames at
+    // each expected cell, alongside any detail tiles that remain architectural.
+    for(let i=0;i<recipe.length;i++)if(recipe[i]){
+      const x=i%map.width,y=Math.floor(i/map.width),tile=detailLayer.getTileAt(x,y);
+      const image=[...(scene.furnitureImages?.values()??[])].find(s=>{const dx=x*32-s.x,dy=y*32-s.y;return s.active&&s.visible&&s.depth===.05&&dx>=0&&dy>=0&&dx<s.width&&dy<s.height&&1+(s.frame.cutY+dy)/32*16+(s.frame.cutX+dx)/32===recipe[i];});
+      assert(tile?.index===recipe[i]||!!image,'Actual Phaser detail atlas frame matches the shared preview recipe at '+x+','+y);
+    }
     for(const room of floorPlans[config.layout].rooms) {
       const openings=new Set();
       for(const door of room.doors) {

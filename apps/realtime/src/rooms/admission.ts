@@ -4,6 +4,7 @@ import type { OfficeMap } from "../../../../packages/shared/src/map.ts";
 import { matchMaker } from "colyseus";
 import type { Authorization } from "../auth/authorize.ts";
 import type { OfficeState } from "../state/office-state.ts";
+import {structureVersion} from '../../../../packages/shared/src/environment/live-decoration.ts';
 // Single persistent process by design. Per-office queues cover creation AND seat
 // reservation; a full canonical room never causes another room to be created.
 export function createAdmission() {
@@ -46,7 +47,7 @@ export function createAdmission() {
         let current = claims.get(claimKey);
         const roomId = rooms.get(officeId);
         let local = roomId ? matchMaker.getLocalRoomById(roomId) : undefined;
-        if (local && map && (local.state as OfficeState).mapVersion !== mapVersion(map)) {
+        if (local && map && (local.state as OfficeState).mapVersion !== mapVersion(map) && (!(local.state as OfficeState).structureVersion||structureVersion(map)!==(local.state as OfficeState).structureVersion)) {
           await local.disconnect(ENVIRONMENT_CHANGED_CODE); local = undefined; current = undefined;
           for (const id of claims.keys()) if (id.startsWith(officeId+"/")) claims.delete(id);
         }

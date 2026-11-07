@@ -12,6 +12,7 @@
     "test": "node --import tsx --test src/**/*.test.ts"
   },
   "dependencies": {
+    "@colyseus/core": "0.18.21",
     "@colyseus/schema": "5.0.42",
     "@colyseus/ws-transport": "0.18.4",
     "@supabase/supabase-js": "2.118.0",

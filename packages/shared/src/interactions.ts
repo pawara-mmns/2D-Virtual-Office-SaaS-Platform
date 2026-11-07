@@ -4,6 +4,7 @@ import { fixtures, type Fixture } from './environment/rooms.ts';
 import type { AvatarDirection } from './avatars.ts';
 import {catalogSeats,chairFamilies,embeddedWorkstationAssets,isChairAsset,seatExits,type SeatRect} from './environment/seating-metadata.ts';
 import {directionalChairRects} from './environment/assets.ts';
+import {collectionSofas} from './environment/collection.ts';
 
 export type InteractionAction = 'SIT'|'STAND'|'USE'|'OPEN'|'PLAY_GAME'|'SHARE_SCREEN';
 export type Point = {x:number;y:number};
@@ -14,7 +15,7 @@ export type SeatSlot = { id:string;parentObjectId:string;worldPosition:Point;anc
 export type ForegroundRect=SeatRect&{sourceX:number;sourceY:number};
 export type Interactable = OfficeObject & {objectType:'chair'|'sofa'|'bench';occupancy:{capacity:number;onePerSlot:true};slots:SeatSlot[];foreground:ForegroundRect[]};
 // Only seating artwork gets functional actions. Future action names confer no capability.
-export const seatingCatalog=Object.fromEntries([...Object.keys(chairFamilies),...embeddedWorkstationAssets,'waiting','benchWaiting','sofa','sofaCompact','sofaSectional'].map(id=>{const rect=fixtures[id as Fixture],seats=catalogSeats(id,rect[2],rect[3]);return[id,{type:seats[0]!.type,slots:seats.length}];})) as Partial<Record<Fixture,{type:Interactable['objectType'];slots:number}>>;
+export const seatingCatalog=Object.fromEntries([...Object.keys(chairFamilies),...embeddedWorkstationAssets,...Object.keys(collectionSofas),'waiting','benchWaiting','sofa','sofaCompact','sofaSectional','beanBag'].map(id=>{const rect=fixtures[id as Fixture],seats=catalogSeats(id,rect[2],rect[3]);return[id,{type:seats[0]!.type,slots:seats.length}];})) as Partial<Record<Fixture,{type:Interactable['objectType'];slots:number}>>;
 function placements(map:OfficeMap):Marker[] {
   const layer=map.layers.find(l=>l.name==='Placements'&&l.type==='objectgroup');
   if(layer?.type==='objectgroup')return layer.objects;
@@ -42,7 +43,7 @@ export function registerSeating(map:OfficeMap, placement:Marker & {instanceId?:s
   if(!seatingCatalog[placement.name as Fixture]||![placement.x,placement.y,placement.width,placement.height].every(Number.isFinite))return null;
   const {x,y}=placement,width=placement.width!,height=placement.height!;
   if(width<=0||height<=0||x<0||y<0||x+width>map.width*32||y+height>map.height*32)return null;
-  const instanceId=placement.instanceId??`${placement.type}/${placement.name}/${x}:${y}`;
+  const instanceId=placement.instanceId??`${map.layers.some(l=>l.name==='Environment')?'base/':''}${placement.type}/${placement.name}/${x}:${y}`;
   const definitions=catalogSeats(placement.name,width,height,placement.facing);
   const slots=definitions.map(seat=>{
     const anchor={x:x+seat.anchor.x,y:y+seat.anchor.y,direction:seat.facing},r={...seat.footprint,x:x+seat.footprint.x,y:y+seat.footprint.y};

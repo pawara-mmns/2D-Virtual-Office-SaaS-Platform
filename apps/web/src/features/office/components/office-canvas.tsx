@@ -2,6 +2,7 @@
 import type { EnvironmentConfig } from "../../../../../../packages/shared/src/environment/catalog.ts";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type {LiveSnapshot,LiveRequest} from '../../../../../../packages/shared/src/environment/live-decoration';
 import { OfficeDisclosure } from "@/components/office-disclosure";
 import { OfficeHud, type OfficeContext } from "./office-hud";
 import { HudGlassControl } from "./hud-glass";
@@ -26,6 +27,7 @@ import { InteractionControls } from './interaction-controls';
 import type {PublishedDecoration} from '../../../../../../packages/shared/src/environment/decoration';
 import {DecorationEditor} from '../../decoration/decoration-editor';
 import type {EditorView,EditorEvent} from '../../decoration/overlay';
+import type {EditorCommand} from '../../decoration/manipulation';
 
 export type { OfficeContext } from "./office-hud";
 
@@ -57,9 +59,14 @@ export default function OfficeCanvas({ appearance, profileWarning, officeId, use
   const [primary,setPrimary]=useState<PrimaryInteraction|null>(null);
   const [interactionError,setInteractionError]=useState('');
   const [editing,setEditing]=useState(false);
+  const [live,setLive]=useState<LiveSnapshot|null>(null);
+  const editLive=useCallback((request:LiveRequest)=>network.current?.editEnvironment?.(request)??Promise.reject(Error('Live editing is unavailable. Reconnect to the office.')),[]);
   const editorHandler=useRef<((event:EditorEvent)=>void)|null>(null);
-  const configureEditor=useCallback((view:EditorView|null)=>controls.current?.setEditor(view),[]);
+  const editorView=useRef<EditorView|null>(null);
+  const configureEditor=useCallback((view:EditorView|null)=>{editorView.current=view;controls.current?.setEditor(view);},[]);
   const subscribeEditor=useCallback((handler:((event:EditorEvent)=>void)|null)=>{editorHandler.current=handler;},[]);
+  const commandEditor=useCallback((command:EditorCommand)=>controls.current?.editorCommand(command)??false,[]);
+  const focusEditor=useCallback(()=>host.current?.focus({preventScroll:true}),[]);
   const changeEditing=useCallback((value:boolean)=>{setEditing(value);if(value)setPanel(null);},[]);
   const touchMove=useCallback((code:string,active:boolean)=>controls.current?.setTouchMove(code,active),[]);
   const interact=useCallback(()=>{setInteractionError('');controls.current?.interact();},[]);
@@ -133,14 +140,15 @@ export default function OfficeCanvas({ appearance, profileWarning, officeId, use
         },
         onNavigation(value) { if (active) setNavigation(value); },
         onReducedEffects(value) { if (active) setReducedEffects(value); },
-        onReady(version) {
+        onReady(version,structureVersion) {
           window.clearTimeout(timeout);
           if (!active) return;
           setStatus("ready");
+          if(editorView.current)controls.current?.setEditor(editorView.current);
           try {
             const url = realtimeUrl(process.env.NEXT_PUBLIC_REALTIME_URL);
             const client = createClient();
-            const connected = connectOffice({ url, officeId, mapVersion: version!, onPresence: (value) => { if (active) setPresence(value); },
+            const connected = connectOffice({ url, officeId, mapVersion: version!,environment:environment??undefined,structureVersion,onEnvironment:value=>{if(active){controls.current?.applyEnvironment(value);setLive(value);editorHandler.current?.({type:'live',snapshot:value});}}, onPresence: (value) => { if (active) setPresence(value); },
               onChat: chatEvents.emit,
               onVoice: (value) => { if (active) setVoice((previous) => sameVoiceState(previous,value) ? previous : value); },
               onProximity: value=>{if(active)setProximity(value);},
@@ -196,7 +204,7 @@ export default function OfficeCanvas({ appearance, profileWarning, officeId, use
       </OfficeDisclosure>}
       avatar={<AvatarSettings currentKey={avatarKey} displayName={displayName} icon={<HudIcon name="avatar" />} panel={{ open: panel === "avatar", onOpenChange: avatarPanel, container: panelHost, returnFocus: restoreProfileFocus }} onSaved={(key, name) => { setSavedKey(key); if (name) setSavedName(name); network.current?.appearanceChanged(); }} />}
       controls={<>
-        {isOwner&&environment&&<DecorationEditor officeId={officeId} environment={environment} ready={status==='ready'&&presence.status==='online'} onView={configureEditor} onHandler={subscribeEditor} onEditing={changeEditing}/>}
+        {isOwner&&environment&&<DecorationEditor officeId={officeId} environment={environment} container={panelHost} ready={status==='ready'&&presence.status==='online'} live={live} editLive={editLive} onView={configureEditor} onHandler={subscribeEditor} onEditing={changeEditing} onCommand={commandEditor} onFocusOffice={focusEditor}/>}
         <button ref={chatToggle} className="office-control" aria-label="Office Chat" title="Office Chat" aria-expanded={chatOpen} aria-controls="office-chat" onClick={() => setPanel((value) => value === "chat" ? null : "chat")}><HudIcon name="chat" /><span className="hud-control-label">Office Chat</span></button>
         <Participants participants={participants} icon={<HudIcon name="people" />} panel={{ open: panel === "participants", onOpenChange: participantsPanel, container: panelHost }} findable={findable} onFind={(sessionId) => navigateCamera({ type: "teammate", sessionId }, true)} />
       </>}
@@ -212,8 +220,9 @@ export default function OfficeCanvas({ appearance, profileWarning, officeId, use
           <select id="office-area" className="office-control" aria-describedby="office-camera-hint" disabled={status !== "ready" || !navigation?.areas.length} value={navigation?.areaId ?? ""} onChange={(event) => { if (event.target.value) navigateCamera({ type: "area", id: event.target.value }); }}>
             <option value="">View an area</option>{navigation?.areas.map((area) => <option key={area.id} value={area.id}>{area.name}</option>)}
           </select></details>
+          {navigation?.mode!=="self"&&navigation&&<button className="office-control office-camera-return" aria-label="Return to my avatar" title="Return to my avatar · Escape" disabled={!navigation.canReturn} onClick={()=>navigateCamera({type:"self"},true)}><HudIcon name="follow"/><span className="sr-only">Return to my avatar</span></button>}
         </div>
-        {navigation && <div className="office-status office-orientation"><p className={navigation.mode === "self" ? "sr-only" : undefined} id="office-camera-hint" role="status" aria-live="polite" aria-atomic="true">{navigation.hint}{navigation.canReturn && " Move or press Escape to follow yourself."}</p>{navigation.mode !== "self" && <button className="office-control" disabled={!navigation.canReturn} onClick={() => navigateCamera({ type: "self" }, true)}>Return to my avatar</button>}</div>}
+        {navigation && <p className="sr-only" id="office-camera-hint" role="status" aria-live="polite" aria-atomic="true">{navigation.hint}{navigation.canReturn && " Move or press Escape to follow yourself."}</p>}
       </GlassSurface>}
       panels={<>
         <ChatPanel key={officeId} officeId={officeId} open={chatOpen} onClose={closeChat} events={chatEvents} userId={userId ?? own?.userId} names={names} send={sendChat} />

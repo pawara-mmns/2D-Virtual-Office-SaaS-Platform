@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
+import {readFileSync} from 'node:fs';
 import {createClient} from '@supabase/supabase-js';
 import {editorAssets,assetRect,parseDecoration,emptyDecoration,baseDecorationObjects,resolvedObjects,upsertDecoration,removeDecoration,createDecorationHistory,composeDecoratedEnvironment,composeOfficeEnvironment,validateDecoration,type DecorationObject} from '../../../../../packages/shared/src/environment/decoration.ts';
 import {defaultEnvironment,layouts,furnitureSets,themes} from '../../../../../packages/shared/src/environment/catalog.ts';
@@ -9,6 +10,7 @@ import {interactionRegistry,seatApproach} from '../../../../../packages/shared/s
 import {createSeating} from '../../../../../packages/shared/src/seating.ts';
 import {canStand,type MovingPosition} from '../../../../../packages/shared/src/movement.ts';
 import {loadDecorationWorkspace,loadPublishedDecoration,persistDecoration} from './service.ts';
+import {decorationWriterConfig} from './writer-config.ts';
 import type {DecorationDatabase,DecorationWorkspace} from '../../../../../packages/shared/src/environment/decoration-database.ts';
 const id='00000000-0000-4000-8000-000000000001',config=defaultEnvironment;
 const object=(x:number,y:number,assetId='chairTask',orientation:DecorationObject['orientation']='down'):DecorationObject=>({id:'custom/'+id,assetId,x,y,orientation});
@@ -18,12 +20,16 @@ function free(doc=emptyDecoration(),assetId='chairTask',orientation:DecorationOb
   throw Error('No free fixture placement');
 }
 test('editor catalog uses only real artwork and native orientation variants; strict bounded payloads reject injection',()=>{
-  assert.equal(editorAssets.length,106);assert.equal(new Set(editorAssets.map(a=>a.id)).size,editorAssets.length);
+  assert.equal(editorAssets.length,211);assert.equal(new Set(editorAssets.map(a=>a.id)).size,editorAssets.length);
   for(const a of editorAssets){assert.ok(a.width>0&&a.height>0);if(a.mode!=='floor')for(const d of a.orientations)assert.ok(assetRect(a.id,d));assert.notEqual(a.mode,'structure');}
+  const migration=readFileSync(new URL('../../../../../supabase/migrations/20261107000100_premium_asset_collection.sql',import.meta.url),'utf8'),sqlCatalog=JSON.parse(migration.match(/select '(\{.*\})'::jsonb;/)![1]!);
+  assert.deepEqual(sqlCatalog,Object.fromEntries(editorAssets.map(a=>[a.id,{width:a.width,height:a.height,mode:a.mode,orientations:a.orientations}])),'SQL allowlist cannot drift from the authored catalog');
   for(const value of [null,{...emptyDecoration(),url:'https://invalid'}, {...emptyDecoration(),objects:[object(32,32,'foreign')]},{...emptyDecoration(),objects:[{...object(32,32),collision:[]}]},{...emptyDecoration(),objects:[object(33,32)]},{...emptyDecoration(),objects:[object(-32,32)]},{...emptyDecoration(),objects:[object(32,32,'deskSingle','left')]},{...emptyDecoration(),objects:[{...object(32,32),id:'custom/'+'-'.repeat(36)}]},{...emptyDecoration(),objects:Array.from({length:161},()=>object(32,32))}])assert.throws(()=>parseDecoration(value));
 });
 test('all 75 balanced compositions retain registered seating, navigation and deterministic maps in the customization composer',()=>{
-  for(const layout of layouts)for(const furniture of furnitureSets)for(const theme of themes){const c={...config,layout:layout.id,furniture:furniture.id,theme:theme.id};assert.equal(validateDecoration(c,emptyDecoration()).ok,true);assert.equal(mapVersion(composeDecoratedEnvironment(c,emptyDecoration(),1)),mapVersion(composeDecoratedEnvironment(c,emptyDecoration(),1)));}
+  for(const layout of layouts)for(const furniture of furnitureSets)for(const theme of themes){const c={...config,layout:layout.id,furniture:furniture.id,theme:theme.id},base=composeOfficeEnvironment(c);assert.equal(validateDecoration(c,emptyDecoration()).ok,true);assert.equal(mapVersion(composeDecoratedEnvironment(c,emptyDecoration(),1)),mapVersion(composeDecoratedEnvironment(c,emptyDecoration(),1)));
+    let added=false;for(let y=32;y<base.height*32-64&&!added;y+=32)for(let x=32;x<base.width*32-64&&!added;x+=32){const doc=upsertDecoration(emptyDecoration(),object(x,y));const result=validateDecoration(c,doc);if(result.ok){assert.ok(interactionRegistry(result.map).some(o=>o.instanceId==='custom/'+id));added=true;}}assert.ok(added,layout.id+'/'+furniture.id+'/'+theme.id+' supports an owner-placed chair');
+  }
 });
 test('add/move/rotate/duplicate/remove and undo/redo preserve base catalog and immutable stable identities',()=>{
   const frozen=JSON.stringify(config),first=free(),history=createDecorationHistory(emptyDecoration());history.apply(first.document);
@@ -57,6 +63,13 @@ test('rugs remain nonblocking; small surface decorations require support and wal
 const response=(data:unknown,status=200)=>new Response(JSON.stringify(data),{status,headers:{'Content-Type':'application/json'}});
 const client=(fetcher:typeof fetch)=>createClient<DecorationDatabase>('https://editor.invalid','synthetic-key',{auth:{persistSession:false,autoRefreshToken:false},global:{fetch:fetcher}});
 const row=():DecorationWorkspace=>({revision:2,publishedRevision:1,baseRevision:0,draftBaseRevision:0,draft:emptyDecoration(),published:emptyDecoration(),previous:emptyDecoration(),previousBaseRevision:0,updatedAt:null,updatedBy:null});
+test('editor server credentials are bound to the tenant project, independently of administrator identity credentials',()=>{
+  const tenant='https://tenant.invalid',env={SUPABASE_ADMIN_URL:'https://identity.invalid',SUPABASE_SECRET_KEY:'synthetic-identity-key',PLATFORM_DATA_SUPABASE_URL:tenant,PLATFORM_DATA_SUPABASE_SECRET_KEY:'synthetic-tenant-key'};
+  assert.deepEqual(decorationWriterConfig(env,tenant),{url:tenant,key:'synthetic-tenant-key'});
+  assert.throws(()=>decorationWriterConfig({...env,PLATFORM_DATA_SUPABASE_URL:'https://other.invalid'},tenant),/workspace project/);
+  assert.throws(()=>decorationWriterConfig({...env,OFFICE_DECORATION_SUPABASE_URL:'https://other.invalid',OFFICE_DECORATION_SUPABASE_SECRET_KEY:'synthetic-editor-key'},tenant),/workspace Supabase project/);
+  assert.deepEqual(decorationWriterConfig({...env,OFFICE_DECORATION_SUPABASE_SECRET_KEY:'synthetic-editor-key'},tenant),{url:tenant,key:'synthetic-editor-key'});
+});
 test('server persistence authorizes owner before privileged writes, revalidates shared geometry and detects conflicts',async()=>{
   let writes=0;const owner=client(async()=>response(row())),writer=()=>client(async(url,options)=>{writes++;assert.ok(String(url).endsWith('/rpc/write_office_decoration'));const body=JSON.parse(String(options?.body));assert.equal(body.p_actor,id);assert.equal(body.p_expected_revision,2);return response({revision:3,publishedRevision:1});});
   const request={owner,writer,actor:id,officeId:id,config,revision:2,baseRevision:0,operation:'draft',document:free().document};

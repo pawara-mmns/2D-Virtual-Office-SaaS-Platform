@@ -7,6 +7,8 @@
     "node": ">=22.14.0"
   },
   "scripts": {
+    "test:decoration:browser": "pnpm --filter @virtual-office/realtime exec tsx --test ../../scripts/test-decoration-browser.mjs",
+    "test:decoration:database": "node --test scripts/decoration-database.test.mjs",
     "test:seating:browser": "pnpm --filter @virtual-office/realtime exec tsx --test ../../scripts/test-directional-seating-browser.mjs",
     "test:movement:browser": "pnpm --filter @virtual-office/realtime exec tsx --test ../../scripts/test-movement-seating-browser.mjs",
     "admin:setup:local": "node scripts/platform-admin-local.mjs",
@@ -44,6 +46,8 @@
     "test:team:live": "node scripts/test-organizations.mjs --team",
     "test:team:anonymous": "pnpm --filter @virtual-office/web test:team:anonymous",
     "assets:office": "node --experimental-strip-types scripts/generate-office-assets.mjs",
+    "assets:editor-catalog": "node --experimental-strip-types scripts/generate-editor-catalog.mjs",
+    "test:office:art": "node --experimental-strip-types --test scripts/office-art.test.mjs",
     "assets:avatars": "node --experimental-strip-types scripts/generate-avatar-assets.mjs",
     "test:office:browser": "node --test scripts/test-office-browser.mjs",
     "test:communication:browser": "node --test scripts/test-communication-browser.mjs",

@@ -6,11 +6,11 @@ export const layouts = [
   { id: "training-hub", name: "Training Hub", description: "Learning tables and whiteboards, with breakout and meeting rooms." },
 ] as const;
 export const themes = [
-  { id: "warm-wood", name: "Warm Wood Corporate", description: "Oak, warm cream and muted blue upholstery.", floor: "c9a875", wood: "c4a275", wall: "ede9d7", fabric: "627f87", background: "344c48" },
-  { id: "minimal-light", name: "Modern Minimal Light", description: "Pale stone, white cabinetry and graphite seating.", floor: "dce2e5", wood: "c8cfd4", wall: "f3f6f7", fabric: "657787", background: "5a6975" },
-  { id: "scandinavian", name: "Scandinavian Neutral", description: "Bleached timber, linen and soft sage.", floor: "ddd1b7", wood: "c8b797", wall: "f0ebdf", fabric: "94a597", background: "777f76" },
+  { id: "warm-wood", name: "Warm Wood Corporate", description: "Oak, warm cream and ink-blue upholstery.", floor: "b38e72", wood: "c29362", wall: "f1dfc9", fabric: "405874", background: "1c3036" },
+  { id: "minimal-light", name: "Modern Minimal Light", description: "Pale stone, white cabinetry and graphite seating.", floor: "c5cbcf", wood: "b8aa99", wall: "f3f6f7", fabric: "465466", background: "34434e" },
+  { id: "scandinavian", name: "Scandinavian Neutral", description: "Bleached timber, linen and soft sage.", floor: "cfbfa3", wood: "c1a681", wall: "f0ebdf", fabric: "637c70", background: "354642" },
   { id: "dark-tech", name: "Dark Tech Office", description: "Charcoal timber, slate walls and blue seating.", floor: "505865", wood: "707986", wall: "85909f", fabric: "577fa4", background: "242d3a" },
-  { id: "eco-green", name: "Eco Green Office", description: "Natural wood, leafy greens and warm off-white walls.", floor: "b2be9d", wood: "aab38d", wall: "e5ebda", fabric: "648e74", background: "405d4e" },
+  { id: "eco-green", name: "Eco Green Office", description: "Natural wood, leafy greens and warm off-white walls.", floor: "acac83", wood: "b99a65", wall: "e5ebda", fabric: "456f5c", background: "233d34" },
 ] as const;
 export const decorPacks = [
   { id: "minimal", name: "Minimal", description: "Essential plants, storage and clear circulation.", density: 0 },

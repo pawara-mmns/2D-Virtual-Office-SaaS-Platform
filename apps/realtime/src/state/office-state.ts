@@ -10,5 +10,5 @@ export const PlayerState = schema({
   availability: t.string<"AVAILABLE" | "BUSY" | "DO_NOT_DISTURB">().default("AVAILABLE"),
 }, "PlayerState");
 export type PlayerState = SchemaType<typeof PlayerState>;
-export const OfficeState = schema({ officeId: t.string().default(""), mapVersion: t.string().default(""), players: t.map(PlayerState), seats:t.map('string') }, "OfficeState");
+export const OfficeState = schema({ officeId: t.string().default(""), mapVersion: t.string().default(""), structureVersion:t.string().default(''),environmentRevision:t.number().default(0),environmentEpoch:t.string().default(''),players: t.map(PlayerState), seats:t.map('string') }, "OfficeState");
 export type OfficeState = SchemaType<typeof OfficeState>;
