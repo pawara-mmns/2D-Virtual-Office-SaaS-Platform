@@ -125,7 +125,7 @@ export function composeEnvironment(input: EnvironmentConfig): ComposedMap {
       const index=(prop.y+j)*width+prop.x+i,gid=1+(sy/32+j)*16+sx/32+i;
       if(prop.wall)details[index]=gid;else{furniture[index]=gid;collision[index]=1;}
     }
-    const marker={name:prop.asset,type:'passage',x:prop.x*32,y:prop.y*32,width:pw,height:ph};
+    const marker={name:prop.asset,type:'passage',x:prop.x*32,y:prop.y*32,width:pw,height:ph,...(prop.optionalDecoration?{optionalDecoration:true}:{})};
     (prop.wall?decorations:placements).push(marker);passageDecor.push({...marker,type:prop.role});
   }
   if(config.overrides.rug!=='none')for(const [x,y,w,h]of passage.runners)rugs.push({name:config.overrides.rug,type:'passage-runner',x:x*32+4,y:y*32+4,width:w*32-8,height:h*32-8});

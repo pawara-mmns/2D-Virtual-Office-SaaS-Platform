@@ -2,7 +2,7 @@ import {chairFamilies,type ChairAsset} from './seating-metadata.ts';
 import type {AvatarDirection} from '../avatars.ts';
 // Content-owned atlas contract. The first 128 tiles retain their existing art;
 // a deterministic shelf packer assigns new assets below those legacy rows.
-export const environmentAtlas = { width: 512, height: 1024, columns: 16, tileCount: 512 } as const;
+export const environmentAtlas = { width: 512, height: 1152, columns: 16, tileCount: 576 } as const;
 export type AssetCategory = 'workstations'|'seating'|'storage'|'reception'|'meeting'|'pantry'|'lounge'|'decor'|'training'|'structure';
 export type AssetMode = 'blocking'|'wall'|'surface'|'structure';
 export type AssetSpec = { category: AssetCategory; kind: string; width: number; height: number; variant: string; mode: AssetMode; material?: 'solid'|'glass'|'half'|'threshold' };
@@ -17,12 +17,21 @@ export const premiumDefinitions={
   trophyShelf:asset('decor','trophies',2,1,'awards','wall'),
   sculpture:asset('reception','sculpture',1,1,'loop'),
   windowPanel:asset('decor','window',2,1,'daylight','wall'),
+  loungeArt:asset('lounge','room-accent',2,1,'lounge','wall'),
+  codePanel:asset('workstations','room-accent',2,1,'code','wall'),
+  presentationPanel:asset('meeting','room-accent',2,1,'presentation','wall'),
+  receptionCrest:asset('reception','room-accent',2,1,'crest','wall'),
+  hospitalityShelf:asset('pantry','room-accent',2,1,'hospitality','wall'),
+  ideaBoard:asset('training','room-accent',2,1,'ideas','wall'),
+  supplyCubbies:asset('storage','room-accent',2,1,'supplies'),
+  wayfindingLight:asset('decor','room-accent',1,1,'wayfinding','wall'),
 } as const;
 // Local artwork coordinates reserved for a future display renderer. This is
 // geometry only: there is no SHARE_SCREEN action, media subscription or permission.
 export const displaySurfaces={
   wallDisplay:{x:6,y:6,width:84,height:19,interactive:false},
   gameConsole:{x:6,y:6,width:52,height:19,interactive:false},
+  presentationPanel:{x:5,y:5,width:54,height:19,interactive:false},
 } as const;
 export const assetDefinitions = {
   deskSingle:asset('workstations','desk',2,2,'single'),deskDual:asset('workstations','desk',2,2,'dual'),deskLaptop:asset('workstations','desk',2,2,'laptop'),deskStanding:asset('workstations','desk',2,2,'standing'),deskCreative:asset('workstations','desk',2,2,'creative'),deskReturn:asset('workstations','desk',3,2,'return'),deskManager:asset('workstations','desk',3,2,'manager'),benchShared:asset('workstations','bench',4,1,'shared'),benchLaptop:asset('workstations','bench',4,1,'laptop'),

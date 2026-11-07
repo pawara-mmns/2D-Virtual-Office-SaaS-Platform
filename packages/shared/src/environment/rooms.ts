@@ -118,4 +118,16 @@ export function furnishRoom(room: RoomSpec, config: EnvironmentConfig, density: 
     if(kind==='pantry')safeAt('livingWall',1,0);
     if(kind==='meeting')safeAt('planterWide',center-1,1);
   }
+  // One purpose-specific feature per room. Try authored wall slots in priority
+  // order; never replace existing owner/base furniture to force a decoration in.
+  if(density>0){
+    const mounted=(asset:Fixture)=>{for(const column of[center+2,w-5,1,w-7,center-3])if(column>=1&&safeAt(asset,column,0))break;};
+    if(kind==='lounge')mounted('loungeArt');
+    if(kind==='work'||kind==='private-office')mounted('codePanel');
+    if(kind==='meeting')mounted('presentationPanel');
+    if(kind==='reception')mounted('receptionCrest');
+    if(kind==='pantry')mounted('hospitalityShelf');
+    if(kind==='collaboration'||kind==='training')mounted('ideaBoard');
+    if(kind==='utility')safeAt('supplyCubbies',1,1);
+  }
 }
