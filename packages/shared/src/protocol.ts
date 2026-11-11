@@ -3,6 +3,7 @@ import type { Availability } from "./chat.ts";
 import type { ProximityState, BubbleRef } from './proximity.ts';
 import type { InteractionRequest } from './interactions.ts';
 import type {LiveSnapshot,LiveRequest} from './environment/live-decoration.ts';
+import type { GameCommand, GameReply } from './games/protocol.ts';
 export const TICK_MS = 50;
 export const MOVEMENT_HZ = 60;
 export const ENVIRONMENT_CHANGED_CODE = 4052;
@@ -16,11 +17,12 @@ export type PlayerSnapshot = AvatarAppearance & {
   isRunning?: boolean; motionState?: 'IDLE'|'WALKING'|'RUNNING'|'SITTING'|'STANDING'; seatId?: string;
   movementEpoch?:number;
 };
-export type OfficeSnapshot = { officeId: string; mapVersion: string;movementProtocol?:number;structureVersion?:string;environmentRevision?:number;environmentEpoch?:string; players: Map<string, PlayerSnapshot>; seats?: Map<string,string> };
+export type OfficeSnapshot = { gameProtocol?:number; officeId: string; mapVersion: string;movementProtocol?:number;structureVersion?:string;environmentRevision?:number;environmentEpoch?:string; players: Map<string, PlayerSnapshot>; seats?: Map<string,string> };
 export type MovementDiagnostics={rttMs:number;jitterMs:number;pendingInputs:number;correctionPx:number;serverMovementMs:number|null;prediction:boolean;fps?:number;inputVisibleMs?:number|null};
 export type Participant = Pick<PlayerSnapshot, "sessionId" | "userId" | "displayName" | "avatarKey" | "connected" | "availability"> & { isSelf?: boolean };
 export type Presence = { status: "connecting" | "online" | "reconnecting" | "offline" | "denied"; count: number; notice: string; reload?: boolean };
 export type OfficeNetwork = {
+  game?(command: GameCommand): Promise<GameReply>;
   environment?():LiveSnapshot|undefined;
   editEnvironment?(request:LiveRequest):Promise<LiveSnapshot>;
   syncEnvironment?():void;

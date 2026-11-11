@@ -2,6 +2,9 @@
 import type { EnvironmentConfig } from "../../../../../../packages/shared/src/environment/catalog.ts";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from 'react-dom';
+import { GameOverlay } from '../../games/game-overlay';
+import type { GameCommand, GameTableState } from '../../../../../../packages/shared/src/games/protocol';
 import type {LiveSnapshot,LiveRequest} from '../../../../../../packages/shared/src/environment/live-decoration';
 import { OfficeDisclosure } from "@/components/office-disclosure";
 import { OfficeHud, type OfficeContext } from "./office-hud";
@@ -45,9 +48,14 @@ export default function OfficeCanvas({ appearance, profileWarning, officeId, use
   const [savedName, setSavedName] = useState<string | null>(null);
   const [savedAppearance, setSavedAppearance] = useState<string | null>(null);
   const network = useRef<OfficeNetwork | null>(null);
+  const [nearGame, setNearGame] = useState<string | null>(null);
+  const [gameOpen, setGameOpen] = useState<string | null>(null);
+  const [gameTables, setGameTables] = useState<Map<string, GameTableState>>(() => new Map());
+  const gameRequest = useCallback((command: GameCommand) => network.current?.game?.(command) ?? Promise.reject(Error('Reconnect to the office before using the game.')), []);
   const [presence, setPresence] = useState<Presence>({ status: "connecting", count: 0, notice: "Connecting to your office…" });
   const [panel, setPanel] = useState<"avatar" | "participants" | "chat" | "settings" | null>(null);
   const [panelHost, setPanelHost] = useState<HTMLDivElement | null>(null);
+  const openGame = useCallback((id: string) => { setGameOpen(id); setPanel(null); network.current?.input(0, 0, false); }, []);
   const [compact, setCompact] = useState(false);
   const zoomControls = useRef<HTMLDivElement>(null);
   const chatOpen = panel === "chat";
@@ -79,6 +87,13 @@ export default function OfficeCanvas({ appearance, profileWarning, officeId, use
   const restoreProfileFocus = () => profileToggle.current?.focus({ preventScroll: true });
   const chatToggle = useRef<HTMLButtonElement>(null);
   const own = participants.find((person) => person.isSelf);
+  const gameUserId = userId ?? own?.userId;
+  const resumeGame = [...gameTables.values()].filter(t => t.session && t.session.status !== 'CLOSED' && t.session.players.some(p => p.userId === gameUserId)).sort((a,b) => Number(b.session?.status !== 'FINISHED') - Number(a.session?.status !== 'FINISHED') || (b.session?.createdAt ?? 0) - (a.session?.createdAt ?? 0))[0];
+  const closeGame = () => {
+    const table = gameOpen ? gameTables.get(gameOpen) : undefined, session = table?.session;
+    if (gameOpen && !session?.players.some(p => p.userId === gameUserId)) void gameRequest({ action: 'UNWATCH', tableId: gameOpen }).catch(() => {});
+    setGameOpen(null); queueMicrotask(() => host.current?.focus({ preventScroll: true }));
+  };
   const names = useMemo(() => new Map(participants.map((person) => [person.userId, person.displayName])), [participants]);
   const findable = useMemo(() => new Set(presence.status === "online" ? navigation?.findable : []), [navigation, presence.status]);
   const navigateCamera = useCallback((command: CameraCommand, focus = false) => {
@@ -134,6 +149,8 @@ export default function OfficeCanvas({ appearance, profileWarning, officeId, use
       const { createOfficeGame } = await import("../engine/create-game");
       return () => createOfficeGame(element, {
         onInteraction(value){if(active)setPrimary(value);},
+        onGameOpen: openGame,
+        onGameTable(value){if(active)setNearGame(value);},
         onDecoration(event){if(active)editorHandler.current?.(event);},
         onBubbleAnchors(values) {
           const visible=new Set<string>();
@@ -156,6 +173,7 @@ export default function OfficeCanvas({ appearance, profileWarning, officeId, use
               onProximity: value=>{if(active)setProximity(value);},
               onProximityError: message=>{if(active)setProximityError(message);},
               onInteractionError:message=>{if(active)setInteractionError(message);},
+              onGameState: value => { if (active) setGameTables(previous => { if (!value) return new Map(); const next = new Map(previous); next.set(value.tableId, value); if (next.size > 32) next.delete(next.keys().next().value!); return next; }); },
               onParticipants: (value) => { if (active) setParticipants(value); },
               onAvailabilityError: (message) => { if (active) setAvailabilityError(message); },
               async getToken() { const { data, error } = await client.auth.getSession(); return error ? null : data.session?.access_token ?? null; },
@@ -172,7 +190,7 @@ export default function OfficeCanvas({ appearance, profileWarning, officeId, use
     }, fail);
     controls.current = controller;
     return () => { active = false; focusOffice.current = false; window.clearTimeout(timeout); clearTimeout(authTimer); authSubscription?.unsubscribe(); window.removeEventListener("pagehide", leave); network.current?.close(); network.current = null; controls.current = null; void controller.dispose(); };
-  }, [attempt, officeId, chatEvents, environmentKey,decorationKey]);
+  }, [attempt, officeId, chatEvents, environmentKey,decorationKey,openGame]);
   return <section aria-label="Interactive office" className="office-shell" data-panel={panel ?? "none"} data-editing={editing}>
     <div className={`office-work-area${chatOpen ? " chat-open" : ""}`}>
     <div inert={compact && panel !== null} className="office-world relative bg-ink">
@@ -190,7 +208,7 @@ export default function OfficeCanvas({ appearance, profileWarning, officeId, use
           </button>;
         })}
       </div>
-      <InteractionControls key={presence.status==='online'&&panel===null&&!editing?'enabled':'disabled'} primary={primary} online={presence.status==='online'&&panel===null&&!editing} interact={interact} move={touchMove}/>
+      <InteractionControls key={presence.status==='online'&&panel===null&&!editing&&!gameOpen?'enabled':'disabled'} primary={primary} online={presence.status==='online'&&panel===null&&!editing&&!gameOpen} interact={interact} move={touchMove} gameTable={nearGame} playGame={openGame}/>
       {status !== "ready" && <div className="absolute inset-0 flex items-center justify-center bg-surface p-8 text-center">
         {status === "loading" ? <p role="status" className="text-sm text-muted">Preparing your office…</p> : <div><h2 className="font-semibold">Office unavailable</h2><p role="alert" className="mt-3 max-w-sm text-sm leading-7 text-muted">The office engine or artwork could not load. Check your connection and browser graphics support, then try again.</p><button className="auth-button mt-5" onClick={() => { setNavigation(null); setStatus("loading"); setAttempt((value) => value + 1); }}>Try again</button></div>}
       </div>}
@@ -206,6 +224,7 @@ export default function OfficeCanvas({ appearance, profileWarning, officeId, use
       </OfficeDisclosure>}
       avatar={<AvatarSettings currentKey={avatarKey} displayName={displayName} appearance={customization} icon={<HudIcon name="avatar" />} panel={{ open: panel === "avatar", onOpenChange: avatarPanel, container: panelHost, returnFocus: restoreProfileFocus }} onSaved={(key, name, config) => { setSavedKey(key); setSavedAppearance(config ?? ''); if (name) setSavedName(name); network.current?.appearanceChanged(); }} />}
       controls={<>
+        {(!gameOpen||panel!==null||editing)&&resumeGame&&<button className="office-control" type="button" aria-label="Resume chess match" title="Chess match" disabled={presence.status!=='online'||editing} onClick={()=>openGame(resumeGame.tableId)}><HudIcon name="chess"/><span className="hud-control-label">Chess match</span></button>}
         {isOwner&&environment&&<DecorationEditor officeId={officeId} environment={environment} container={panelHost} ready={status==='ready'&&presence.status==='online'} live={live} editLive={editLive} onView={configureEditor} onHandler={subscribeEditor} onEditing={changeEditing} onCommand={commandEditor} onFocusOffice={focusEditor}/>}
         <button ref={chatToggle} className="office-control" aria-label="Office Chat" title="Office Chat" aria-expanded={chatOpen} aria-controls="office-chat" onClick={() => setPanel((value) => value === "chat" ? null : "chat")}><HudIcon name="chat" /><span className="hud-control-label">Office Chat</span></button>
         <Participants participants={participants} icon={<HudIcon name="people" />} panel={{ open: panel === "participants", onOpenChange: participantsPanel, container: panelHost }} findable={findable} onFind={(sessionId) => navigateCamera({ type: "teammate", sessionId }, true)} />
@@ -229,6 +248,7 @@ export default function OfficeCanvas({ appearance, profileWarning, officeId, use
       panels={<>
         <ChatPanel key={officeId} officeId={officeId} open={chatOpen} onClose={closeChat} events={chatEvents} userId={userId ?? own?.userId} names={names} send={sendChat} />
         <div ref={setPanelHost} className="office-panels" />
+        {gameOpen&&panel===null&&!editing&&panelHost&&createPortal(<GameOverlay key={gameOpen} tableId={gameOpen} table={gameTables.get(gameOpen)} userId={gameUserId} online={presence.status==='online'} request={gameRequest} onClose={closeGame}/>,panelHost)}
       </>}
       voice={<OfficeVoice key={officeId+':'+(voice?.sessionId??'pending')} officeId={officeId} state={voice} proximity={proximity} online={presence.status==='online'} denied={presence.status==='denied'} lock={lockBubble} leave={leaveVoice} error={proximityError}/>}
       notices={<>

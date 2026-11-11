@@ -19,8 +19,9 @@ import {structureVersion,type LiveSnapshot} from '../../../../../../packages/sha
 import {tileLayer} from '../../../../../../packages/shared/src/map.ts';
 import {DecorationOverlay,type EditorView,type EditorEvent,type EditorPointer} from '../../decoration/overlay.ts';
 import type {EditorCommand} from '../../decoration/manipulation.ts';
+import { gameTables, closestGameTable, gameTableDistance, type GameTable } from '../../../../../../packages/shared/src/games/tables.ts';
 
-export type OfficeCallbacks = { onReady(mapVersion?: string,structureVersion?:string): void; onError(): void;onMovementReset?():void; onNavigation?(state: NavigationState): void; onReducedEffects?(reduced: boolean): void; onBubbleAnchors?(anchors: BubbleAnchor[]): void; onInteraction?(value:PrimaryInteraction|null):void;onDecoration?(event:EditorEvent):void };
+export type OfficeCallbacks = { onReady(mapVersion?: string,structureVersion?:string): void; onError(): void;onMovementReset?():void; onNavigation?(state: NavigationState): void; onReducedEffects?(reduced: boolean): void; onBubbleAnchors?(anchors: BubbleAnchor[]): void; onInteraction?(value:PrimaryInteraction|null):void;onDecoration?(event:EditorEvent):void;onGameOpen?(tableId:string):void;onGameTable?(tableId:string|null):void };
 export class OfficeScene extends Phaser.Scene {
   player!: Phaser.Physics.Arcade.Sprite;
   avatar!: PlayerAvatar;
@@ -46,6 +47,8 @@ export class OfficeScene extends Phaser.Scene {
   private readonly movementInput = { x: 0, y: 0, facing: "down" as const };
   private geometry?:OfficeMap;
   private interactables:Interactable[]=[];
+  private gameObjects: GameTable[] = [];
+  private nearGameId: string | null = null;
   private primary:PrimaryInteraction|null=null;
   private primaryKey='';
   private promptAt=0;
@@ -85,7 +88,7 @@ export class OfficeScene extends Phaser.Scene {
     if (this.failed) return;
     try {
       const data = validateOfficeMap(this.cache.tilemap.get("studio").data);
-      this.geometry=data;this.interactables=interactionRegistry(data);
+      this.geometry=data;this.interactables=interactionRegistry(data);this.gameObjects=gameTables(data);
       const map = this.make.tilemap({ key: "studio" });
       this.worldMap=map;
       const tiles = map.addTilesetImage("office", "office-tiles", 32, 32, 0, 0);
@@ -275,7 +278,7 @@ export class OfficeScene extends Phaser.Scene {
   applyEnvironment(snapshot:LiveSnapshot){
     if(!this.environment||snapshot===this.liveSnapshot||snapshot.structureVersion!==structureVersion(this.geometry!))return;
     const map=composeDecoratedEnvironment(this.environment,snapshot.document,snapshot.publishedRevision);
-    const before=this.geometry!;this.geometry=map;this.liveSnapshot=snapshot;this.interactables=interactionRegistry(map);this.previewSeating?.updateMap(map);this.publishInteraction(null);
+    const before=this.geometry!;this.geometry=map;this.liveSnapshot=snapshot;this.interactables=interactionRegistry(map);this.gameObjects=gameTables(map);this.previewSeating?.updateMap(map);this.publishInteraction(null);
     const collision=this.worldMap?.getLayer('Collision')?.tilemapLayer,a=tileLayer(before,'Collision').data,b=tileLayer(map,'Collision').data;
     if(collision)for(let i=0;i<b.length;i++)if(a[i]!==b[i]){const x=i%map.width,y=Math.floor(i/map.width);if(b[i])collision.putTileAt(1,x,y,false)?.setCollision(true,true,true,true);else collision.removeTileAt(x,y,true,false);collision.calculateFacesWithin(x-1,y-1,3,3);}
     this.editor?.setLive(map);if(!this.editing)this.renderFurniture(map);
@@ -318,17 +321,23 @@ export class OfficeScene extends Phaser.Scene {
     if(this.editing)return false;
     if(!this.primary||this.primary.available===false)return false;
     const {action,objectId,slotId}=this.primary;
+    if (action === 'PLAY_GAME') { this.callbacks.onGameOpen?.(objectId); return true; }
     if(this.multiplayer)return this.network?.interact?.({action,objectId,slotId})??false;
     return !!this.preview&&this.previewSeating?.act('preview',this.preview,{action,objectId,slotId,seq:0})==='OK';
   }
   private publishInteraction(value:PrimaryInteraction|null) {
-    const key=value?`${value.action}:${value.slotId}:${value.available!==false}`:'';
+    const key=value?`${value.action}:${value.objectId}:${value.slotId}:${value.available!==false}`:'';
     this.primary=value;
     if(this.primaryKey!==key){this.primaryKey=key;this.callbacks.onInteraction?.(value);}
   }
   private updateInteraction(own:PlayerSnapshot,occupied:ReadonlyMap<string,string>,time:number) {
     if(time<this.promptAt)return;this.promptAt=time+100;
-    this.publishInteraction(this.geometry&&own.connected?closestInteraction(this.geometry,this.interactables,own,occupied,own.seatId):null);
+    const table = this.geometry && own.connected ? closestGameTable(this.geometry, this.gameObjects, own) : null;
+    if (this.nearGameId !== (table?.id ?? null)) { this.nearGameId = table?.id ?? null; this.callbacks.onGameTable?.(this.nearGameId); }
+    const seat = this.geometry && own.connected ? closestInteraction(this.geometry, this.interactables, own, occupied, own.seatId) : null;
+    const slot = seat ? this.interactables.flatMap(o => o.slots).find(s => s.id === seat.slotId) : undefined;
+    const seatDistance = slot ? Math.hypot(own.x - slot.anchor.x, own.y - slot.anchor.y) : Infinity;
+    this.publishInteraction(table && !own.seatId && gameTableDistance(table, own) <= seatDistance ? { action: 'PLAY_GAME', objectId: table.id, slotId: '', label: 'Play Chess', available: true } : seat);
   }
   update(_time: number, delta: number) {
     if (!this.player || this.failed) return;
@@ -344,6 +353,7 @@ export class OfficeScene extends Phaser.Scene {
       if (!snapshot || !own || !isMapPosition(own, this.mapWidth, this.mapHeight)) {
         this.movementLifetime='disconnected';
         this.publishInteraction(null);
+        if (this.nearGameId) { this.nearGameId = null; this.callbacks.onGameTable?.(null); }
         this.bubbles?.update(null,()=>undefined,delta,true);
         this.positionsUnavailable = true;
         for (const avatar of this.remotes.values()) avatar.destroy();

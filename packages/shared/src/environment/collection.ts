@@ -100,7 +100,7 @@ export const collectionDefinitions={
   tvMediaCredenza:a(9,'TV and media storage credenza','lounge','media',3,2,'blocking',{light:'screen',future:'display'}),
   tvMobileStand:a(9,'Mobile TV presentation stand','lounge','media',2,2,'blocking',{light:'screen',future:'display'}),
   consoleArcade:a(9,'Upright arcade cabinet','lounge','media',1,2,'blocking',{light:'screen',future:'game'}),
-  chessTable:a(9,'Chess discussion table','lounge','table',2,1,'blocking',{future:'game'}),
+  chessTable:a(9,'Chess discussion table','lounge','table',2,1,'blocking'),
   foosballTable:a(9,'Foosball recreation table','lounge','table',3,2,'blocking',{future:'game'}),
   pingPongTable:a(9,'Table tennis station','lounge','table',4,2,'blocking',{future:'game'}),
   boardGameShelf:a(9,'Board game library shelving','lounge','storage',2,2,'blocking',{future:'game'}),

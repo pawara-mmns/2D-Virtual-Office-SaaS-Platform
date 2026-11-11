@@ -1,0 +1,21 @@
+{
+  "clients": 3,
+  "transport": "real local HTTP/WebSocket",
+  "identities": "synthetic authorization",
+  "game": "chess.js 1.4.0",
+  "result": "passed",
+  "checkmate": true,
+  "captures": true,
+  "drawAgreement": true,
+  "resignation": true,
+  "rematch": true,
+  "authorizedReconnect": true,
+  "seatingPreserved": true,
+  "promotion": "server-seeded position; actual chooser and authoritative knight promotion",
+  "sceneMounts": 1,
+  "microphoneCaptures": 0,
+  "mobile": [
+    390,
+    844
+  ]
+}
