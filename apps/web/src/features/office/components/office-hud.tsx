@@ -4,14 +4,15 @@ import Link from "next/link";
 import { HudGlass } from "./hud-glass";
 import { GlassSurface } from "./glass-surface";
 import { HudIcon } from "@/components/hud-icon";
-import { avatarPresets, type AvatarKey } from "@/features/avatars/presets";
+import { type AvatarKey } from "@/features/avatars/presets";
+import { AvatarPreview } from '@/features/avatars/avatar-preview';
 import type { Presence } from "../../../../../../packages/shared/src/protocol.ts";
 export type OfficeContext = { workspaceName: string; officeName: string; workspaceHref: string };
 
 // Layout owns no renderer, transport or media state. Features retain their
 // mounted owners while their triggers move into progressively disclosed groups.
-export function OfficeHud({ context, presence, displayName, avatarKey, profileToggle, onMenuOpen, reducedEffects, retry, settings, avatar, controls, camera, panels, voice, notices }: {
-  context: OfficeContext; presence: Presence; displayName: string; avatarKey: AvatarKey;
+export function OfficeHud({ context, presence, displayName, avatarKey, appearance, profileToggle, onMenuOpen, reducedEffects, retry, settings, avatar, controls, camera, panels, voice, notices }: {
+  context: OfficeContext; presence: Presence; displayName: string; avatarKey: AvatarKey; appearance?: string;
   profileToggle: RefObject<HTMLButtonElement | null>; onMenuOpen(): void; retry(): void;
   settings: ReactNode; avatar: ReactNode; controls: ReactNode; camera: ReactNode;
   panels: ReactNode; voice: ReactNode; notices: ReactNode; reducedEffects?: boolean;
@@ -20,7 +21,6 @@ export function OfficeHud({ context, presence, displayName, avatarKey, profileTo
   const menu = useRef<HTMLDivElement>(null);
   const id = useId();
   const connection = presence.status === "online" ? "Connected" : presence.status === "connecting" ? "Connecting" : presence.status === "reconnecting" ? "Reconnecting" : presence.status === "denied" ? "Access denied" : "Disconnected";
-  const preview = avatarPresets.find(preset => preset.key === avatarKey)!;
   const close = () => { setMenuOpen(false); profileToggle.current?.focus({ preventScroll: true }); };
   useEffect(() => {
     if (!menuOpen) return;
@@ -39,7 +39,7 @@ export function OfficeHud({ context, presence, displayName, avatarKey, profileTo
           <button ref={profileToggle} type="button" className="office-profile-trigger office-control" aria-label="Profile and workspace" aria-expanded={menuOpen} aria-controls={id} title={context.workspaceName + " / " + context.officeName}
             onClick={() => { if (!menuOpen) onMenuOpen(); setMenuOpen(!menuOpen); }}
             onKeyDown={event => { if (event.key === "ArrowDown") { event.preventDefault(); onMenuOpen(); setMenuOpen(true); requestAnimationFrame(() => menu.current?.querySelector<HTMLButtonElement>("button")?.focus()); } }}>
-            <span aria-hidden="true" className="office-profile-avatar pixel-art" style={{ backgroundImage: "url('/office/avatar.png')", backgroundPosition: `0 -${preview.index * 128}px` }} />
+            <span aria-hidden="true" className="office-profile-avatar"><AvatarPreview avatarKey={avatarKey} appearance={appearance} size={32} /></span>
             <span className="office-profile-name">{displayName}</span><span className="office-connection-dot" data-state={presence.status} aria-hidden="true" /><HudIcon name="chevron" />
           </button>
           <div className="office-context sr-only"><p>{context.workspaceName}</p><h1>{context.officeName}</h1></div>

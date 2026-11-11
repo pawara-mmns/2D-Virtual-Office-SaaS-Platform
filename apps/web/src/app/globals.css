@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "../features/decoration/editor.css";
+@import "../features/avatars/avatar-studio.css";
 
 /* Semantic foundation. Existing Tailwind color names remain compatible below. */
 :root {

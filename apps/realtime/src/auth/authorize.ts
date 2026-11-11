@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { avatarDisplayName, safeAvatarKey, type AvatarAppearance } from "../../../../packages/shared/src/avatars.ts";
 import { isId } from "../../../../packages/shared/src/protocol.ts";
+import { decodeCustomization, encodeCustomization } from '../../../../packages/shared/src/avatar-customization.ts';
 export class AccessDenied extends Error { constructor() { super("Office access denied. Sign in and verify active membership."); } }
 export type Authorization = AvatarAppearance & { userId: string; organizationId: string; officeId: string; token: string; expiresAt: number; checkedAt: number; voiceAllowed?: boolean; platformVersion?: number };
 export type Authorize = (token: unknown, officeId: unknown) => Promise<Authorization>;
@@ -9,7 +10,7 @@ export type IdentitySource = {
   office(id: string): Promise<{ id: string; organizationId: string } | null>;
   activeOrganization(id: string): Promise<boolean>;
   activeMember(organizationId: string, userId: string): Promise<boolean>;
-  profile(id: string): Promise<{ avatarKey: unknown; displayName: unknown } | null>;
+  profile(id: string): Promise<{ avatarKey: unknown; displayName: unknown; appearance?: unknown } | null>;
 };
 export async function authorizeIdentity(token: unknown, officeId: unknown, source: IdentitySource, now = Date.now()): Promise<Authorization> {
   if (typeof token !== "string" || !token || token.length > 8192 || !isId(officeId)) throw new AccessDenied();
@@ -26,8 +27,9 @@ export async function authorizeIdentity(token: unknown, officeId: unknown, sourc
   ]);
   if (!activeOrganization || !activeMember) throw new AccessDenied();
   const name = avatarDisplayName(profile?.displayName);
+  const customization = decodeCustomization(profile?.appearance);
   return { userId: user.id, organizationId: office.organizationId, officeId, token, expiresAt, checkedAt: now,
-    avatarKey: safeAvatarKey(profile?.avatarKey), displayName: name };
+    avatarKey: safeAvatarKey(profile?.avatarKey), displayName: name, ...(customization ? { appearance: encodeCustomization(customization) } : {}) };
 }
 export function supabaseAuthorizer(url: string, key: string): Authorize {
   return async (token, officeId) => {
@@ -41,8 +43,16 @@ export function supabaseAuthorizer(url: string, key: string): Authorize {
         if (error) throw new AccessDenied(); return data ? { id: data.id, organizationId: data.organization_id } : null; },
       async activeOrganization(id) { const { data, error } = await client.from("organizations").select("id").eq("id", id).eq("status", "ACTIVE").maybeSingle(); return !error && !!data; },
       async activeMember(organizationId, userId) { const { data, error } = await client.from("organization_members").select("id,role").eq("organization_id", organizationId).eq("user_id", userId).eq("status", "ACTIVE").maybeSingle(); return !error && !!data && ["OWNER", "ADMIN", "MEMBER"].includes(data.role); },
-      async profile(id) { const { data, error } = await client.from("profiles").select("avatar_key,display_name").eq("id", id).maybeSingle();
-        if (error) throw new AccessDenied(); return data ? { avatarKey: data.avatar_key, displayName: data.display_name } : null; },
+      async profile(id) {
+        let result = await client.from("profiles").select("avatar_key,display_name,avatar_appearance").eq("id", id).maybeSingle();
+        if (result.error && ['42703', 'PGRST204'].includes(result.error.code)) {
+          const legacy = await client.from("profiles").select("avatar_key,display_name").eq("id", id).maybeSingle();
+          result = legacy.error ? { ...legacy, data: null } : { ...legacy, data: legacy.data ? { ...legacy.data, avatar_appearance: null } : null };
+        }
+        if (result.error) throw new AccessDenied();
+        const data = result.data;
+        return data ? { avatarKey: data.avatar_key, displayName: data.display_name, appearance: data.avatar_appearance } : null;
+      },
     };
     // Total authorization deadline, including sequential RLS reads.
     let deadline: ReturnType<typeof setTimeout> | undefined;

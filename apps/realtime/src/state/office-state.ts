@@ -3,6 +3,7 @@ export const MovementCommand=schema({x:t.int8().default(0),y:t.int8().default(0)
 export const PlayerState = schema({
   sessionId: t.string().default(""), userId: t.string().default(""),
   displayName: t.string().default("Member"), avatarKey: t.string().default("fern"),
+  appearance: t.string().default(''),
   x: t.float32().default(0), y: t.float32().default(0),
   direction: t.string<"down" | "left" | "right" | "up">().default("down"),
   isMoving: t.boolean().default(false), connected: t.boolean().default(true),

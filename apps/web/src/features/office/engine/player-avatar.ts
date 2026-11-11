@@ -2,6 +2,9 @@ import Phaser from "phaser";
 import { avatarAnimationKey, avatarBody, avatarDirections, avatarDisplayName, avatarIdleFrame, avatarPresets, safeAvatarKey, avatarSittingFrame, avatarMotion, type AvatarAppearance, type AvatarKey } from "../../avatars/presets.ts";
 import type { Direction } from "../input/movement.ts";
 import type { PlayerSnapshot } from "../../../../../../packages/shared/src/protocol.ts";
+import { decodeCustomization } from '../../../../../../packages/shared/src/avatar-customization.ts';
+import { loadAvatarAtlas } from '../../avatars/composer.ts';
+import { acquireAvatarTexture } from './avatar-textures.ts';
 
 export class PlayerAvatar {
   readonly sprite: Phaser.Physics.Arcade.Sprite;
@@ -14,6 +17,12 @@ export class PlayerAvatar {
   private labelWidth = -1;
   private networkAppearance = "";
   private seated=false;
+  private appearanceSource?: string;
+  private texture?: ReturnType<typeof acquireAvatarTexture>;
+  private appearanceRevision = 0;
+  private disposed = false;
+  private pendingProgress: number | null = null;
+  private readonly onShutdown = () => { this.disposed = true; this.appearanceRevision++; this.texture?.release(); this.texture = undefined; };
   constructor(private readonly scene: Phaser.Scene, x: number, y: number, appearance: AvatarAppearance) {
     this.key = safeAvatarKey(appearance.avatarKey); this.fullName = avatarDisplayName(appearance.displayName);
     for (const preset of avatarPresets) for (const direction of avatarDirections) {
@@ -26,18 +35,35 @@ export class PlayerAvatar {
     this.sprite = scene.physics.add.sprite(x, y, "avatar", avatarIdleFrame(this.key, this.facing)).setDepth(3).setCollideWorldBounds(true);
     this.sprite.setSize(avatarBody.width, avatarBody.height).setOffset(avatarBody.offsetX, avatarBody.offsetY);
     this.label = scene.add.text(x, y - 26, this.fullName, { fontFamily: "Arial", fontSize: "10px", color: "#f7f8f1", backgroundColor: "#25363d", padding: { x: 5, y: 3 },shadow:{offsetX:0,offsetY:1,color:'#101e25',blur:0,fill:true} }).setOrigin(.5).setDepth(4);
+    this.setAppearance(appearance);
+    scene.events.once(Phaser.Scenes.Events.SHUTDOWN, this.onShutdown);
   }
   setAppearance(appearance: AvatarAppearance) {
+    const changed = this.key !== safeAvatarKey(appearance.avatarKey) || this.appearanceSource !== appearance.appearance;
     this.key = safeAvatarKey(appearance.avatarKey); this.fullName = avatarDisplayName(appearance.displayName);
-    this.walkingDirection = null; this.idleDirection = null; this.labelWidth = -1;
+    this.labelWidth = -1;
+    if (!changed) return;
+    this.appearanceSource = appearance.appearance;
+    const revision = ++this.appearanceRevision;
+    const config = decodeCustomization(appearance.appearance);
+    const swap = (texture?: ReturnType<typeof acquireAvatarTexture>) => {
+      this.pendingProgress = this.sprite.anims.isPlaying ? this.sprite.anims.getProgress() : null;
+      this.sprite.anims.stop(); this.sprite.setTexture(texture?.key ?? 'avatar', texture ? 0 : avatarIdleFrame(this.key, this.facing));
+      this.texture?.release(); this.texture = texture;
+      this.walkingDirection = null; this.idleDirection = null;
+    };
+    if (!config) { swap(); return; }
+    void loadAvatarAtlas().then(atlas => {
+      if (!this.disposed && revision === this.appearanceRevision && this.scene.sys.isActive()) swap(acquireAvatarTexture(this.scene, config, atlas));
+    }).catch(() => { /* Keep the existing deterministic legacy artwork if loading fails. */ });
   }
   renderNetwork(state: PlayerSnapshot, delta: number, local: boolean, presented=false) {
-    const identity = `${state.avatarKey}/${state.displayName}`;
+    const identity = `${state.avatarKey}/${state.displayName}/${state.appearance ?? ''}`;
     if (this.networkAppearance !== identity) {
       this.networkAppearance = identity;
       // The green local label identifies self without consuming the profile's
       // character budget or truncating its name differently from chat/voice.
-      this.setAppearance({ avatarKey: state.avatarKey, displayName: state.displayName });
+      this.setAppearance({ avatarKey: state.avatarKey, displayName: state.displayName, appearance: state.appearance });
       if (local) this.label.setBackgroundColor("#245743");
     }
     this.sprite.setVelocity(0, 0);
@@ -48,13 +74,14 @@ export class PlayerAvatar {
     this.facing = state.direction;
     const pose=avatarMotion(state);this.seated=!!state.seatId;
     if(pose==='SITTING') {
-      this.sprite.anims.stop();this.sprite.setFrame(avatarSittingFrame(this.key,this.facing));this.walkingDirection=null;this.idleDirection=null;
+      this.sprite.anims.stop();this.sprite.setFrame(this.texture ? 12 + avatarDirections.indexOf(this.facing)*3 : avatarSittingFrame(this.key,this.facing));this.walkingDirection=null;this.idleDirection=null;
     } else if (state.isMoving && state.connected) {
-      if (this.walkingDirection !== this.facing) { this.sprite.play(avatarAnimationKey(this.key, this.facing)); this.walkingDirection = this.facing; this.idleDirection = null; }
+      if (this.walkingDirection !== this.facing) { this.sprite.play(this.texture ? `${this.texture.key}-${avatarDirections.indexOf(this.facing)}` : avatarAnimationKey(this.key, this.facing)); if(this.pendingProgress !== null) this.sprite.anims.setProgress(this.pendingProgress); this.walkingDirection = this.facing; this.idleDirection = null; }
     } else if (this.idleDirection !== this.facing || this.walkingDirection) {
-      this.sprite.anims.stop(); this.sprite.setFrame(avatarIdleFrame(this.key, this.facing)); this.idleDirection = this.facing; this.walkingDirection = null;
+      this.sprite.anims.stop(); this.sprite.setFrame(this.texture ? avatarDirections.indexOf(this.facing)*3 : avatarIdleFrame(this.key, this.facing)); this.idleDirection = this.facing; this.walkingDirection = null;
     }
     this.sprite.anims.timeScale=pose==='RUNNING'?1.6:1;
+    this.pendingProgress = null;
     // Tile furniture stays below avatars. A seated pose rests visibly on its cushion.
     this.sprite.setDepth(3+state.y/100000);this.label.setDepth(4+state.y/100000);
     this.sprite.setAlpha(state.connected ? 1 : .5);
@@ -62,7 +89,7 @@ export class PlayerAvatar {
     this.positionLabel();
     this.label.setVisible(local || this.scene.cameras.main.worldView.contains(this.sprite.x, this.sprite.y));
   }
-  destroy() { this.sprite.destroy(); this.label.destroy(); }
+  destroy() { this.scene.events.off(Phaser.Scenes.Events.SHUTDOWN, this.onShutdown); this.onShutdown(); this.sprite.destroy(); this.label.destroy(); }
   bubblePosition() {
     const bounds=this.sprite.getBounds();
     const footX=bounds.left+(avatarBody.offsetX+avatarBody.width/2)*this.sprite.scaleX;

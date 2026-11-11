@@ -39,18 +39,18 @@ function serve(request, response) {
     const pathname = new URL(request.url, "http://localhost").pathname;
     if (pathname === "/") { response.setHeader("Content-Type", "text/html"); response.end(html); return; }
     if (pathname === "/phaser.js") { response.setHeader("Content-Type", "text/javascript"); response.end(readFileSync(resolve(web, "node_modules/phaser/dist/phaser.esm.js"))); return; }
-    if (["/packages/shared/src/environment/collection.ts","/packages/shared/src/environment/live-decoration.ts","/packages/shared/src/environment/decoration.ts","/packages/shared/src/environment/seating-metadata.ts","/packages/shared/src/movement.ts","/packages/shared/src/interactions.ts","/packages/shared/src/seating.ts","/packages/shared/src/avatars.ts", "/packages/shared/src/map.ts", "/packages/shared/src/protocol.ts", "/packages/shared/src/socket-transport.ts", "/packages/shared/src/environment/catalog.ts", "/packages/shared/src/environment/compose.ts", "/packages/shared/src/environment/visuals.ts", "/packages/shared/src/environment/plans.ts", "/packages/shared/src/environment/architecture.ts", "/packages/shared/src/environment/rooms.ts", "/packages/shared/src/environment/assets.ts", "/packages/shared/src/environment/passages.ts"].includes(pathname)) {
+    if (["/packages/shared/src/avatar-art.ts","/packages/shared/src/avatar-customization.ts","/packages/shared/src/environment/collection.ts","/packages/shared/src/environment/live-decoration.ts","/packages/shared/src/environment/decoration.ts","/packages/shared/src/environment/seating-metadata.ts","/packages/shared/src/movement.ts","/packages/shared/src/interactions.ts","/packages/shared/src/seating.ts","/packages/shared/src/avatars.ts", "/packages/shared/src/map.ts", "/packages/shared/src/protocol.ts", "/packages/shared/src/socket-transport.ts", "/packages/shared/src/environment/catalog.ts", "/packages/shared/src/environment/compose.ts", "/packages/shared/src/environment/visuals.ts", "/packages/shared/src/environment/plans.ts", "/packages/shared/src/environment/architecture.ts", "/packages/shared/src/environment/rooms.ts", "/packages/shared/src/environment/assets.ts", "/packages/shared/src/environment/passages.ts"].includes(pathname)) {
       const source = ts.transpileModule(readFileSync(resolve(root, pathname.slice(1)), "utf8"), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } });
       response.setHeader("Content-Type", "text/javascript"); response.end(source.outputText); return;
     }
     if (pathname.startsWith("/office/")) {
       const name = pathname.slice(8);
-      if (!["studio.json", "office-tiles.png", "avatar.png",'environments/warm-wood.png'].includes(name)) throw new Error("Unknown asset");
+      if (!["studio.json", "office-tiles.png", "avatar.png", 'avatar-layers.png','environments/warm-wood.png'].includes(name)) throw new Error("Unknown asset");
       response.setHeader("Content-Type", name.endsWith("png") ? "image/png" : "application/json"); response.end(readFileSync(resolve(web, "public/office", name))); return;
     }
     if (pathname.startsWith("/modules/")) {
       const base = resolve(web, "src/features"); const file = resolve(base, pathname.slice(9));
-      const allowed = file.startsWith(resolve(base, "office") + sep) || [resolve(base, "decoration/overlay.ts"), resolve(base, "decoration/manipulation.ts"), resolve(base, "avatars/presets.ts"), resolve(base, "avatars/animation.ts")].includes(file);
+      const allowed = file.startsWith(resolve(base, "office") + sep) || [resolve(base, "decoration/overlay.ts"), resolve(base, "decoration/manipulation.ts"), resolve(base, "avatars/presets.ts"), resolve(base, "avatars/animation.ts"), resolve(base, 'avatars/composer.ts')].includes(file);
       if (!allowed || !file.endsWith(".ts")) throw new Error("Invalid module");
       const source = ts.transpileModule(readFileSync(file, "utf8"), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } });
       response.setHeader("Content-Type", "text/javascript"); response.end(source.outputText); return;
