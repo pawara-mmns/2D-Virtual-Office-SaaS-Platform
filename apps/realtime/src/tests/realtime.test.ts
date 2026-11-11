@@ -21,6 +21,7 @@ import { composeEnvironment } from '../../../../packages/shared/src/environment/
 import { defaultEnvironment } from '../../../../packages/shared/src/environment/catalog.ts';
 import { interactionRegistry, seatApproach } from '../../../../packages/shared/src/interactions.ts';
 import { canStand } from '../movement/simulation.ts';
+import { defaultCustomization, encodeCustomization } from '../../../../packages/shared/src/avatar-customization.ts';
 
 // Real HTTP/WebSockets and Schema synchronization; synthetic authorization only.
 // Never contacts Supabase or represents live-account validation.
@@ -38,6 +39,30 @@ const origin = "http://localhost:3000";
 async function until(check: () => boolean, message: string, timeout = 6000) {
   const start = Date.now(); while (!check()) { if (Date.now() - start > timeout) throw new Error(`Timed out: ${message}`); await delay(20); }
 }
+
+test('real transport: appearance refresh survives an in-flight old read and the throttle without replacing the player', {timeout:15000}, async()=>{
+  const office=id(887);let appearance=encodeCustomization(defaultCustomization),hold=false,waiting=false,release:(()=>void)|undefined;
+  const authorize:Authorize=async(token,requested)=>{
+    const n=Number(String(token).replace('appearance-',''));if(![1,2].includes(n)||requested!==office)throw new AccessDenied();
+    const captured=appearance;
+    if(hold&&n===1){hold=false;waiting=true;await new Promise<void>(resolve=>{release=resolve;});}
+    return{userId:id(n),organizationId:id(888),officeId:office,token:String(token),expiresAt:Date.now()+60000,checkedAt:Date.now(),avatarKey:'plum',displayName:'Taylor',appearance:captured};
+  };
+  const server=createRealtimeServer({authorize,map,origins:[origin]});await server.listen(0,'127.0.0.1');const address=server.transport.server!.address();assert.ok(address&&typeof address==='object');
+  const url=`http://127.0.0.1:${address.port}`,rooms:SDKRoom[]=[];
+  const join=async(n:number)=>{const response=await fetch(url+'/office/join',{method:'POST',headers:{Origin:origin,'Content-Type':'application/json',Authorization:`Bearer appearance-${n}`},body:JSON.stringify({officeId:office,mapVersion:mapVersion(map)})});assert.equal(response.status,200);const room=await new Client(url,{headers:{Origin:origin}}).consumeSeatReservation<OfficeState>(await response.json());rooms.push(room);room.onMessage('proximity.state',()=>{});room.onMessage('voice.state',()=>{});await until(()=>room.state.players?.has(room.sessionId),'appearance initial state');return room;};
+  try{
+    const a=await join(1),b=await join(2),room=matchMaker.getLocalRoomById(a.roomId),state=room.state as OfficeState,player=state.players.get(a.sessionId)!;
+    const before={x:player.x,y:player.y,epoch:player.movementEpoch,availability:player.availability};
+    hold=true;a.send('credential','appearance-1');await until(()=>waiting,'old profile read pending');
+    appearance=encodeCustomization({...defaultCustomization,top:'hoodie',hat:'beanie'});
+    a.send('credential','appearance-1');await delay(80);release!();
+    await until(()=>b.state.players.get(a.sessionId)?.appearance===appearance,'latest appearance replicated after queued refresh');
+    assert.equal(state.players.get(a.sessionId),player,'player object is retained');
+    assert.deepEqual({x:player.x,y:player.y,epoch:player.movementEpoch,availability:player.availability},before);
+    assert.equal(player.connected,true);assert.equal(a.roomId,b.roomId);
+  }finally{release?.();for(const room of rooms){room.reconnection.enabled=false;if(room.connection.isOpen)await room.leave();room.removeAllListeners();}await server.gracefullyShutdown(false);}
+});
 
 test('real transport: running replication, contested and multi-slot seats, disconnect and environment retirement', {timeout:30000},async()=>{
   const office=id(880),geometry=composeEnvironment(defaultEnvironment);let changed=false;

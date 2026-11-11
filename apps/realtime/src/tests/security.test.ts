@@ -6,6 +6,7 @@ import { realtimeConfig } from "../config/environment.ts";
 import { canStand, simulate, type Position } from "../movement/simulation.ts";
 import { validateOfficeMap, mapMarkers, PLAYER_SPEED } from "../../../../packages/shared/src/map.ts";
 import { validInput, mapVersion, TICK_MS } from "../../../../packages/shared/src/protocol.ts";
+import { defaultCustomization, encodeCustomization } from '../../../../packages/shared/src/avatar-customization.ts';
 
 const userId = "00000000-0000-4000-8000-000000000001", orgId = "00000000-0000-4000-8000-000000000002", officeId = "00000000-0000-4000-8000-000000000003";
 const map = validateOfficeMap(JSON.parse(readFileSync(new URL("../../../web/public/office/studio.json", import.meta.url), "utf8")));
@@ -18,6 +19,14 @@ test("authorization accepts only independently verified active members; saved pr
   const auth = await authorizeIdentity(token(), officeId, source());
   assert.equal(auth.userId, userId); assert.equal(auth.organizationId, orgId); assert.equal(auth.avatarKey, "slate"); assert.equal(auth.displayName, "Alice");
   assert.equal("email" in auth, false);
+});
+
+test('appearance authority validates persisted v1 metadata and falls back for corrupt or future records', async () => {
+  for (const appearance of [defaultCustomization, encodeCustomization(defaultCustomization), null, { ...defaultCustomization, version: 2 }, { ...defaultCustomization, hat: 'remote.png' }]) {
+    const auth = await authorizeIdentity(token(), officeId, { ...source(), profile: async () => ({ avatarKey: 'plum', displayName: 'Taylor', appearance }) });
+    assert.equal(auth.avatarKey, 'plum');
+    assert.equal(auth.appearance, appearance === defaultCustomization || typeof appearance === 'string' ? encodeCustomization(defaultCustomization) : undefined);
+  }
 });
 test("profile name normalization is consistent and private with one profile read per authorization", async () => {
   for (const [name, expected] of [["  Alex  Lee ", "Alex Lee"], ["You", "You"], ["private@example.invalid", "Member"], ["", "Member"]]) {

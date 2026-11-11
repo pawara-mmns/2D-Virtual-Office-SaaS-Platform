@@ -1,6 +1,7 @@
 import { pathToFileURL } from "node:url";
 import { picture } from "./office-pixel-art.mjs";
 import { avatarPresets } from "../apps/web/src/features/avatars/presets.ts";
+import { generateModularAvatars } from './generate-modular-avatar-assets.mjs';
 
 // Original fixed designs, not a skin/wardrobe editor. Shared proportions and foot placement.
 const palettes = [
@@ -52,6 +53,7 @@ export function generateAvatars() {
     }
   }
   avatar.png("avatar.png");
+  generateModularAvatars();
   console.log("Generated six original presets with walking and seated poses in one 96x1536 sprite sheet; original frames preserved.");
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) generateAvatars();

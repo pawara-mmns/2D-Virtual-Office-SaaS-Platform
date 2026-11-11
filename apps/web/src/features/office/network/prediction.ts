@@ -63,7 +63,8 @@ export class OfficePrediction{
       if(this.input.pendingCount<90)this.input.send();
     }
     if(stalled)this.local!.reset();
-    const local=this.local!,pose={...own,...local.state,x:local.value('x'),y:local.value('y')};
+    // Appearance is authoritative metadata, outside the movement rollback state.
+    const local=this.local!,pose={...own,...local.state,avatarKey:own.avatarKey,displayName:own.displayName,appearance:own.appearance,x:local.value('x'),y:local.value('y')};
     // Corrections must not visually ease THROUGH a newly moved wall/furniture.
     // A seat's authored footprint is intentionally solid and uses raw authority.
     if(own.seatId||held&&own.motionState==='STANDING'){Object.assign(pose,own);}

@@ -19,7 +19,7 @@ import {LiveOffice,type LiveStore} from '../environment/live.ts';
 import {structureVersion,type LiveDelta} from '../../../../packages/shared/src/environment/live-decoration.ts';
 
 type OfficeClient = Client<{ auth: Authorization }>;
-type Control = { input: MoveInput; lastInput: number; window: number; messages: number; refreshing: boolean; nextCheck: number };
+type Control = { input: MoveInput; lastInput: number; window: number; messages: number; refreshing: boolean; nextCheck: number; refreshedAt: number; pendingToken?: string };
 export type RoomServices = {
   authorize: Authorize; map: OfficeMap;
   chat?: ChatStore;
@@ -103,10 +103,10 @@ export function officeRoomClass(services: RoomServices) {
       this.onMessage('environment.edit',(client,value:unknown)=>{void this.editEnvironment(client,value);});
       this.onMessage("credential", (client, value: unknown) => {
         const control = this.controls.get(client.sessionId);
-        if (!control || control.refreshing || typeof value !== "string" || value.length > 8192) return;
-        // Credential/profile refresh is bounded separately from movement messages.
-        if (Date.now() < control.nextCheck - AUTH_CHECK_MS + 1000) return;
-        void this.revalidate(client, value);
+        if (!control || typeof value !== "string" || !value || value.length > 8192) return;
+        // Keep one latest refresh through an in-flight read or the one-second
+        // throttle. A just-saved appearance must not wait for the periodic lease.
+        control.pendingToken = value;
       });
       this.onMessage("chat.send", (client, value: unknown) => { void this.sendChat(client, value); });
       this.onMessage("availability.set", (client, value: unknown) => { void this.setAvailability(client, value); });
@@ -222,9 +222,9 @@ export function officeRoomClass(services: RoomServices) {
           if (canStand(this.officeMap, x, spawn.y) && [...this.state.players.values()].every((p) => Math.hypot(p.x - x, p.y - spawn.y) >= 20)) { spawnX = x; break; }
         }
         const player = new PlayerState();
-        Object.assign(player, { sessionId: client.sessionId, userId: fresh.userId, avatarKey: fresh.avatarKey, displayName: fresh.displayName, x: spawnX, y: spawn.y });
+        Object.assign(player, { sessionId: client.sessionId, userId: fresh.userId, avatarKey: fresh.avatarKey, displayName: fresh.displayName, appearance: fresh.appearance ?? '', x: spawnX, y: spawn.y });
         this.state.players.set(client.sessionId, player);
-        this.controls.set(client.sessionId, { input: { seq: -1, x: 0, y: 0 }, lastInput: 0, window: Date.now(), messages: 0, refreshing: false, nextCheck: Date.now() + AUTH_CHECK_MS });
+        this.controls.set(client.sessionId, { input: { seq: -1, x: 0, y: 0 }, lastInput: 0, window: Date.now(), messages: 0, refreshing: false, nextCheck: Date.now() + AUTH_CHECK_MS, refreshedAt: Date.now() });
         const pending=this.live?.pendingFor(fresh.userId);if(pending)void this.editEnvironment(client,pending);
       } catch {
         if (client.auth) services.release(this.state.officeId, client.auth.userId, client.sessionId);
@@ -244,14 +244,14 @@ export function officeRoomClass(services: RoomServices) {
     private async revalidate(client: OfficeClient, token = client.auth?.token) {
       const control = this.controls.get(client.sessionId);
       if (!control || control.refreshing) return;
-      control.refreshing = true;
+      control.refreshing = true; control.refreshedAt = Date.now();
       try {
         const fresh = await services.authorize(token, this.state.officeId);
         if (!this.controls.has(client.sessionId) || this.revoked.has(client.sessionId)) return;
         if (fresh.userId !== client.auth?.userId || fresh.organizationId !== client.auth?.organizationId) throw new Error();
         client.auth = fresh;
         const player = this.state.players.get(client.sessionId);
-        if (player) { player.avatarKey = fresh.avatarKey; player.displayName = fresh.displayName; }
+        if (player) { player.avatarKey = fresh.avatarKey; player.displayName = fresh.displayName; player.appearance = fresh.appearance ?? ''; }
         control.nextCheck = Date.now() + AUTH_CHECK_MS;
       } catch { this.deny(client); }
       finally { control.refreshing = false; }
@@ -263,7 +263,9 @@ export function officeRoomClass(services: RoomServices) {
         const control = this.controls.get(client.sessionId), player = this.state.players.get(client.sessionId);
         if (!control || !player) continue;
         if (!client.auth || now >= client.auth.expiresAt || now - client.auth.checkedAt >= AUTH_LEASE_MS) { this.deny(client); continue; }
-        if (now >= control.nextCheck && !control.refreshing) void this.revalidate(client);
+        if (control.pendingToken && !control.refreshing && now - control.refreshedAt >= 1000) {
+          const token = control.pendingToken; control.pendingToken = undefined; void this.revalidate(client, token);
+        } else if (now >= control.nextCheck && !control.refreshing) void this.revalidate(client);
         const channel=this.inputs.get(client.sessionId);if(channel.size)this.nativeClients.add(client.sessionId);
         const native=this.nativeClients.has(client.sessionId);
         // One server-sized step per tick, regardless of how many commands a

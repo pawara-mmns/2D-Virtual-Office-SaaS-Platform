@@ -43,6 +43,7 @@ export default function OfficeCanvas({ appearance, profileWarning, officeId, use
   const [reducedEffects, setReducedEffects] = useState(false);
   const [savedKey, setSavedKey] = useState<AvatarKey | null>(null);
   const [savedName, setSavedName] = useState<string | null>(null);
+  const [savedAppearance, setSavedAppearance] = useState<string | null>(null);
   const network = useRef<OfficeNetwork | null>(null);
   const [presence, setPresence] = useState<Presence>({ status: "connecting", count: 0, notice: "Connecting to your office…" });
   const [panel, setPanel] = useState<"avatar" | "participants" | "chat" | "settings" | null>(null);
@@ -91,6 +92,7 @@ export default function OfficeCanvas({ appearance, profileWarning, officeId, use
   const participantsPanel = useCallback((open: boolean) => setPanel(open ? "participants" : null), []);
   const avatarKey = savedKey ?? appearance.avatarKey;
   const displayName = savedName ?? appearance.displayName;
+  const customization = savedAppearance ?? appearance.appearance;
   const latestAppearance = useRef<AvatarAppearance>({ ...appearance, avatarKey });
   useEffect(() => {
     if (panel === null && focusOffice.current) { focusOffice.current = false; host.current?.focus({ preventScroll: true }); }
@@ -110,10 +112,10 @@ export default function OfficeCanvas({ appearance, profileWarning, officeId, use
     }
   }, [compact, panel, panelHost]);
   useEffect(() => {
-    const current = { avatarKey, displayName };
+    const current = { avatarKey, displayName, appearance: customization };
     latestAppearance.current = current;
     controls.current?.setAppearance(current);
-  }, [avatarKey, displayName]);
+  }, [avatarKey, displayName, customization]);
   useEffect(() => {
     if (!host.current) return;
     const environment = JSON.parse(environmentKey) as EnvironmentConfig | null;
@@ -194,7 +196,7 @@ export default function OfficeCanvas({ appearance, profileWarning, officeId, use
       </div>}
     </div>
     </div>
-    <OfficeHud context={context} presence={presence} displayName={displayName} avatarKey={avatarKey} profileToggle={profileToggle} onMenuOpen={() => setPanel(null)} reducedEffects={reducedEffects}
+    <OfficeHud context={context} presence={presence} displayName={displayName} avatarKey={avatarKey} appearance={customization} profileToggle={profileToggle} onMenuOpen={() => setPanel(null)} reducedEffects={reducedEffects}
       retry={() => { setNavigation(null); setStatus("loading"); setPresence({ status: "connecting", count: 0, notice: "Connecting to your office..." }); setAttempt((value) => value + 1); }}
       settings={<OfficeDisclosure label="Settings" icon={<HudIcon name="settings" />} material="elevated" panel={{ open: panel === "settings", onOpenChange: settingsPanel, container: panelHost, returnFocus: restoreProfileFocus }}>
         <div className="space-y-4"><div><label htmlFor="office-availability" className="mb-2 block text-sm font-medium">Your availability</label>
@@ -202,7 +204,7 @@ export default function OfficeCanvas({ appearance, profileWarning, officeId, use
         </div><HudGlassControl /><p id="office-instructions" className="text-sm leading-6 text-muted">Click or Tab into the office, then use WASD or arrows. Hold Shift to run. Press E near an open seat to sit, then E to stand before walking. Touch devices have movement arrows and a Run toggle. Tab to leave. Map navigation changes your view, not your position. Scroll over the map to zoom; Ctrl/Cmd+scroll keeps browser zoom.</p>
         <p className="text-sm leading-6 text-muted">Enable proximity voice to talk with nearby teammates. The Meeting Room takes precedence and uses its own explicit Join Voice action.</p></div>
       </OfficeDisclosure>}
-      avatar={<AvatarSettings currentKey={avatarKey} displayName={displayName} icon={<HudIcon name="avatar" />} panel={{ open: panel === "avatar", onOpenChange: avatarPanel, container: panelHost, returnFocus: restoreProfileFocus }} onSaved={(key, name) => { setSavedKey(key); if (name) setSavedName(name); network.current?.appearanceChanged(); }} />}
+      avatar={<AvatarSettings currentKey={avatarKey} displayName={displayName} appearance={customization} icon={<HudIcon name="avatar" />} panel={{ open: panel === "avatar", onOpenChange: avatarPanel, container: panelHost, returnFocus: restoreProfileFocus }} onSaved={(key, name, config) => { setSavedKey(key); setSavedAppearance(config ?? ''); if (name) setSavedName(name); network.current?.appearanceChanged(); }} />}
       controls={<>
         {isOwner&&environment&&<DecorationEditor officeId={officeId} environment={environment} container={panelHost} ready={status==='ready'&&presence.status==='online'} live={live} editLive={editLive} onView={configureEditor} onHandler={subscribeEditor} onEditing={changeEditing} onCommand={commandEditor} onFocusOffice={focusEditor}/>}
         <button ref={chatToggle} className="office-control" aria-label="Office Chat" title="Office Chat" aria-expanded={chatOpen} aria-controls="office-chat" onClick={() => setPanel((value) => value === "chat" ? null : "chat")}><HudIcon name="chat" /><span className="hud-control-label">Office Chat</span></button>

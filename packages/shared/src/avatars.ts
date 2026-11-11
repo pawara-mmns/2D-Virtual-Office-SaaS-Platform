@@ -7,7 +7,8 @@ export const avatarPresets = [
   { key: "slate", name: "Slate", description: "Navy knit, silver hair and glasses", index: 5 },
 ] as const;
 export type AvatarKey = typeof avatarPresets[number]["key"];
-export type AvatarAppearance = { avatarKey: AvatarKey; displayName: string };
+// Canonical, validated JSON metadata on the wire; empty/absent uses the exact legacy sheet.
+export type AvatarAppearance = { avatarKey: AvatarKey; displayName: string; appearance?: string };
 export const defaultAvatar: AvatarKey = "fern";
 export const avatarDirections = ["down", "left", "right", "up"] as const;
 export type AvatarDirection = typeof avatarDirections[number];

@@ -184,6 +184,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          avatar_appearance: Json | null
           avatar_key: string | null
           created_at: string
           display_name: string
@@ -191,6 +192,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          avatar_appearance?: Json | null
           avatar_key?: string | null
           created_at?: string
           display_name?: string
@@ -198,6 +200,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          avatar_appearance?: Json | null
           avatar_key?: string | null
           created_at?: string
           display_name?: string
