@@ -1,15 +1,15 @@
 {
-  "compositionMs": 252.69999998807907,
-  "meanFrameMs": 32.55833333333333,
+  "compositionMs": 84.29999999888241,
+  "meanFrameMs": 17.066666666666666,
   "diagnostics": {
-    "rttMs": 27.600000023841858,
-    "jitterMs": 13.167118730917744,
-    "pendingInputs": 4,
+    "rttMs": 17.300000000745058,
+    "jitterMs": 8.662563931823101,
+    "pendingInputs": 5,
     "correctionPx": 0,
-    "serverMovementMs": 0.6207830758427331,
+    "serverMovementMs": 0.21483900709216452,
     "prediction": true,
-    "fps": 41.59962116317264,
-    "inputVisibleMs": 4.199999988079071
+    "fps": 59.96123329435658,
+    "inputVisibleMs": 3.200000001117587
   },
   "textures": 12
 }

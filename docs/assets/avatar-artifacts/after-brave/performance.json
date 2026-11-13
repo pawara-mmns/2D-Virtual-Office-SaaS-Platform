@@ -1,0 +1,15 @@
+{
+  "compositionMs": 17.300000000745058,
+  "meanFrameMs": 25.478333333320915,
+  "diagnostics": {
+    "rttMs": 25.199999999254942,
+    "jitterMs": 7.283013209722994,
+    "pendingInputs": 5,
+    "correctionPx": 0,
+    "serverMovementMs": 0.3643916002896708,
+    "prediction": true,
+    "fps": 41.96740570263587,
+    "inputVisibleMs": 2.599999999627471
+  },
+  "textures": 12
+}

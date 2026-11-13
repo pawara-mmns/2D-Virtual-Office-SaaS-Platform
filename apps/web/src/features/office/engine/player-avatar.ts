@@ -3,7 +3,6 @@ import { avatarAnimationKey, avatarBody, avatarDirections, avatarDisplayName, av
 import type { Direction } from "../input/movement.ts";
 import type { PlayerSnapshot } from "../../../../../../packages/shared/src/protocol.ts";
 import { decodeCustomization } from '../../../../../../packages/shared/src/avatar-customization.ts';
-import { loadAvatarAtlas } from '../../avatars/composer.ts';
 import { acquireAvatarTexture } from './avatar-textures.ts';
 
 export class PlayerAvatar {
@@ -19,10 +18,8 @@ export class PlayerAvatar {
   private seated=false;
   private appearanceSource?: string;
   private texture?: ReturnType<typeof acquireAvatarTexture>;
-  private appearanceRevision = 0;
-  private disposed = false;
   private pendingProgress: number | null = null;
-  private readonly onShutdown = () => { this.disposed = true; this.appearanceRevision++; this.texture?.release(); this.texture = undefined; };
+  private readonly onShutdown = () => { this.texture?.release(); this.texture = undefined; };
   constructor(private readonly scene: Phaser.Scene, x: number, y: number, appearance: AvatarAppearance) {
     this.key = safeAvatarKey(appearance.avatarKey); this.fullName = avatarDisplayName(appearance.displayName);
     for (const preset of avatarPresets) for (const direction of avatarDirections) {
@@ -44,7 +41,6 @@ export class PlayerAvatar {
     this.labelWidth = -1;
     if (!changed) return;
     this.appearanceSource = appearance.appearance;
-    const revision = ++this.appearanceRevision;
     const config = decodeCustomization(appearance.appearance);
     const swap = (texture?: ReturnType<typeof acquireAvatarTexture>) => {
       this.pendingProgress = this.sprite.anims.isPlaying ? this.sprite.anims.getProgress() : null;
@@ -53,9 +49,7 @@ export class PlayerAvatar {
       this.walkingDirection = null; this.idleDirection = null;
     };
     if (!config) { swap(); return; }
-    void loadAvatarAtlas().then(atlas => {
-      if (!this.disposed && revision === this.appearanceRevision && this.scene.sys.isActive()) swap(acquireAvatarTexture(this.scene, config, atlas));
-    }).catch(() => { /* Keep the existing deterministic legacy artwork if loading fails. */ });
+    swap(acquireAvatarTexture(this.scene, config));
   }
   renderNetwork(state: PlayerSnapshot, delta: number, local: boolean, presented=false) {
     const identity = `${state.avatarKey}/${state.displayName}/${state.appearance ?? ''}`;

@@ -4,13 +4,13 @@ import { encodeCustomization, type AvatarCustomization } from '../../../../../..
 type Entry = { key: string; users: number };
 const caches = new WeakMap<Phaser.Textures.TextureManager, Map<string, Entry>>();
 let serial = 0;
-export function acquireAvatarTexture(scene: Phaser.Scene, appearance: AvatarCustomization, atlas: HTMLImageElement) {
+export function acquireAvatarTexture(scene: Phaser.Scene, appearance: AvatarCustomization) {
   let cache = caches.get(scene.textures);
   if (!cache) { cache = new Map(); caches.set(scene.textures, cache); }
   const identity = encodeCustomization(appearance);
   let entry = cache.get(identity);
   if (!entry || !scene.textures.exists(entry.key)) {
-    const key = `custom-avatar-${++serial}`, canvas = composeAvatar(appearance, atlas);
+    const key = `custom-avatar-${++serial}`, canvas = composeAvatar(appearance);
     const texture = scene.textures.addCanvas(key, canvas)!;
     for (let frame = 0; frame < 24; frame++) texture.add(frame, 0, frame % 3 * 32, Math.floor(frame / 3) * 32, 32, 32);
     texture.setFilter(Phaser.Textures.FilterMode.NEAREST);
