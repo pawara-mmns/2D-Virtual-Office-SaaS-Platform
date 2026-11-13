@@ -7,6 +7,17 @@ export const AVATAR_FRAMES = 24;
 export const avatarLayers = ['body', 'bottom', 'shoes', 'top', 'hairBack', 'eyes', 'eyebrows', 'expression', 'hair', 'office', 'hat', 'glasses', 'headphones'] as const;
 export type AvatarLayer = typeof avatarLayers[number];
 export const artColors = { main: 'ffffff', light: 'dddddd', shade: '999999', ink: '29333f', cream: 'f1e9d7' } as const;
+// These are authored mask tokens, not colors sampled from a rendered canvas.
+// White clothing is a valid target color; fixed cream details stay independent.
+export function avatarPalette(color: string): Readonly<Record<string, string>> {
+  const rgb = [1, 3, 5].map(index => parseInt(color.slice(index, index + 2), 16));
+  const hex = (channels: number[]) => `#${channels.map(value => Math.round(value).toString(16).padStart(2, '0')).join('')}`;
+  return {
+    [artColors.main]: color,
+    [artColors.light]: hex(rgb.map(value => value + (255 - value) * .25)),
+    [artColors.shade]: hex(rgb.map(value => value * .7)),
+  };
+}
 export type PixelRect = [x: number, y: number, width: number, height: number, color: string];
 const partFor = (layer: AvatarLayer): AvatarPart => layer === 'hairBack' ? 'hair' : layer;
 export const avatarAtlasEntries = avatarCatalog.body.flatMap(body => avatarLayers.flatMap(layer => (avatarCatalog[partFor(layer)] as readonly string[]).filter(option => layer !== 'body' || option === body).map(option => ({ body, layer, option }))));
@@ -63,8 +74,8 @@ export function drawAvatarLayer(body: string, layer: AvatarLayer, option: string
   } else if (layer === 'shoes') {
     legs(main, true);
     if (option === 'sneakers') { if (!seated || direction === 0) { p(seated ? 9 : 11, 28 + step, seated ? 7 : 6, 1, cream); p(18, 28 - step, seated ? 7 : 6, 1, cream); p(13, 26 + step, 2, 1, cream); p(20, 26 - step, 2, 1, cream); } else { p(direction === 1 ? 3 : back ? 11 : 24, back ? 26 : 28, back ? 5 : 7, 1, cream); } }
-    if (option === 'formal') { p(12, seated ? 26 : 26 + step, 2, 1, light); }
-    if (option === 'casual') p(19, seated ? 26 : 26 - step, 3, 1, shade);
+    if (option === 'formal') p(seated && side ? direction === 1 ? 5 : 26 : 12, seated ? back ? 25 : side ? 27 : 26 : 26 + step, 2, 1, light);
+    if (option === 'casual') p(seated && side ? direction === 1 ? 11 : 20 : 19, seated ? back ? 25 : 26 : 26 - step, 3, 1, shade);
   } else if (layer === 'top') {
     p(left, torsoY, width, 10); p(left + 2, torsoY + 1, width - 4, 7, light);
     p(left - 3, torsoY + 1 + step, 3, option === 'tshirt' || option === 'dress' ? 4 : 8);

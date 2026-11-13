@@ -16,7 +16,7 @@ export type ForegroundRect=SeatRect&{sourceX:number;sourceY:number};
 export type Interactable = OfficeObject & {objectType:'chair'|'sofa'|'bench';occupancy:{capacity:number;onePerSlot:true};slots:SeatSlot[];foreground:ForegroundRect[]};
 // Only seating artwork gets functional actions. Future action names confer no capability.
 export const seatingCatalog=Object.fromEntries([...Object.keys(chairFamilies),...embeddedWorkstationAssets,...Object.keys(collectionSofas),'waiting','benchWaiting','sofa','sofaCompact','sofaSectional','beanBag'].map(id=>{const rect=fixtures[id as Fixture],seats=catalogSeats(id,rect[2],rect[3]);return[id,{type:seats[0]!.type,slots:seats.length}];})) as Partial<Record<Fixture,{type:Interactable['objectType'];slots:number}>>;
-function placements(map:OfficeMap):Marker[] {
+export function placements(map:OfficeMap):Marker[] {
   const layer=map.layers.find(l=>l.name==='Placements'&&l.type==='objectgroup');
   if(layer?.type==='objectgroup')return layer.objects;
   // Legacy maps have the same content-owned atlas, but predate placement metadata.
@@ -60,7 +60,7 @@ export function interactionRegistry(map:OfficeMap) {
   for(const o of objects){if(ids.has(o.instanceId))throw Error('Duplicate interactable identity');ids.add(o.instanceId);}
   return objects.sort((a,b)=>a.instanceId.localeCompare(b.instanceId));
 }
-function pathClear(map:OfficeMap,a:Point,b:Point,allow?:Interactable['footprint']) {
+export function pathClear(map:OfficeMap,a:Point,b:Point,allow?:Interactable['footprint']) {
   const architecture=tileLayer(map,'Architecture').data,steps=Math.max(1,Math.ceil(Math.hypot(b.x-a.x,b.y-a.y)));
   for(let n=0;n<=steps;n++)for(const [x,y]of bodyCorners(a.x+(b.x-a.x)*n/steps,a.y+(b.y-a.y)*n/steps)) {
     const tx=Math.floor(x/TILE_SIZE),ty=Math.floor(y/TILE_SIZE);
@@ -78,7 +78,7 @@ export function seatApproach(map:OfficeMap,object:Interactable,slot:SeatSlot,fro
 export function standPosition(map:OfficeMap,object:Interactable,slot:SeatSlot) {
   return slot.approaches.find(p=>canStand(map,p.x,p.y)&&pathClear(map,slot.anchor,p,slot.collisionFootprint));
 }
-export type PrimaryInteraction = {action:'SIT'|'STAND';objectId:string;slotId:string;label:string;available?:boolean};
+export type PrimaryInteraction = {action:'SIT'|'STAND'|'PLAY_GAME';objectId:string;slotId:string;label:string;available?:boolean};
 export function closestInteraction(map:OfficeMap,objects:readonly Interactable[],from:Point,occupied:ReadonlyMap<string,string>,seatId=''):PrimaryInteraction|null {
   if(seatId){const object=objects.find(o=>o.slots.some(s=>s.id===seatId));return object?{action:'STAND',objectId:object.instanceId,slotId:seatId,label:'Stand',available:true}:null;}
   const candidates=objects.flatMap(o=>o.slots.filter(s=>seatApproach(map,o,s,from)).map(s=>({o,s,d:Math.hypot(from.x-s.anchor.x,from.y-s.anchor.y),available:!occupied.has(s.id)})))

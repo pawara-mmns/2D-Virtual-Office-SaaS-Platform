@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { avatarCatalog, avatarColorKeys, defaultCustomization, parseCustomization, encodeCustomization, decodeCustomization, legacyCustomization, randomCustomization } from '../../../../../packages/shared/src/avatar-customization.ts';
-import { avatarAtlasEntries, drawAvatarLayer, appearanceLayers } from '../../../../../packages/shared/src/avatar-art.ts';
+import { artColors, avatarAtlasEntries, drawAvatarLayer, appearanceLayers } from '../../../../../packages/shared/src/avatar-art.ts';
 import { loadAvatarProfile, saveAvatarPreference } from './service.ts';
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from '../../lib/supabase/database.types.ts';
@@ -26,6 +26,7 @@ test('every layer option has bounded integer artwork for every body, direction, 
       assert.ok([x, y, width, height].every(Number.isInteger));
       assert.ok(x >= 0 && y >= 0 && x + width <= 32 && y + height <= 32, `${body}/${layer}/${option}/${frame} clips`);
       assert.match(color, /^[0-9a-f]{6}$/);
+      assert.ok((Object.values(artColors) as string[]).includes(color), 'every pixel uses an explicit mask or intentional fixed detail');
     }
     if (!['none', 'bald'].includes(option) && ['body', 'top', 'bottom', 'shoes', 'hair'].includes(layer)) assert.ok(rects.length > 0);
   }

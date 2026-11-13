@@ -17,6 +17,8 @@ import { parseInteraction } from '../../../../packages/shared/src/interactions.t
 import { createSeating } from '../interactions/seating.ts';
 import {LiveOffice,type LiveStore} from '../environment/live.ts';
 import {structureVersion,type LiveDelta} from '../../../../packages/shared/src/environment/live-decoration.ts';
+import { GameSessions, type GameActor } from '../games/sessions.ts';
+import { parseGameRequest } from '../../../../packages/shared/src/games/protocol.ts';
 
 type OfficeClient = Client<{ auth: Authorization }>;
 type Control = { input: MoveInput; lastInput: number; window: number; messages: number; refreshing: boolean; nextCheck: number; refreshedAt: number; pendingToken?: string };
@@ -61,12 +63,20 @@ export function officeRoomClass(services: RoomServices) {
     private editPending=new Set<string>();
     private editAt=new Map<string,number>();
     private editWindows=new Map<string,{at:number;count:number}>();
+    private games!: GameSessions;
+    private gamePending = new Set<string>();
+    private gameAt = new Map<string, number>();
     // All default matchmaking paths fail closed. Only our authorized endpoint
     // can reserve seats with trusted authData. Never inherit bundle JWT defaults.
     static async onAuth(): Promise<never> { throw new ServerError(403, "Use authorized office admission."); }
     onCreate(options: { officeId: string; map?: OfficeMap }) {
       this.officeMap = options.map ?? services.map;
       this.state.officeId = options.officeId;
+      this.games = new GameSessions(options.officeId, this.officeMap, (id, table) => {
+        const recipient = this.clients.find(c => c.sessionId === id), auth = recipient?.auth;
+        if (recipient && auth && this.state.players.get(id)?.connected && !this.revoked.has(id) && Date.now() < auth.expiresAt && Date.now() - auth.checkedAt < AUTH_LEASE_MS) recipient.send('game.state', table);
+      });
+      this.clock.setInterval(() => this.games.tick(), 1000);
       this.seating=createSeating(this.officeMap,this.state.seats);
       this.proximity=createProximity(options.officeId,services.voice,services.proximity,Date.now,conversationSpace(this.officeMap));
       this.state.mapVersion = mapVersion(this.officeMap);
@@ -101,6 +111,7 @@ export function officeRoomClass(services: RoomServices) {
       });
       this.onMessage('environment.sync',client=>{const now=Date.now();if(now-(this.editAt.get('sync/'+client.sessionId)??0)<300)return;this.editAt.set('sync/'+client.sessionId,now);if(this.live&&this.state.players.get(client.sessionId)?.connected)client.send('environment.snapshot',this.live.snapshot);});
       this.onMessage('environment.edit',(client,value:unknown)=>{void this.editEnvironment(client,value);});
+      this.onMessage('game.request', (client, value: unknown) => { void this.gameAction(client, value); });
       this.onMessage("credential", (client, value: unknown) => {
         const control = this.controls.get(client.sessionId);
         if (!control || typeof value !== "string" || !value || value.length > 8192) return;
@@ -149,6 +160,7 @@ export function officeRoomClass(services: RoomServices) {
     }
     private applyLiveMap(map:OfficeMap,delta:LiveDelta){
       this.officeMap=map;this.seating.updateMap(map);
+      this.games.updateMap(map);
       for(const [id,player]of this.state.players){player.movementEpoch++;this.inputs.get(id).drain();const control=this.controls.get(id);if(control){control.input={seq:control.input.seq,x:0,y:0};control.lastInput=0;}}
       this.state.environmentRevision=delta.revision;
       if(delta.saved)this.state.mapVersion=mapVersion(map);
@@ -165,6 +177,32 @@ export function officeRoomClass(services: RoomServices) {
       const fresh = await services.authorize(auth.token, this.state.officeId);
       if (fresh.userId !== auth.userId || fresh.organizationId !== auth.organizationId || fresh.officeId !== this.state.officeId || Date.now() >= fresh.expiresAt || !this.state.players.get(client.sessionId)?.connected) throw new ChatFailure("DENIED");
       return fresh;
+    }
+    private gameActor(client: OfficeClient, auth = client.auth): GameActor {
+      const player = this.state.players.get(client.sessionId);
+      if (!auth || !player?.connected || this.revoked.has(client.sessionId)) throw new ChatFailure('DENIED');
+      return { userId: auth.userId, sessionId: client.sessionId, officeId: auth.officeId, organizationId: auth.organizationId, displayName: auth.displayName, connected: true, x: player.x, y: player.y, seatId: player.seatId };
+    }
+    private async gameAction(client: OfficeClient, value: unknown) {
+      const request = parseGameRequest(value);
+      const requestId = request?.requestId ?? '';
+      const fail = (code: string, message: string) => client.send('game.reply', { requestId, ok: false, code, message });
+      if (!request) { fail('INVALID', 'Invalid game request.'); return; }
+      // Closing one's own spectator subscription is immediate, including while
+      // another request is pending. It grants no new read or play capability.
+      if (request.action === 'UNWATCH') {
+        const auth = client.auth;
+        if (!auth || Date.now() >= auth.expiresAt || Date.now() - auth.checkedAt >= AUTH_LEASE_MS) { fail('DENIED', 'Office access expired.'); return; }
+        try { client.send('game.reply', this.games.handle(this.gameActor(client), request)); } catch { fail('DENIED', 'Game access denied.'); }
+        return;
+      }
+      if (this.gamePending.has(client.sessionId) || Date.now() - (this.gameAt.get(client.sessionId) ?? 0) < 80) { fail('RATE_LIMIT', 'Wait for the previous game action to finish.'); return; }
+      this.gamePending.add(client.sessionId); this.gameAt.set(client.sessionId, Date.now());
+      try {
+        const fresh = await this.actionIdentity(client);
+        client.send('game.reply', this.games.handle(this.gameActor(client, fresh), request));
+      } catch { fail('DENIED', 'Game access could not be verified. Reconnect and check your office membership.'); }
+      finally { this.gamePending.delete(client.sessionId); }
     }
     private async proximityAction(client:OfficeClient,value:unknown) {
       const serial=(this.proximityRevision.get(client.sessionId)??0)+1;
@@ -225,6 +263,7 @@ export function officeRoomClass(services: RoomServices) {
         Object.assign(player, { sessionId: client.sessionId, userId: fresh.userId, avatarKey: fresh.avatarKey, displayName: fresh.displayName, appearance: fresh.appearance ?? '', x: spawnX, y: spawn.y });
         this.state.players.set(client.sessionId, player);
         this.controls.set(client.sessionId, { input: { seq: -1, x: 0, y: 0 }, lastInput: 0, window: Date.now(), messages: 0, refreshing: false, nextCheck: Date.now() + AUTH_CHECK_MS, refreshedAt: Date.now() });
+        this.games.connect(this.gameActor(client, fresh));
         const pending=this.live?.pendingFor(fresh.userId);if(pending)void this.editEnvironment(client,pending);
       } catch {
         if (client.auth) services.release(this.state.officeId, client.auth.userId, client.sessionId);
@@ -232,6 +271,7 @@ export function officeRoomClass(services: RoomServices) {
       }
     }
     private deny(client: OfficeClient) {
+      if (client.auth) this.games.revoke(client.sessionId, client.auth.userId);
       this.seating.release(client.sessionId,this.state.players.get(client.sessionId));
       this.proximity.leave(client.sessionId);
       services.voice?.leave(client.sessionId);
@@ -284,6 +324,7 @@ export function officeRoomClass(services: RoomServices) {
       this.simulationWorkMs += performance.now() - began;
     }
     onDrop(client: OfficeClient) {
+      if (client.auth) this.games.disconnect(client.sessionId, client.auth.userId);
       this.seating.release(client.sessionId,this.state.players.get(client.sessionId));
       this.proximityRevision.set(client.sessionId,(this.proximityRevision.get(client.sessionId)??0)+1);
       this.proximity.leave(client.sessionId);
@@ -304,6 +345,7 @@ export function officeRoomClass(services: RoomServices) {
       if (client.state === ClientState.LEAVING || client.state === ClientState.CLOSED || !client.auth || fresh.userId !== client.auth.userId || fresh.organizationId !== client.auth.organizationId || !this.state.players.has(client.sessionId)) throw new ServerError(403, "Office access denied.");
       client.auth = fresh;
       this.state.players.get(client.sessionId)!.connected = true;
+      this.games.connect(this.gameActor(client, fresh));
       this.state.players.get(client.sessionId)!.movementEpoch++;
       this.inputs.get(client.sessionId).drain();
       const control = this.controls.get(client.sessionId)!;
@@ -312,6 +354,8 @@ export function officeRoomClass(services: RoomServices) {
       const pending=this.live?.pendingFor(fresh.userId);if(pending)void this.editEnvironment(client,pending);
     }
     onLeave(client: OfficeClient) {
+      if (client.auth) this.games.disconnect(client.sessionId, client.auth.userId);
+      this.gamePending.delete(client.sessionId); this.gameAt.delete(client.sessionId);
       this.diagnosticAt.delete(client.sessionId);
       this.nativeClients.delete(client.sessionId);
       this.editAt.delete(client.sessionId);this.editAt.delete('sync/'+client.sessionId);this.editPending.delete(client.sessionId);
@@ -324,6 +368,6 @@ export function officeRoomClass(services: RoomServices) {
       this.state.players.delete(client.sessionId); this.controls.delete(client.sessionId); this.revoked.delete(client.sessionId);
       if (client.auth) services.release(this.state.officeId, client.auth.userId, client.sessionId);
     }
-    onDispose() { this.seating.clear();this.interactionAt.clear();this.interactionSeq.clear();this.proximity.close();this.proximityAt.clear();for (const id of this.state.players.keys()) services.voice?.leave(id); this.controls.clear(); this.revoked.clear(); this.chatPending.clear(); this.statusPending.clear(); this.statusAt.clear(); services.disposed(this.state.officeId, this.roomId); }
+    onDispose() { this.games.dispose();this.gamePending.clear();this.gameAt.clear();this.seating.clear();this.interactionAt.clear();this.interactionSeq.clear();this.proximity.close();this.proximityAt.clear();for (const id of this.state.players.keys()) services.voice?.leave(id); this.controls.clear(); this.revoked.clear(); this.chatPending.clear(); this.statusPending.clear(); this.statusAt.clear(); services.disposed(this.state.officeId, this.roomId); }
   };
 }

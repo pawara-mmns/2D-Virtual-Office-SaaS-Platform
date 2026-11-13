@@ -11,6 +11,8 @@ import {applyObjectChanges,type LiveSnapshot,type LiveRequest,type LiveReply,typ
 import {parseDecoration} from '../../../../../../packages/shared/src/environment/decoration.ts';
 import type {EnvironmentConfig} from '../../../../../../packages/shared/src/environment/catalog.ts';
 import {OfficePrediction} from './prediction.ts';
+import { gameChannel } from '../../games/channel.ts';
+import type { GameTableState } from '../../../../../../packages/shared/src/games/protocol.ts';
 
 type OfficeRoom = Room<object, OfficeSnapshot>;
 export function realtimeUrl(value: string | undefined, production = process.env.NODE_ENV === "production") {
@@ -30,9 +32,12 @@ export function connectOffice(options: {
   onProximity?(state:ProximityState|null):void;
   onProximityError?(message:string):void;
   onInteractionError?(message:string):void;
+  onGameState?(table: GameTableState | null): void;
 }): OfficeNetwork {
   let room: OfficeRoom | undefined, state: OfficeSnapshot | undefined;
+  let gamesReady = false;
   let closed = false, denied = false, online = false, seq = 0, previousCount = 0;
+  const games = gameChannel(options.officeId, () => !closed && !denied && online && !!room, request => room?.send('game.request', request), options.onGameState);
   let lastX = 0, lastY = 0, lastSent = 0, lastRun=false, interactionSeq=0;
   let disposeTransport: (() => void) | undefined;
   let participantKey = "", chatReady = false;
@@ -56,7 +61,7 @@ export function connectOffice(options: {
     voiceState = value ? { sessionId:value.sessionId,zone:value.zone,configured:value.configured,participants:value.participants,...(value.bubble?{bubble:{...value.bubble}}:{}) } : null;
     options.onVoice?.(voiceState);
   };
-  const disconnected = () => { prediction?.dispose();prediction=undefined;native=false;intent={x:0,y:0,run:false};for(const item of pending.values()){clearTimeout(item.timer);item.reject(Error('Connection lost. The operation is unconfirmed. Reconnect and retry Save.'));}pending.clear();clearTimeout(syncTimer);chatReady = false; options.onChat?.({ type: "connection", online: false }); options.onParticipants?.([]); publishVoice(null);proximity=null;options.onProximity?.(null); participantKey = ""; };
+  const disconnected = () => { games.disconnect();gamesReady=false;prediction?.dispose();prediction=undefined;native=false;intent={x:0,y:0,run:false};for(const item of pending.values()){clearTimeout(item.timer);item.reject(Error('Connection lost. The operation is unconfirmed. Reconnect and retry Save.'));}pending.clear();clearTimeout(syncTimer);chatReady = false; options.onChat?.({ type: "connection", online: false }); options.onParticipants?.([]); publishVoice(null);proximity=null;options.onProximity?.(null); participantKey = ""; };
   const controller = new AbortController();
   const presence = (status: Presence["status"], notice: string) => {
     if (!closed) options.onPresence({ status, notice, count: online && state ? [...state.players.values()].filter((p) => p.connected).length : 0 });
@@ -108,6 +113,7 @@ export function connectOffice(options: {
         if (closed || denied || !online) return;
         if (next.officeId !== options.officeId || next.mapVersion !== options.mapVersion&&(!options.structureVersion||next.structureVersion!==options.structureVersion)) { close(); options.onPresence({ status: "offline", count: 0, notice: "Office map changed. Reload this page.",reload:true }); return; }
         state = next;
+        if (next.gameProtocol === 1 && !gamesReady) { gamesReady = true; games.reconnect(); }
         if(next.environmentEpoch&&(!environment||environment.epoch!==next.environmentEpoch||environment.revision<(next.environmentRevision??0)))syncEnvironment();
         if (!chatReady && online) { chatReady = true; options.onChat?.({ type: "connection", online: true }); }
         const participants = [...next.players.values()];
@@ -119,6 +125,8 @@ export function connectOffice(options: {
         if (count !== previousCount) { const before = previousCount; previousCount = count; presence("online", count > before ? "A participant joined." : "A participant left."); }
       });
       room.onMessage('environment.snapshot',(value:LiveSnapshot)=>{try{acceptSnapshot(value);}catch{syncEnvironment();}});
+      room.onMessage('game.state', (value: unknown) => { if (!closed && online) games.accept(value); });
+      room.onMessage('game.reply', games.reply);
       room.onMessage('environment.delta',(value:LiveDelta)=>{
         if(closed||!online||!options.environment)return;
         try{
@@ -147,13 +155,14 @@ export function connectOffice(options: {
       room.onMessage('proximity.state',(value:unknown)=>{if(closed||!online||!room)return;const decoded=decodeProximity(value,options.officeId,room.sessionId);if(decoded){proximity=decoded;options.onProximity?.(decoded);}});
       room.onMessage('proximity.error',()=>{if(!closed&&online)options.onProximityError?.('Conversation change denied. Check current membership or wait a moment and retry.');});
       room.onDrop(() => { if (closed || denied) return; online = false; disconnected(); presence("reconnecting", "Connection lost. Reconnecting…"); });
-      room.onReconnect(() => { if (closed || denied) return; online = true; lastSent = 0;syncAt=0;syncEnvironment(); presence("online", "Reconnected."); void credential(); });
+      room.onReconnect(() => { if (closed || denied) return; online = true; lastSent = 0;syncAt=0;syncEnvironment(); if(state?.gameProtocol===1&&!gamesReady){gamesReady=true;games.reconnect();} presence("online", "Reconnected."); void credential(); });
       room.onLeave((code) => { if (closed) return; if (code === ENVIRONMENT_CHANGED_CODE) { close(); options.onPresence({ status: "offline", count: 0, notice: "Your owner applied a new office setup. Reload to enter it.", reload: true }); return; } denied ||= code === 4000; online = false; state = undefined; disconnected(); clearInterval(refresh); if (denied && room) room.reconnection.enabled = false; presence(denied ? "denied" : "offline", denied ? "Office access ended. Return to the workspace and check your membership." : "Disconnected. Verify your session and membership, then retry."); });
       room.onError((code) => { if (closed) return; denied ||= code === 401 || code === 403; online = false; disconnected(); if (denied) { clearInterval(refresh); if (room) room.reconnection.enabled = false; } presence(denied ? "denied" : "offline", denied ? "Office access denied. Return to the workspace and check your membership." : "Office connection failed. Check access and retry."); });
       presence("online", "Connected.");
     } catch { if (!closed) presence("offline", "Could not connect to the office. Check your network connection and retry."); }
   };
   const close = () => {
+    games.dispose();
     if (closed) return;
     closed = true; online = false; state = undefined; controller.abort(); clearInterval(refresh);
     clearTimeout(syncTimer);
@@ -192,6 +201,7 @@ export function connectOffice(options: {
       room.send("input", { seq: seq++, x: Math.sign(x), y: Math.sign(y), run:run===true });
     },
     interact(request){const value={...request,seq:interactionSeq++};if(!online||!room||closed||!parseInteraction(value))return false;prediction?.holdInteraction();intent={x:0,y:0,run:false};room.send('object.interact',value);return true;},
+    game: games.request,
     appearanceChanged() { void credential().catch(() => {}); },
     close,
     sendChat(body, clientMessageId) { if (closed || !online || !chatReady || !room || !parseChatSend({ body, clientMessageId })) return false; room.send("chat.send", { body, clientMessageId }); return true; },

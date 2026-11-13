@@ -1,4 +1,5 @@
 const paths = {
+  chess: 'M9 3h6l-1 5 4 4-2 5H8l-2-5 4-4-1-5ZM8 17h8l2 4H6l2-4ZM9 5h6',
   seat: 'M7 3v10h11M7 9h10v4M5 13h14v3H5v-3ZM7 16v5M17 16v5',
   stand: 'M12 3v12M8 7l4-4 4 4M5 20h14',
   follow: 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8ZM12 2v3M12 19v3M2 12h3M19 12h3',

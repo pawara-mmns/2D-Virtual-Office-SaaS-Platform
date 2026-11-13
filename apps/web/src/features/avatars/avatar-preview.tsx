@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { avatarIdleFrame, safeAvatarKey, avatarDirections, type AvatarDirection, type AvatarKey } from './presets';
 import { decodeCustomization } from '../../../../../packages/shared/src/avatar-customization';
-import { composeAvatar, loadAvatarAtlas } from './composer';
+import { composeAvatar } from './composer';
 import type { PreviewCrop } from './studio-model';
 let legacyImage: Promise<HTMLImageElement> | undefined;
 function loadLegacy() {
@@ -17,7 +17,7 @@ export function AvatarPreview({ appearance, avatarKey = 'fern', direction = 'dow
   useEffect(() => {
     let disposed = false, animation = 0;
     const config = decodeCustomization(appearance);
-    const source = config ? loadAvatarAtlas().then(atlas => composeAvatar(config, atlas)) : loadLegacy();
+    const source = config ? Promise.resolve().then(() => composeAvatar(config)) : loadLegacy();
     void source.then(sheet => {
       if (disposed || !canvas.current) return;
       setError('');

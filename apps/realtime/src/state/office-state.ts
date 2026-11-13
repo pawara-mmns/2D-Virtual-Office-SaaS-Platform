@@ -13,5 +13,5 @@ export const PlayerState = schema({
   movementEpoch:t.uint32().default(1),
 }, "PlayerState");
 export type PlayerState = SchemaType<typeof PlayerState>;
-export const OfficeState = schema({ officeId: t.string().default(""), mapVersion: t.string().default(""),movementProtocol:t.uint8().default(1), structureVersion:t.string().default(''),environmentRevision:t.number().default(0),environmentEpoch:t.string().default(''),players: t.map(PlayerState), seats:t.map('string') }, "OfficeState");
+export const OfficeState = schema({ gameProtocol:t.uint8().default(1), officeId: t.string().default(""), mapVersion: t.string().default(""),movementProtocol:t.uint8().default(1), structureVersion:t.string().default(''),environmentRevision:t.number().default(0),environmentEpoch:t.string().default(''),players: t.map(PlayerState), seats:t.map('string') }, "OfficeState");
 export type OfficeState = SchemaType<typeof OfficeState>;
